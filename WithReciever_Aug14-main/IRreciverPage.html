@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PCC S.T.A.T.S. | IR Receiver & Library</title>
+    <link rel="icon" type="image/png" href="pcctruelogo.png">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="ir-library.js"></script>
+    <style>
+        .sidebar { position: fixed; left: 0; top: 0; height: 100vh; width: 260px; background-color: #800000; padding: 24px; display: flex; flex-direction: column; z-index: 40; transition: 0.3s; }
+        .sidebar-header { display: flex; align-items: center; gap: 12px; color: white; font-weight: 900; font-size: 1.25rem; margin-bottom: 24px; cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); text-decoration: none; }
+        .sidebar-header:hover { transform: translateX(4px); opacity: 0.9; }
+        .sidebar-header:active { transform: scale(0.98); }
+        .sidebar-logo { width: 60px; height: 60px; object-fit: contain; border-radius: 6px; }
+        .nav-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 12px; color: rgba(255,255,255,0.72); text-decoration: none; font-size: 14px; transition: all 0.2s ease; }
+        .nav-item:hover { background: rgba(255,255,255,0.09); color: white; transform: translateX(4px); }
+        .nav-item.active { background: rgba(255,255,255,0.16); color: white; font-weight: 700; }
+        .main-wrapper { margin-left: 260px; padding: 32px 30px 60px; min-height: 100vh; }
+        .page-shell { max-width: 1200px; margin: 0 auto; display: grid; gap: 24px; }
+        .card { background: #fff; border: 1px solid #f3f4f6; border-radius: 24px; box-shadow: 0 10px 28px rgba(15,23,42,0.05); }
+        .receiver-panel, .library-panel { padding: 28px; }
+        .status-pill { display: inline-flex; align-items: center; gap: 8px; background: #f8fafc; border-radius: 999px; padding: 8px 14px; font-size: 11px; font-weight: 900; letter-spacing: 0.15em; text-transform: uppercase; }
+        .status-pill.ready { color: #1f2937; border: 1px solid #e5e7eb; }
+        .status-pill.listening { color: #b45309; background: #fff7ed; border: 1px solid #fed7aa; }
+        .status-pill.received { color: #166534; background: #ecfdf5; border: 1px solid #bbf7d0; }
+        .status-pill.stopped { color: #374151; background: #f3f4f6; border: 1px solid #e5e7eb; }
+        .receiver-stage {
+            position: relative; min-height: 390px; border-radius: 28px; background: linear-gradient(135deg,#fff7f7,#f8fafc); border: 1px solid #fee2e2; overflow: hidden; display: flex; align-items: center; justify-content: center; padding: 24px;
+        }
+        .receiver-stage::before {
+            content: ""; position: absolute; inset: 0; background: radial-gradient(circle at center, rgba(128,0,0,0.04), transparent 52%);
+        }
+        .signal-ring { position: absolute; border-radius: 999px; border: 2px solid rgba(128,0,0,0.15); opacity: 0; animation: none; }
+        .receiver-stage.listening .signal-ring { opacity: 1; animation: pulse 2.8s infinite ease-out; }
+        .signal-ring:nth-child(1){ width: 160px; height: 160px; }
+        .signal-ring:nth-child(2){ width: 220px; height: 220px; animation-delay: 0.7s; }
+        .signal-ring:nth-child(3){ width: 280px; height: 280px; animation-delay: 1.4s; }
+        .receiver-core {
+            position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); width: 110px; height: 110px; border-radius: 26px; background: linear-gradient(135deg,#800000,#a52a2a); display: flex; align-items: center; justify-content: center; box-shadow: 0 18px 36px rgba(128,0,0,0.25);
+        }
+        .receiver-core i { color: white; }
+        .receiver-stage.listening .receiver-core { animation: blink 1s infinite; }
+        .receiver-stage:not(.listening) .receiver-core { animation: none; }
+        .receiver-illustration {
+            position: relative; width: 100%; max-width: 880px; height: 330px; display: flex; align-items: center; justify-content: center; z-index: 1;
+        }
+        .guide-scene {
+            position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; opacity: 1; transition: opacity 0.25s ease;
+        }
+        .receiver-stage.listening .guide-scene { opacity: 0; pointer-events: none; }
+        .device-glow {
+            position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); width: 220px; height: 220px; border-radius: 50%; background: radial-gradient(circle, rgba(128, 0, 0, 0.18), rgba(128, 0, 0, 0.08) 34%, rgba(255,255,255,0) 72%); filter: blur(12px); z-index: 1;
+        }
+        .guide-scene .device-box {
+            position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); width: 170px; height: 170px; background: linear-gradient(135deg,#8c0f0f,#b21f1f); border: 10px solid rgba(255,255,255,0.25); border-radius: 26px; box-shadow: 0 18px 38px rgba(128,0,0,0.18), inset 0 0 18px rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; z-index: 3;
+        }
+        .guide-scene .device-box::before {
+            content: ""; position: absolute; inset: 18px; border-radius: 18px; border: 2px solid rgba(255,255,255,0.15);
+        }
+        .guide-scene .device-box .device-icon {
+            width: 74px; height: 74px; border-radius: 50%; border: 4px solid rgba(255,255,255,0.95); position: relative; background: rgba(255,255,255,0.04);
+        }
+        .guide-scene .device-box .device-icon::before,
+        .guide-scene .device-box .device-icon::after {
+            content: ""; position: absolute; border-radius: 50%; border: 4px solid rgba(255,255,255,0.9); inset: 0;
+        }
+        .guide-scene .device-box .device-icon::before { transform: scale(0.54); }
+        .guide-scene .device-box .device-icon::after { transform: scale(0.8); }
+        .guide-scene .hand {
+            position: absolute; width: 170px; height: 130px; background: linear-gradient(135deg,#f4d0b0,#e6a574); border-radius: 55% 50% 40% 55% / 65% 60% 40% 45%; box-shadow: inset 0 -8px 0 rgba(0,0,0,0.04); z-index: 2; transform-origin: center; filter: drop-shadow(0 12px 12px rgba(0,0,0,0.08));
+        }
+        .guide-scene .hand.left {
+            left: 29%; bottom: 25%; transform: rotate(28deg);
+        }
+        .guide-scene .hand.left::before {
+            content: ""; position: absolute; width: 30px; height: 72px; right: 4px; bottom: 32px; border-radius: 18px; background: linear-gradient(180deg,#f4d0b0,#eab17d); transform: rotate(12deg);
+        }
+        .guide-scene .hand.right {
+            right: 29%; bottom: 25%; transform: rotate(-28deg);
+        }
+        .guide-scene .hand.right::before {
+            content: ""; position: absolute; width: 30px; height: 72px; left: 6px; bottom: 32px; border-radius: 18px; background: linear-gradient(180deg,#f4d0b0,#eab17d); transform: rotate(-12deg);
+        }
+        .guide-scene .aircon-remote {
+            position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%) rotate(12deg); width: 142px; height: 210px; background: linear-gradient(135deg,#f3f6f8,#dfe4e8); border: 6px solid rgba(127,138,149,0.18); border-radius: 26px; box-shadow: 0 18px 28px rgba(15,23,42,0.08), inset 0 0 0 3px rgba(255,255,255,0.6); z-index: 4;
+        }
+        .guide-scene .aircon-remote::before {
+            content: ""; position: absolute; left: 14px; right: 14px; top: 16px; height: 36px; border-radius: 12px; background: linear-gradient(180deg,#d8dee6,#c8ced9);
+        }
+        .guide-scene .aircon-remote::after {
+            content: ""; position: absolute; left: 50%; top: 22px; width: 26px; height: 26px; border-radius: 50%; transform: translateX(-50%); background: rgba(128,0,0,0.15);
+        }
+        .guide-scene .remote-buttons {
+            position: absolute; inset: 68px 18px 18px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; align-items: center; justify-items: center;
+        }
+        .guide-scene .remote-buttons span {
+            display: block; width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(135deg,#d9dee5,#bfc8d2); box-shadow: inset 0 0 0 2px rgba(98,106,117,0.2);
+        }
+        .guide-scene .remote-buttons span:nth-child(2),
+        .guide-scene .remote-buttons span:nth-child(5),
+        .guide-scene .remote-buttons span:nth-child(8) {
+            width: 26px; height: 26px; background: linear-gradient(135deg,#ebeef2,#d7dfe7);
+        }
+        .guide-scene .user-hint {
+            position: absolute; left: 50%; top: 26%; transform: translateX(-50%); font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: rgba(75,85,99,0.45); font-weight: 900;
+        }
+        .signal-panel { display: block; margin-top: 20px; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 20px; padding: 20px; }
+        .signal-panel.show { display: block; }
+        .mini-btn { background: #f3f4f6; color: #374151; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; border-radius: 16px; padding: 12px 18px; font-size: 10px; transition: all 0.2s ease; cursor: pointer; }
+        .mini-btn:hover { background: #e5e7eb; transform: translateY(-1px); }
+        .mini-btn:active { background: #d1d5db; transform: translateY(0); box-shadow: inset 0 2px 4px rgba(0,0,0,0.1); }
+        .mini-btn:focus { outline: 2px solid #800000; outline-offset: 2px; }
+        .primary-btn { background: #800000; color: white; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; border-radius: 16px; padding: 14px 20px; font-size: 10px; box-shadow: 0 10px 25px rgba(128,0,0,0.2); transition: all 0.2s ease; cursor: pointer; }
+        .primary-btn:hover { background: #600000; transform: translateY(-1px); box-shadow: 0 12px 30px rgba(128,0,0,0.3); }
+        .primary-btn:active { background: #400000; transform: translateY(0); box-shadow: inset 0 2px 4px rgba(0,0,0,0.2); }
+        .primary-btn:focus { outline: 2px solid #800000; outline-offset: 2px; }
+        .secondary-btn { background: #eef2ff; color: #1f2937; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; border-radius: 16px; padding: 12px 18px; font-size: 10px; transition: all 0.2s ease; cursor: pointer; }
+        .secondary-btn:hover { background: #e0e7ff; transform: translateY(-1px); }
+        .secondary-btn:active { background: #c7d2fe; transform: translateY(0); box-shadow: inset 0 2px 4px rgba(0,0,0,0.1); }
+        .secondary-btn:focus { outline: 2px solid #800000; outline-offset: 2px; }
+        .library-grid { display: grid; gap: 16px; }
+        .library-entry { border: 1px solid #e5e7eb; border-radius: 20px; padding: 18px; background: linear-gradient(180deg,#fff 0%,#fff8f8 100%); }
+        .tag { font-size: 9px; font-weight: 900; letter-spacing: 0.15em; text-transform: uppercase; color: #6b7280; }
+        .tag-green { color: #166534; background: #ecfdf5; border-radius: 999px; padding: 4px 8px; }
+        .library-form { display: none; margin-top: 18px; border: 1px solid #e5e7eb; border-radius: 22px; background: #fafafa; padding: 20px; }
+        .library-form.show { display: block; }
+        .field { width: 100%; border: 1px solid #e5e7eb; border-radius: 14px; background: white; padding: 12px 14px; font-size: 14px; }
+        @keyframes pulse { 0% { transform: scale(0.9); opacity: 0.8; } 70% { transform: scale(1.1); opacity: 0.3; } 100% { transform: scale(1.25); opacity: 0; } }
+        @keyframes blink { 0%,100% {opacity:0.85; box-shadow: 0 0 0 0 rgba(128,0,0,0.1);} 50% {opacity:1; box-shadow: 0 0 22px rgba(128,0,0,0.3);} }
+        @media (max-width: 768px) { .sidebar { transform: translateX(-100%); } .sidebar.show { transform: translateX(0); } .main-wrapper { margin-left: 0; padding: 18px; } }
+    </style>
+</head>
+<body class="antialiased bg-gray-50">
+    <aside id="sidebar" class="sidebar">
+        <a href="1_dashboard_trial.html" class="sidebar-header">
+            <img src="statswhite.png" alt="PCC Logo" class="sidebar-logo">
+            <span>PCC S.T.A.T.S.</span>
+        </a>
+        <nav class="flex-grow mt-6">
+            <a href="1_dashboard_trial.html" class="nav-item"><i data-lucide="layout-dashboard"></i> Dashboard</a>
+            <a href="2_analytics_trial.html" class="nav-item"><i data-lucide="bar-chart-3"></i> Analytics</a>
+            <a href="3_alert_trial.html" class="nav-item"><i data-lucide="bell"></i> Alerts</a>
+            <a href="IRreciverPage.html" class="nav-item active"><i data-lucide="radio"></i> IR Receiver</a>
+            <a href="4_settings_trial.html" class="nav-item"><i data-lucide="settings"></i> Settings</a>
+        </nav>
+        <div class="p-4 border-t border-white/10">
+            <button onclick="confirmLogout && confirmLogout()" class="nav-item opacity-60 w-full text-left"><i data-lucide="log-out"></i> Logout</button>
+        </div>
+    </aside>
+
+    <main class="main-wrapper">
+        <div class="page-shell">
+            <section class="card receiver-panel">
+                <div class="flex items-center justify-between gap-4 mb-5">
+                    <div>
+                        <p class="text-[10px] font-black uppercase tracking-[0.25em] text-gray-400">IR Control</p>
+                        <h1 class="text-3xl font-black text-[#800000] uppercase">IR Signal Receiver</h1>
+                    </div>
+                    <span id="receiverStatus" class="status-pill ready">Status: Not Ready</span>
+                </div>
+                <p class="text-sm text-gray-600 mb-6">Capture and read an infrared signal from an air conditioner remote control.</p>
+
+                <div class="receiver-stage p-8 md:p-12">
+                    <div class="signal-ring"></div>
+                    <div class="signal-ring"></div>
+                    <div class="signal-ring"></div>
+                    <div id="receiverCore" class="receiver-core"><i data-lucide="radio" class="w-10 h-10"></i></div>
+                    <div class="receiver-illustration">
+                        <div class="guide-scene" aria-hidden="true">
+                            <div class="device-glow"></div>
+                            <div class="hand left"></div>
+                            <div class="hand right"></div>
+                            <div class="aircon-remote">
+                                <div class="remote-buttons">
+                                    <span></span><span></span><span></span>
+                                    <span></span><span></span><span></span>
+                                    <span></span><span></span><span></span>
+                                </div>
+                            </div>
+                            <div class="device-box">
+                                <div class="device-icon"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="absolute bottom-0 left-0 right-0 z-10 flex flex-col items-center justify-center pb-10 pt-8">
+                        <div class="text-center">
+                            <h2 id="receiverTitle" class="text-xl font-black uppercase tracking-[0.18em] text-gray-700 mb-3">Not Ready</h2>
+                            <p id="receiverMessage" class="text-sm text-gray-500 max-w-lg mt-2">The IR receiver is currently inactive.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="signal-panel" id="signalPanel">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+                        <div>
+                            <p class="tag">Captured Signal</p>
+                            <h3 class="text-xl font-black text-gray-800">Signal Received ✓</h3>
+                        </div>
+                        <div class="flex gap-3 flex-wrap">
+                            <button id="copySignalBtn" class="primary-btn">Copy IR Signal</button>
+                            <button id="pasteSignalBtn" class="secondary-btn">Paste to Library</button>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mb-4">
+                        <div><span class="tag">Protocol</span><p id="signalProtocol" class="mt-2 font-bold text-gray-700">--</p></div>
+                        <div><span class="tag">Signal Length</span><p id="signalLength" class="mt-2 font-bold text-gray-700">--</p></div>
+                        <div><span class="tag">Status</span><p id="signalStatus" class="mt-2 font-bold text-gray-700">Ready</p></div>
+                    </div>
+                    <div class="bg-white border border-gray-200 rounded-2xl p-4">
+                        <p class="tag mb-3">Raw IR Signal</p>
+                        <pre id="rawSignalOutput" class="overflow-x-auto text-xs leading-7 text-gray-700 whitespace-pre-wrap">uint16_t rawData[] = {\n    0\n};</pre>
+                    </div>
+                </div>
+
+                <div class="mt-8 flex flex-wrap gap-3">
+                    <button id="readyBtn" class="primary-btn">Ready to Receive</button>
+                    <button id="receiveAgainBtn" class="mini-btn">Receive Again</button>
+                    <button id="stopBtn" class="mini-btn">Stop Receiving</button>
+                </div>
+            </section>
+
+            <section id="library" class="card library-panel">
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+                    <div>
+                        <p class="text-[10px] font-black uppercase tracking-[0.25em] text-gray-400">IR Control</p>
+                        <h2 class="text-3xl font-black text-[#800000] uppercase">IR Remote Library</h2>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <label class="tag">Laboratory</label>
+                        <select id="labFilterSelect" class="field w-auto min-w-[180px]">
+                            <option value="">Select laboratory</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap gap-3 mb-6">
+                    <button id="activateFromLibraryBtn" class="primary-btn">Activate IR Receiver</button>
+                    <button id="addSignalBtn" class="mini-btn">Add Signal</button>
+                </div>
+
+                <div id="libraryForm" class="library-form">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="tag block mb-2">Laboratory</label>
+                            <select id="saveLabSelect" class="field"></select>
+                        </div>
+                        <div>
+                            <label class="tag block mb-2">Command</label>
+                            <select id="saveCommandSelect" class="field">
+                                <option value="acOn">AC ON</option>
+                                <option value="acOff">AC OFF</option>
+                                <option value="temperatureUp">Temperature UP</option>
+                                <option value="temperatureDown">Temperature DOWN</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="tag block mb-2">Signal Name</label>
+                            <input id="saveSignalName" class="field" placeholder="AC ON"/>
+                        </div>
+                        <div>
+                            <label class="tag block mb-2">Protocol</label>
+                            <input id="saveProtocolInput" class="field" value="PANASONIC"/>
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <label class="tag block mb-2">Raw IR Signal</label>
+                        <textarea id="saveRawDataInput" class="field" rows="7" placeholder="Paste the captured IR raw data here..."></textarea>
+                    </div>
+                    <div class="mt-5 flex gap-3 flex-wrap">
+                        <button id="saveSignalBtn" class="primary-btn">Save Signal</button>
+                        <button id="cancelSignalBtn" class="mini-btn">Cancel</button>
+                    </div>
+                </div>
+
+                <div id="libraryGrid" class="library-grid mt-6"></div>
+            </section>
+        </div>
+    </main>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: 'AIzaSyAv9fvbotQfi21Nu7LNZYBuzNUJOD5Vj0E',
+            databaseURL: 'https://pcc-stats-default-rtdb.asia-southeast1.firebasedatabase.app/'
+        };
+
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.database();
+
+        const COMMANDS = [
+            { key: 'acOn', label: 'AC ON', group: 'Power Control' },
+            { key: 'acOff', label: 'AC OFF', group: 'Power Control' },
+            { key: 'temperatureUp', label: 'Temperature UP', group: 'Temperature Control' },
+            { key: 'temperatureDown', label: 'Temperature DOWN', group: 'Temperature Control' }
+        ];
+
+        const state = {
+            receiving: false,
+            capturedSignal: null,
+            availableLabs: [],
+            libraryData: {},
+            listeningTimeoutId: null,
+            irReceiverListener: null
+        };
+
+        function clearListeningTimeout() {
+            if (state.listeningTimeoutId) {
+                clearTimeout(state.listeningTimeoutId);
+                state.listeningTimeoutId = null;
+            }
+        }
+
+        function stopListeningSession(reason = 'manual') {
+            clearListeningTimeout();
+            state.receiving = false;
+            state.capturedSignal = null;
+            setReceiverStatus('stopped');
+            document.getElementById('receiveAgainBtn').disabled = true;
+            document.getElementById('receiveAgainBtn').style.opacity = '0.5';
+            document.getElementById('receiveAgainBtn').style.cursor = 'not-allowed';
+            document.getElementById('rawSignalOutput').textContent = 'uint16_t rawData[] = {\n    0\n};';
+
+            if (state.irReceiverListener) {
+                db.ref('irReceiver').off('value', state.irReceiverListener);
+                state.irReceiverListener = null;
+            }
+
+            const statusText = reason === 'timeout'
+                ? 'Receiver timed out after 10 seconds.'
+                : 'Receiver Stopped';
+
+            db.ref('irReceiver').set({
+                state: 'stopped',
+                status: statusText,
+                updatedAt: Date.now(),
+                signal: null
+            });
+        }
+
+        function startListeningSession() {
+            clearListeningTimeout();
+            state.receiving = true;
+            setReceiverStatus('listening');
+            document.getElementById('receiveAgainBtn').disabled = false;
+            document.getElementById('receiveAgainBtn').style.opacity = '1';
+            document.getElementById('receiveAgainBtn').style.cursor = 'pointer';
+
+            if (!state.irReceiverListener) {
+                state.irReceiverListener = db.ref('irReceiver').on('value', (snapshot) => {
+                    const data = snapshot.val() || {};
+                    
+                    if (data.state === 'listening') {
+                        setReceiverStatus('listening');
+                    } else if (data.state === 'received' && data.lastSignal) {
+                        clearListeningTimeout();
+                        const signal = data.lastSignal;
+                        const rawArray = normalizeRawData(signal.rawData || []);
+                        
+                        state.capturedSignal = {
+                            rawData: rawArray,
+                            protocol: signal.protocol || 'PANASONIC',
+                            signalLength: signal.length || rawArray.length
+                        };
+                        displaySignal(state.capturedSignal);
+                        setReceiverStatus('received');
+                    } else if (data.state === 'stopped') {
+                        clearListeningTimeout();
+                        setReceiverStatus('stopped');
+                    } else {
+                        setReceiverStatus('idle');
+                    }
+                });
+            }
+
+            db.ref('irReceiver').set({
+                state: 'listening',
+                status: 'Listening for IR Signal...',
+                updatedAt: Date.now(),
+                signal: null
+            });
+
+            state.listeningTimeoutId = setTimeout(() => {
+                stopListeningSession('timeout');
+            }, 10000);
+        }
+
+        function normalizeRawData(raw) {
+            if (Array.isArray(raw)) return raw.map(Number).filter((n) => !Number.isNaN(n));
+            if (typeof raw !== 'string') return [];
+            return raw.replace(/uint16_t\s*rawData\s*\[\]\s*=\s*\{?|\};?$/gi, '')
+                .split(/[\s,]+/)
+                .map((item) => Number(item.trim()))
+                .filter((value) => !Number.isNaN(value));
+        }
+
+        function formatSignal(rawData) {
+            const arr = normalizeRawData(rawData || []);
+            if (!arr.length) return 'uint16_t rawData[] = {\n    0\n};';
+            return 'uint16_t rawData[] = {\n    ' + arr.join(', ') + '\n};';
+        }
+
+        function displaySignal(data) {
+            const safe = data || state.capturedSignal || {};
+            const rawData = normalizeRawData(safe.rawData || []);
+            document.getElementById('signalProtocol').textContent = safe.protocol || 'PANASONIC';
+            document.getElementById('signalLength').textContent = Number(safe.signalLength || rawData.length || 0);
+            document.getElementById('signalStatus').textContent = 'Captured';
+            document.getElementById('rawSignalOutput').textContent = formatSignal(rawData);
+        }
+
+        function setReceiverStatus(status) {
+            const statusEl = document.getElementById('receiverStatus');
+            const titleEl = document.getElementById('receiverTitle');
+            const messageEl = document.getElementById('receiverMessage');
+            const core = document.getElementById('receiverCore');
+            const panel = document.getElementById('signalPanel');
+            const receiverStage = document.querySelector('.receiver-stage');
+            statusEl.className = 'status-pill';
+            receiverStage.classList.remove('listening');
+            core.classList.remove('receiver-blink');
+
+            if (status === 'listening') {
+                statusEl.classList.add('listening');
+                statusEl.textContent = 'Status: Listening for IR Signal...';
+                titleEl.textContent = 'Listening for IR Signal...';
+                messageEl.textContent = 'Receiver is powered on. Point the remote toward the module and press a button within 10 seconds.';
+                receiverStage.classList.add('listening');
+                core.classList.add('receiver-blink');
+                panel.classList.remove('show');
+            } else if (status === 'received') {
+                statusEl.classList.add('received');
+                statusEl.textContent = 'Status: ✓ Signal Received';
+                titleEl.textContent = 'Signal Received ✓';
+                messageEl.textContent = 'The IR signal has been captured and is ready to paste into the library.';
+                panel.classList.add('show');
+            } else if (status === 'stopped') {
+                statusEl.classList.add('stopped');
+                statusEl.textContent = 'Status: Receiver Stopped';
+                titleEl.textContent = 'Receiver Stopped';
+                messageEl.textContent = 'The IR receiver is powered off until the system is ready to receive.';
+                panel.classList.remove('show');
+            } else {
+                statusEl.classList.add('ready');
+                statusEl.textContent = 'Status: Not Ready';
+                titleEl.textContent = 'Not Ready';
+                messageEl.textContent = 'The IR receiver is currently powered off because the system is not ready to receive.';
+                panel.classList.remove('show');
+            }
+        }
+
+        function normalizeLabName(rawName) {
+            if (!rawName) return 'Room';
+            const text = String(rawName).trim();
+            if (text.toLowerCase().startsWith('room')) return text;
+            return text;
+        }
+
+        function dashboardLabListFromFirebase(data) {
+            const roomEntries = Object.keys(data || {}).filter((key) => key.startsWith('Room_'));
+            const list = roomEntries.map((key) => {
+                const roomData = data[key] || {};
+                const roomName = roomData.roomName || roomData.customRoomName || key.replace(/_/g, ' ');
+                return { key, name: normalizeLabName(roomName) };
+            });
+            return list.length ? list : [
+                { key: 'Laboratory 1', name: 'Laboratory 1' },
+                { key: 'Laboratory 2', name: 'Laboratory 2' },
+                { key: 'Laboratory 3', name: 'Laboratory 3' },
+                { key: 'Laboratory 4', name: 'Laboratory 4' },
+                { key: 'Laboratory 5', name: 'Laboratory 5' },
+                { key: 'Laboratory 6', name: 'Laboratory 6' }
+            ];
+        }
+
+        function renderLabOptions() {
+            const labOptions = state.availableLabs;
+            const optionsHtml = labOptions.map((lab) => `<option value="${lab.name}">${lab.name}</option>`).join('');
+            document.getElementById('labFilterSelect').innerHTML = '<option value="">Select laboratory</option>' + optionsHtml;
+            document.getElementById('saveLabSelect').innerHTML = optionsHtml;
+            if (!document.getElementById('labFilterSelect').value && labOptions.length) {
+                document.getElementById('labFilterSelect').value = labOptions[0].name;
+            }
+        }
+
+        function getLibraryByLab(labName) {
+            const key = String(labName || '').trim();
+            const labEntry = state.libraryData[key] || {};
+            const result = {};
+            COMMANDS.forEach((cmd) => {
+                result[cmd.key] = labEntry[cmd.key] || null;
+            });
+            return result;
+        }
+
+        function asyncAlert(message, okText='OK') {
+            if (window.Swal) {
+                Swal.fire({ title: message, icon: 'info', confirmButtonText: okText, confirmButtonColor: '#800000' });
+                return;
+            }
+            alert(message);
+        }
+
+        function renderLibraryCards() {
+            const selectedLab = document.getElementById('labFilterSelect').value || state.availableLabs[0]?.name || 'Laboratory 1';
+            const labSignals = getLibraryByLab(selectedLab);
+            const groupMarkup = COMMANDS.map((cmd) => {
+                const entry = labSignals[cmd.key];
+                const card = entry ? `
+                    <div class="library-entry">
+                        <div class="flex items-center justify-between gap-2">
+                            <div>
+                                <p class="tag">${cmd.group}</p>
+                                <h3 class="text-xl font-black text-gray-800 mt-2">${cmd.label}</h3>
+                            </div>
+                            <span class="tag-green">Saved</span>
+                        </div>
+                        <div class="mt-4 space-y-2 text-sm text-gray-700">
+                            <p><span class="tag">Protocol</span> ${entry.protocol || 'PANASONIC'}</p>
+                            <p><span class="tag">Signal</span> ${entry.name || cmd.label}</p>
+                            <p><span class="tag">Length</span> ${entry.signalLength || normalizeRawData(entry.rawData || []).length}</p>
+                        </div>
+                        <div class="mt-5 flex gap-2 flex-wrap">
+                            <button data-action="view" data-lab="${selectedLab}" data-command="${cmd.key}" class="mini-btn">View</button>
+                            <button data-action="copy" data-lab="${selectedLab}" data-command="${cmd.key}" class="mini-btn">Copy</button>
+                            <button data-action="edit" data-lab="${selectedLab}" data-command="${cmd.key}" class="mini-btn">Edit</button>
+                            <button data-action="delete" data-lab="${selectedLab}" data-command="${cmd.key}" class="mini-btn">Delete</button>
+                        </div>
+                    </div>
+                ` : `
+                    <div class="library-entry opacity-80">
+                        <p class="tag">${cmd.group}</p>
+                        <h3 class="text-xl font-black text-gray-800 mt-2">${cmd.label}</h3>
+                        <p class="text-sm text-gray-500 mt-3">No saved signal yet.</p>
+                        <button data-action="new" data-lab="${selectedLab}" data-command="${cmd.key}" class="primary-btn mt-4">Add Signal</button>
+                    </div>
+                `;
+                return card;
+            }).join('');
+
+            document.getElementById('libraryGrid').innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">${groupMarkup}</div>`;
+
+            document.querySelectorAll('[data-action]').forEach((button) => {
+                const action = button.dataset.action;
+                const lab = button.dataset.lab;
+                const command = button.dataset.command;
+                button.addEventListener('click', () => handleLibraryAction(action, lab, command));
+            });
+        }
+
+        function handleLibraryAction(action, lab, command) {
+            const data = state.libraryData[lab]?.[command];
+            if (action === 'new' || action === 'edit') {
+                const selected = data || { protocol: 'PANASONIC', name: command, rawData: [], signalLength: 0 };
+                document.getElementById('saveLabSelect').value = lab;
+                document.getElementById('saveCommandSelect').value = command;
+                document.getElementById('saveSignalName').value = selected.name || COMMANDS.find((item) => item.key === command)?.label || '';
+                document.getElementById('saveProtocolInput').value = selected.protocol || 'PANASONIC';
+                document.getElementById('saveRawDataInput').value = formatSignal(selected.rawData || []);
+                document.getElementById('libraryForm').classList.add('show');
+                return;
+            }
+            if (action === 'copy') {
+                const text = formatSignal(data?.rawData || []);
+                navigator.clipboard.writeText(text).then(() => {
+                    asyncAlert('IR signal copied successfully!');
+                }).catch(() => asyncAlert('Copy failed. Please try again.', 'Retry'));
+                return;
+            }
+            if (action === 'view') {
+                const details = data || {};
+                const entry = { labName: lab, commandKey: command, commandLabel: COMMANDS.find((item) => item.key === command)?.label || command, protocol: details.protocol || 'PANASONIC', rawData: details.rawData || [], signalLength: details.signalLength || normalizeRawData(details.rawData || []).length, createdAt: details.createdAt || '', updatedAt: details.updatedAt || '' };
+                const html = `
+                    <div class="space-y-4 text-sm text-gray-700">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div><span class="tag">Laboratory</span><p class="mt-2 font-bold">${entry.labName}</p></div>
+                            <div><span class="tag">Command</span><p class="mt-2 font-bold">${entry.commandLabel}</p></div>
+                            <div><span class="tag">Protocol</span><p class="mt-2 font-bold">${entry.protocol}</p></div>
+                            <div><span class="tag">Signal Length</span><p class="mt-2 font-bold">${entry.signalLength}</p></div>
+                        </div>
+                        <div class="bg-gray-50 border border-gray-200 rounded-2xl p-4">
+                            <span class="tag">Raw Data</span>
+                            <pre class="mt-3 text-xs leading-6 font-mono whitespace-pre-wrap">${formatSignal(entry.rawData)}</pre>
+                        </div>
+                    </div>
+                `;
+                const modal = document.createElement('div');
+                modal.style.position = 'fixed'; modal.style.inset = '0'; modal.style.background = 'rgba(15,23,42,0.5)'; modal.style.display = 'flex'; modal.style.alignItems = 'center'; modal.style.justifyContent = 'center'; modal.style.zIndex = '999';
+                modal.innerHTML = `<div style="background:#fff; border-radius:24px; max-width:760px; width:min(90vw,760px); padding:24px; border-top:8px solid #800000; box-shadow:0 32px 70px rgba(0,0,0,0.2);">
+                    <div class="flex justify-between items-center mb-4">
+                        <div>
+                            <p class="tag">IR Signal Details</p>
+                            <h3 class="text-2xl font-black text-gray-800">IR Signal Details</h3>
+                        </div>
+                        <button id="closeModalBtn" class="mini-btn">Close</button>
+                    </div>
+                    ${html}
+                    <div class="mt-5 flex gap-3">
+                        <button id="modalCopyBtn" class="primary-btn">Copy Signal</button>
+                        <button id="modalEditBtn" class="mini-btn">Edit Signal</button>
+                    </div>
+                </div>`;
+                document.body.appendChild(modal);
+                document.getElementById('closeModalBtn').addEventListener('click', () => modal.remove());
+                document.getElementById('modalCopyBtn').addEventListener('click', async () => { await navigator.clipboard.writeText(formatSignal(entry.rawData)); asyncAlert('IR signal copied successfully!'); });
+                document.getElementById('modalEditBtn').addEventListener('click', () => { modal.remove(); handleLibraryAction('edit', lab, command); });
+                return;
+            }
+            if (action === 'delete') {
+                Swal.fire({
+                    title: 'Delete IR Signal?',
+                    html: `Are you sure you want to delete:<br><strong>${lab} → ${COMMANDS.find((item) => item.key === command)?.label || command}</strong><br><br>This action cannot be undone.`,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#800000',
+                    cancelButtonColor: '#6b7280',
+                    confirmButtonText: 'Yes, delete it',
+                    cancelButtonText: 'Cancel'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        db.ref(`irRemoteLibrary/${lab}/${command}`).remove().then(() => {
+                            Swal.fire({
+                                title: 'Deleted!',
+                                text: 'IR signal has been deleted.',
+                                icon: 'success',
+                                confirmButtonColor: '#800000'
+                            });
+                        });
+                    }
+                });
+            }
+        }
+
+        function saveLibrarySignal() {
+            const lab = document.getElementById('saveLabSelect').value;
+            const command = document.getElementById('saveCommandSelect').value;
+            const name = document.getElementById('saveSignalName').value.trim() || COMMANDS.find((item) => item.key === command)?.label || 'IR Signal';
+            const protocol = document.getElementById('saveProtocolInput').value.trim() || 'PANASONIC';
+            const rawData = normalizeRawData(document.getElementById('saveRawDataInput').value || []);
+
+            if (!lab || !command || !rawData.length) {
+                asyncAlert('Please select laboratory, command, and valid raw IR data before saving.', 'OK');
+                return;
+            }
+
+            const existing = state.libraryData[lab]?.[command];
+            if (existing) {
+                const replace = window.confirm(`${name} signal already exists for ${lab}.\n\nWhat would you like to do?`);
+                if (!replace) return;
+            }
+
+            const payload = {
+                name,
+                protocol,
+                rawData,
+                signalLength: rawData.length,
+                commandKey: command,
+                commandLabel: COMMANDS.find((item) => item.key === command)?.label || command,
+                createdAt: existing?.createdAt || new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+
+            // Save to IR Remote Library
+            db.ref(`irRemoteLibrary/${lab}/${command}`).set(payload).then(() => {
+                // Also save to room's IR codes path
+                db.ref(`${lab}/irCodes/${command}`).set(payload).then(() => {
+                    document.getElementById('libraryForm').classList.remove('show');
+                    asyncAlert('IR signal saved successfully!');
+                }).catch(() => asyncAlert('Unable to save to room IR codes.', 'Retry'));
+            }).catch(() => asyncAlert('Unable to save to the IR library.', 'Retry'));
+        }
+
+        function loadLibrary() {
+            db.ref('irRemoteLibrary').on('value', (snapshot) => {
+                state.libraryData = snapshot.val() || {};
+                renderLibraryCards();
+            });
+        }
+
+        function loadDashboardLabs() {
+            db.ref().once('value').then((snapshot) => {
+                const data = snapshot.val() || {};
+                const labList = dashboardLabListFromFirebase(data);
+                state.availableLabs = labList;
+                renderLabOptions();
+                const selected = document.getElementById('labFilterSelect').value || labList[0]?.name || 'Laboratory 1';
+                document.getElementById('labFilterSelect').value = selected;
+                renderLibraryCards();
+            }).catch(() => {
+                state.availableLabs = [
+                    { key: 'Laboratory 1', name: 'Laboratory 1' },
+                    { key: 'Laboratory 2', name: 'Laboratory 2' },
+                    { key: 'Laboratory 3', name: 'Laboratory 3' },
+                    { key: 'Laboratory 4', name: 'Laboratory 4' },
+                    { key: 'Laboratory 5', name: 'Laboratory 5' },
+                    { key: 'Laboratory 6', name: 'Laboratory 6' }
+                ];
+                renderLabOptions();
+            });
+        }
+
+        document.getElementById('readyBtn').addEventListener('click', () => {
+            startListeningSession();
+        });
+
+        document.getElementById('receiveAgainBtn').addEventListener('click', () => {
+            startListeningSession();
+        });
+
+        document.getElementById('stopBtn').addEventListener('click', () => {
+            stopListeningSession('manual');
+        });
+
+        document.getElementById('copySignalBtn').addEventListener('click', async () => {
+            const text = document.getElementById('rawSignalOutput').textContent;
+            try {
+                await navigator.clipboard.writeText(text);
+                asyncAlert('IR signal copied successfully!');
+            } catch (error) {
+                asyncAlert('Copy failed. Please try again.', 'Retry');
+            }
+        });
+
+        document.getElementById('pasteSignalBtn').addEventListener('click', () => {
+            const selectedLab = document.getElementById('labFilterSelect').value || state.availableLabs[0]?.name || 'Laboratory 1';
+            const rawText = document.getElementById('rawSignalOutput').textContent;
+            document.getElementById('saveLabSelect').value = selectedLab;
+            document.getElementById('saveRawDataInput').value = rawText;
+            document.getElementById('libraryForm').classList.add('show');
+            window.location.hash = 'library';
+        });
+
+        document.getElementById('activateFromLibraryBtn').addEventListener('click', () => {
+            document.getElementById('readyBtn').click();
+            window.location.hash = 'library';
+        });
+
+        document.getElementById('addSignalBtn').addEventListener('click', () => {
+            const selectedLab = document.getElementById('labFilterSelect').value || state.availableLabs[0]?.name || 'Laboratory 1';
+            document.getElementById('saveLabSelect').value = selectedLab;
+            document.getElementById('saveSignalName').value = 'AC ON';
+            document.getElementById('saveProtocolInput').value = 'PANASONIC';
+            document.getElementById('saveRawDataInput').value = 'uint16_t rawData[] = {\n    0\n};';
+            document.getElementById('libraryForm').classList.add('show');
+            window.location.hash = 'library';
+        });
+
+        document.getElementById('saveSignalBtn').addEventListener('click', saveLibrarySignal);
+        document.getElementById('cancelSignalBtn').addEventListener('click', () => document.getElementById('libraryForm').classList.remove('show'));
+        document.getElementById('labFilterSelect').addEventListener('change', renderLibraryCards);
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadDashboardLabs();
+            loadLibrary();
+            setReceiverStatus('idle');
+            lucide.createIcons();
+        });
+
+        if (window.location.hash === '#library') {
+            setTimeout(() => {
+                const librarySection = document.getElementById('library');
+                if (librarySection) librarySection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 150);
+        }
+    </script>
+</body>
+</html>

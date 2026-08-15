@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PCC S.T.A.T.S. | Alerts</title>
+    <link rel="icon" type="image/png" href="pcctruelogo.png">
+    <link rel="stylesheet" href="style.css">
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="shared-utils.js"></script>
+    <script src="ui-enhancements.js"></script>
+
+    <style>
+        .stats-card { display: flex; align-items: center; gap: 1rem; padding: 1.5rem; border-radius: 24px; background-color: #800000; color: white; box-shadow: 0 10px 15px -3px rgba(128, 0, 0, 0.2); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .stats-card .stats-icon-bg { flex-shrink: 0; }
+        .stats-card > div { flex: 1; }
+        .animate-flicker { animation: flicker 2s infinite; }
+        @keyframes flicker { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+        /* Modal specific styling to match the PCC IOT aesthetic */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(4px); display: none; align-items: center;
+            justify-content: center; z-index: 100;
+        }
+        .modal-content {
+            background: white; width: 90%; max-width: 420px; border-radius: 40px;
+            padding: 32px; position: relative; border-top: 6px solid #800000;
+        }
+
+        .sidebar-logo {
+            width: 60px;
+            height: 60px;
+            object-fit: contain;
+            border-radius: 6px;
+        }
+        .sidebar-header {
+            display: flex; align-items: center; gap: 12px; color: white;
+            font-weight: 900; font-size: 1.25rem; margin-bottom: 24px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            text-decoration: none;
+        }
+
+        .sidebar-header:hover {
+            transform: translateX(4px);
+            opacity: 0.9;
+        }
+
+        .sidebar-header:active {
+            transform: scale(0.98);
+        }
+        .nav-item { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); position: relative; border-left: 3px solid transparent; }
+        .nav-item:hover { transform: translateX(4px); }
+        .nav-item.active { border-left-color: rgba(255, 255, 255, 0.8); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); }
+
+        /* Smooth Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes scaleIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .animate-fade-in {
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+
+        .animate-scale-in {
+            animation: scaleIn 0.3s ease-out forwards;
+        }
+
+        .animate-slide-in {
+            animation: slideIn 0.3s ease-out forwards;
+        }
+
+        /* Button Hover Effects */
+        button {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        button:hover {
+            transform: translateY(-1px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        /* Card Hover Effect */
+        .card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Smooth Scroll */
+        html {
+            scroll-behavior: smooth;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .stats-card { padding: 16px; }
+            .stats-card h2 { font-size: 1.5rem; }
+            .card { padding: 16px; }
+        }
+
+        @media (max-width: 480px) {
+            .stats-card { padding: 12px; gap: 12px; }
+            .stats-card h2 { font-size: 1.25rem; }
+            .stats-card p { font-size: 8px; }
+            .card { padding: 12px; border-radius: 16px; }
+            .modal-content { padding: 20px; }
+        }
+    </style>
+</head>
+<body class="antialiased bg-gray-50 text-gray-900">
+
+    <div id="logoutModal" class="modal-overlay" onclick="closeLogoutModal(event)">
+        <div class="modal-content text-center" onclick="event.stopPropagation()">
+            <div class="flex justify-center mb-4">
+                <div class="p-4 bg-red-50 rounded-full text-[#800000]">
+                    <i data-lucide="log-out" class="w-10 h-10"></i>
+                </div>
+            </div>
+            <h2 class="font-black text-xl text-gray-800 uppercase mb-2">Confirm Logout</h2>
+            <p class="text-[10px] font-bold text-gray-400 uppercase mb-8">Are you sure you want to end your session?</p>
+            
+            <div class="flex gap-3">
+                <button onclick="document.getElementById('logoutModal').style.display='none'" 
+                        class="flex-1 bg-gray-100 text-gray-400 font-black py-4 rounded-2xl hover:bg-gray-200 transition-all uppercase text-xs">
+                    Cancel
+                </button>
+                <button onclick="logout()" 
+                        class="flex-1 bg-[#800000] text-white font-black py-4 rounded-2xl shadow-lg hover:bg-[#600000] transition-all uppercase text-xs">
+                    Logout
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <button id="menu-toggle" class="sm:hidden p-4 absolute top-0 left-0 text-[#800000] z-50"><i data-lucide="menu"></i></button>
+
+    <button class="mobile-menu-toggle">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+    </button>
+
+    <aside id="sidebar" class="sidebar">
+        <a href="1_dashboard_trial.html" class="sidebar-header flex items-center gap-3">
+            <img class="sidebar-logo" src="statswhite.png">
+            <span>PCC S.T.A.T.S.</span>
+        </a>
+        <nav class="flex-grow mt-6">
+            <a href="1_dashboard_trial.html" class="nav-item"><i data-lucide="layout-dashboard"></i> Dashboard</a>
+            <a href="2_analytics_trial.html" class="nav-item"><i data-lucide="bar-chart-3"></i> Analytics</a>
+            <a href="3_alert_trial.html" class="nav-item active"><i data-lucide="bell"></i> Alerts</a>
+            <a href="IRreciverPage.html" class="nav-item"><i data-lucide="radio"></i> IR Receiver</a>
+            <a href="4_settings_trial.html" class="nav-item"><i data-lucide="settings"></i> Settings</a>
+        </nav>
+        <div class="p-4 border-t border-white/10">
+            <button onclick="confirmLogout()" class="nav-item opacity-60 w-full text-left">
+                <i data-lucide="log-out"></i> Logout
+            </button>
+        </div>
+    </aside>
+
+    <main class="main-wrapper">
+        <div class="max-w-[1440px] mx-auto p-4 md:p-8 min-h-[calc(100vh-80px)] flex flex-col">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+                <div class="stats-card">
+                    <div class="stats-icon-bg maroon flex-shrink-0"><i data-lucide="layers" class="w-6 h-6"></i></div>
+                    <div class="flex-1"><p class="text-[10px] uppercase font-bold opacity-70 tracking-widest">Total Labs</p><h2 id="total-labs" class="text-4xl font-black">--</h2></div>
+                </div>
+                <div class="card border-l-4 border-green-500 flex items-center gap-4 p-6">
+                    <div class="stats-icon-bg green flex-shrink-0"><i data-lucide="check-circle" class="w-6 h-6"></i></div>
+                    <div class="flex-1"><p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Normal</p><h2 id="normal-count" class="text-3xl font-black">--</h2></div>
+                </div>
+                <div class="card border-l-4 border-yellow-500 flex items-center gap-4 p-6">
+                    <div class="stats-icon-bg yellow flex-shrink-0"><i data-lucide="alert-triangle" class="w-6 h-6"></i></div>
+                    <div class="flex-1"><p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Critical</p><h2 id="alert-count" class="text-3xl font-black">--</h2></div>
+                </div>
+                <div class="card border-l-4 border-blue-500 flex items-center gap-4 p-6">
+                    <div class="stats-icon-bg blue flex-shrink-0"><i data-lucide="thermometer" class="w-6 h-6"></i></div>
+                    <div class="flex-1"><p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Avg Temp</p><h2 id="avg-temp" class="text-3xl font-black">--</h2></div>
+                </div>
+            </div>
+
+            <div class="card p-6 min-h-[300px] bg-white rounded-2xl shadow-sm border border-gray-100">
+                <div class="flex items-center justify-between mb-8">
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="bell-ring" class="w-5 h-5 text-[#800000]"></i>
+                        <h3 class="font-black text-gray-800 uppercase tracking-widest text-[11px]">Active Incident Log</h3>
+                    </div>
+                    <div id="alert-badge" class="bg-[#800000] text-white text-[9px] font-bold px-3 py-1 rounded-full uppercase">0 Alerts</div>
+                </div>
+                <div id="incident-container" class="space-y-4"></div>
+            </div>
+
+            <div class="mt-8 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div class="p-4 bg-gray-50 border-b border-gray-100 flex justify-between">
+                    <h3 class="text-[10px] font-black uppercase tracking-widest text-gray-500">Resolution History Log</h3>
+                    <button onclick="clearHistory()" class="text-[9px] text-red-400 font-bold uppercase hover:underline">Reset Logs</button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs">
+                        <thead><tr class="bg-gray-50 text-gray-400 uppercase text-[9px] border-b border-gray-100"><th class="p-4">Lab</th><th class="p-4">Event Status</th><th class="p-4 text-right">Time Resolved</th></tr></thead>
+                        <tbody id="log-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-gray-400 px-2 mt-auto pt-10 pb-6">
+                <div class="flex items-center gap-2">
+                    <span class="flex h-2.5 w-2.5 rounded-full bg-green-500 animate-pulse"></span>
+                    Real-time Database Connection: Active
+                </div>
+                <div id="last-update" class="bg-gray-200 px-3 py-1 rounded text-gray-600 tracking-tighter">WAITING FOR SIGNAL...</div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAv9fvbotQfi21Nu7LNZYBuzNUJOD5Vj0E",
+            databaseURL: "https://pcc-stats-default-rtdb.asia-southeast1.firebasedatabase.app/",
+            projectId: "pcc-stats"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+
+        /* --- LOGOUT LOGIC --- */
+        function confirmLogout() {
+            document.getElementById('logoutModal').style.display = 'flex';
+            lucide.createIcons();
+        }
+
+        function closeLogoutModal(e) {
+            if (e.target.id === 'logoutModal') document.getElementById('logoutModal').style.display = 'none';
+        }
+
+        function logout() {
+            window.location.href = "login.html";
+        }
+
+        function resolveIncident(roomKey) {
+            const roomName = roomKey.replace('_', ' ');
+
+            Swal.fire({
+                title: 'Resolve ' + roomName + '?',
+                text: "Status will be updated to Normal in the system.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#800000',
+                confirmButtonText: 'Confirm'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    if (!locallyResolvedKeys.includes(roomKey)) {
+                        locallyResolvedKeys.push(roomKey);
+                        localStorage.setItem('pcc_resolved_keys', JSON.stringify(locallyResolvedKeys));
+                    }
+                    
+                    db.ref(roomKey).update({ status: "NORMAL" }).then(() => {
+                        const newLog = { room: roomName, time: new Date().toLocaleString() };
+                        resolvedHistory.unshift(newLog);
+                        localStorage.setItem('pcc_incident_history', JSON.stringify(resolvedHistory));
+                        
+                        renderHistory();
+                        updateAlertsPage(); 
+                        Swal.fire({ icon: 'success', title: 'Incident Resolved', timer: 1000, showConfirmButton: false });
+                    });
+                }
+            });
+        }
+
+        function renderHistory() {
+            const tbody = document.getElementById('log-table-body');
+            tbody.innerHTML = resolvedHistory.map(log => `
+                <tr class="border-b border-gray-50">
+                    <td class="p-4 font-bold">${log.room}</td>
+                    <td class="p-4"><span class="bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold">NORMAL</span></td>
+                    <td class="p-4 text-gray-400 text-right font-mono text-[10px]">${log.time}</td>
+                </tr>
+            `).join('') || '<tr><td colspan="3" class="p-10 text-center text-gray-300">No history found.</td></tr>';
+        }
+
+        function clearHistory() {
+            resolvedHistory = [];
+            locallyResolvedKeys = [];
+            localStorage.removeItem('pcc_incident_history');
+            localStorage.removeItem('pcc_resolved_keys');
+            renderHistory();
+            renderAlerts();
+        }
+
+        function acknowledgeAlert(alertKey) {
+            console.log(`[Alerts Tab] Acknowledging alert: ${alertKey}`);
+            db.ref(`alerts/${alertKey}`).update({ acknowledged: true }).then(() => {
+                console.log(`[Alerts Tab] Alert ${alertKey} acknowledged successfully`);
+            });
+        }
+
+        // DYNAMIC STATE
+        let labKeys = [];
+        let labsData = {};
+        let resolvedHistory = JSON.parse(localStorage.getItem('pcc_incident_history')) || [];
+        let locallyResolvedKeys = JSON.parse(localStorage.getItem('pcc_resolved_keys')) || [];
+        let alertsData = {};
+        let alertTimestamps = JSON.parse(localStorage.getItem('pcc_alert_timestamps')) || {}; // Track when alerts first triggered
+        let renderDebounceTimer = null;
+        const RENDER_DEBOUNCE_MS = 2000; // Only re-render every 2 seconds max
+
+        function renderAlerts() {
+            // Debounce rendering to prevent spam
+            if (renderDebounceTimer) {
+                clearTimeout(renderDebounceTimer);
+            }
+            
+            renderDebounceTimer = setTimeout(() => {
+                executeRenderAlerts();
+            }, RENDER_DEBOUNCE_MS);
+        }
+        
+        function executeRenderAlerts() {
+            let sumT = 0, criticalCount = 0, incidentHtml = "";
+            const AUTO_DISMISS_MS = 30 * 60 * 1000; // 30 minutes in milliseconds
+
+            // Process temperature alerts from room data
+            labKeys.forEach((roomKey) => {
+                const d = labsData[roomKey];
+                const temp = parseFloat(d.temperature) || 0;
+                const maxT = parseFloat(d.maxT) || 30;
+                sumT += temp;
+                
+                const isAlarm = (d.status === "ALARM" || temp > maxT);
+                const isNotResolved = !locallyResolvedKeys.includes(roomKey);
+
+                if (isAlarm && isNotResolved) {
+                    // Record timestamp when alert first appears
+                    if (!alertTimestamps[roomKey]) {
+                        alertTimestamps[roomKey] = Date.now();
+                        localStorage.setItem('pcc_alert_timestamps', JSON.stringify(alertTimestamps));
+                    }
+                    
+                    // Check if alert has been active for more than 30 minutes
+                    const alertAge = Date.now() - alertTimestamps[roomKey];
+                    const shouldAutoDismiss = alertAge > AUTO_DISMISS_MS;
+                    
+                    if (shouldAutoDismiss) {
+                        // Auto-dismiss the alert
+                        const idx = locallyResolvedKeys.indexOf(roomKey);
+                        if (idx === -1) {
+                            locallyResolvedKeys.push(roomKey);
+                            localStorage.setItem('pcc_resolved_keys', JSON.stringify(locallyResolvedKeys));
+                        }
+                        // Remove timestamp
+                        delete alertTimestamps[roomKey];
+                        localStorage.setItem('pcc_alert_timestamps', JSON.stringify(alertTimestamps));
+                        console.log(`[Auto-dismiss] Alert for ${roomKey} auto-dismissed after 30 minutes`);
+                    } else {
+                        // Show alert with remaining time
+                        const remainingMinutes = Math.ceil((AUTO_DISMISS_MS - alertAge) / (60 * 1000));
+                        criticalCount++;
+                        incidentHtml += `
+                            <div class="flex items-center justify-between p-5 border-l-4 border-red-500 rounded-xl bg-white shadow-md animate-in slide-in-from-top-4 duration-300 hover:shadow-lg transition-shadow">
+                                <div class="flex items-center gap-4">
+                                    <div class="stats-icon-bg" style="background-color: #fee2e2; color: #dc2626;"><i data-lucide="alert-octagon" class="animate-flicker"></i></div>
+                                    <div>
+                                        <h4 class="font-black text-gray-800 text-sm">${roomKey.replace('_', ' ')}</h4>
+                                        <p class="text-[10px] text-red-600 font-bold uppercase tracking-widest">Temperature Critical</p>
+                                        <p class="text-[8px] text-gray-400 mt-1">Auto-dismiss in ${remainingMinutes}min</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-6">
+                                    <div class="text-right"><p class="text-[9px] font-bold text-gray-400 uppercase">Live</p><p class="text-2xl font-black text-red-600">${temp.toFixed(1)}°C</p></div>
+                                    <button onclick="resolveIncident('${roomKey}')" class="px-5 py-2 bg-[#800000] text-white text-[10px] font-black rounded-lg uppercase shadow-lg hover:bg-black transition-all active:scale-95">Resolve</button>
+                                </div>
+                            </div>`;
+                    }
+                } else if (!isAlarm) {
+                    const idx = locallyResolvedKeys.indexOf(roomKey);
+                    if (idx > -1) {
+                        locallyResolvedKeys.splice(idx, 1);
+                        localStorage.setItem('pcc_resolved_keys', JSON.stringify(locallyResolvedKeys));
+                    }
+                    // Remove timestamp if alert is resolved
+                    if (alertTimestamps[roomKey]) {
+                        delete alertTimestamps[roomKey];
+                        localStorage.setItem('pcc_alert_timestamps', JSON.stringify(alertTimestamps));
+                    }
+                }
+            });
+
+            // Process device offline alerts from /alerts (for incident list only, NOT summary cards)
+            const alertKeys = Object.keys(alertsData).sort((a, b) => {
+                const timeA = alertsData[a].timestamp || 0;
+                const timeB = alertsData[b].timestamp || 0;
+                return timeB - timeA; // Newest first
+            });
+
+            let offlineAlertCount = 0;
+            alertKeys.forEach((alertKey) => {
+                const alert = alertsData[alertKey];
+                if (alert.acknowledged) return;
+                if (alert.type !== 'device_offline') return;
+
+                offlineAlertCount++;
+                const roomLabel = alert.roomLabel || alert.room?.replace('_', ' ') || 'Unknown Room';
+                const timeStr = alert.timestamp ? new Date(alert.timestamp).toLocaleString() : 'Unknown';
+
+                incidentHtml += `
+                    <div class="flex items-center justify-between p-5 border-l-4 border-orange-500 rounded-xl bg-white shadow-md animate-in slide-in-from-top-4 duration-300 hover:shadow-lg transition-shadow">
+                        <div class="flex items-center gap-4">
+                            <div class="stats-icon-bg" style="background-color: #ffedd5; color: #ea580c;"><i data-lucide="wifi-off" class="animate-flicker"></i></div>
+                            <div>
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="bg-orange-100 text-orange-700 px-2 py-0.5 rounded text-[9px] font-bold uppercase">Offline</span>
+                                    <h4 class="font-black text-gray-800 text-sm">${roomLabel}</h4>
+                                </div>
+                                <p class="text-[10px] text-orange-600 font-bold uppercase tracking-widest">${alert.message || 'Device not responding'}</p>
+                                <p class="text-[10px] text-gray-500 mt-1 font-semibold">${timeStr}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-6">
+                            <button onclick="acknowledgeAlert('${alertKey}')" class="px-5 py-2 border-2 border-[#800000] text-[#800000] text-[10px] font-black rounded-lg uppercase hover:bg-[#800000] hover:text-white transition-all active:scale-95">Acknowledge</button>
+                        </div>
+                    </div>`;
+            });
+
+            // Indicators - use shared utility for summary cards
+            const stats = calculateStats(labsData, labKeys);
+            updateSummaryCards(stats, {
+                total: 'total-labs',
+                normal: 'normal-count',
+                critical: 'alert-count',
+                avgTemp: 'avg-temp'
+            });
+            
+            // Alert badge shows total incidents (temperature + offline) to match incident list
+            const totalIncidents = criticalCount + offlineAlertCount;
+            document.getElementById('alert-badge').innerText = totalIncidents + " Alerts";
+
+            const container = document.getElementById('incident-container');
+            container.innerHTML = incidentHtml ? incidentHtml : `
+                <div class="flex flex-col items-center justify-center py-20 text-gray-300">
+                    <i data-lucide="shield-check" class="w-12 h-12 mb-2 opacity-20"></i>
+                    <p class="text-[10px] font-bold uppercase">All Labs Operational</p>
+                </div>`;
+            lucide.createIcons();
+            
+            // Update Sync Timestamp
+            document.getElementById('last-update').innerText = "LAST SYNC: " + new Date().toLocaleTimeString();
+        }
+
+        // More specific Firebase listeners to prevent spam
+        // Only listen to Room_ paths, not entire database
+        db.ref().on("value", (snap) => {
+            const data = snap.val();
+            if(data) {
+                // Only update if room data actually changed
+                const newLabsData = {};
+                const newLabKeys = Object.keys(data).filter(key => key.startsWith("Room_"));
+                
+                let dataChanged = false;
+                newLabKeys.forEach(key => {
+                    if (JSON.stringify(labsData[key]) !== JSON.stringify(data[key])) {
+                        dataChanged = true;
+                    }
+                    newLabsData[key] = data[key];
+                });
+                
+                if (dataChanged || newLabKeys.length !== labKeys.length) {
+                    labsData = newLabsData;
+                    labKeys = newLabKeys;
+                    renderAlerts();
+                }
+            }
+        });
+
+        // Listen for device offline alerts with debouncing
+        db.ref('alerts').on('value', (snap) => {
+            const data = snap.val();
+            if(data) {
+                // Only update if alerts actually changed
+                if (JSON.stringify(alertsData) !== JSON.stringify(data)) {
+                    alertsData = data;
+                    renderAlerts();
+                }
+            }
+        });
+
+        // Mobile menu toggle
+        document.getElementById('menu-toggle').addEventListener('click', () => document.getElementById('sidebar').classList.toggle('hidden'));
+        
+        renderHistory();
+    </script>
+</body>
+</html>

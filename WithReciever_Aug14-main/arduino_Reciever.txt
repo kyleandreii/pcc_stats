@@ -1,0 +1,43 @@
+#include <Arduino.h>
+#include <IRremoteESP8266.h>
+#include <IRrecv.h>
+#include <IRutils.h>
+
+// Define the GPIO pin where the KY-022 Signal pin is connected
+const uint16_t kRecvPin = 14; 
+
+// Set the capture buffer size. 1024 is usually enough for AC remotes.
+const uint16_t kCaptureBufferSize = 1024;
+
+// Timeout for the end of a message. AC messages are long, so 50ms is safe.
+const uint8_t kTimeout = 50; 
+
+IRrecv irrecv(kRecvPin, kCaptureBufferSize, kTimeout, true);
+decode_results results;
+
+void setup() {
+  Serial.begin(115200);
+  irrecv.enableIRIn();  // Start the receiver
+  Serial.println("Ready to receive IR signals...");
+}
+
+void loop() {
+  if (irrecv.decode(&results)) {
+    // Display the basic info
+    Serial.println("-----------------------------------------");
+    Serial.print("Protocol: ");
+    Serial.println(typeToString(results.decode_type));
+    
+    // Display the Raw Data (Important for ACs)
+    Serial.print("Raw Data (");
+    Serial.print(results.rawlen);
+    Serial.println("):");
+    
+    // This format is easy to copy-paste back into an IR sender script
+    yield(); 
+    Serial.println(resultToSourceCode(&results));
+    
+    Serial.println("-----------------------------------------");
+    irrecv.resume(); // Prepare for the next signal
+  }
+}

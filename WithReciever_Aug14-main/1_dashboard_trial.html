@@ -1,0 +1,1261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PCC S.T.A.T.S. | Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="shared-utils.js"></script>
+    <script src="ui-enhancements.js"></script>
+
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background-color: #f9fafb; font-family: ui-sans-serif, system-ui, sans-serif; }
+        
+        .sidebar {
+            position: fixed; left: 0; top: 0; height: 100vh; width: 260px;
+            background-color: #800000; padding: 24px; display: flex; flex-direction: column; z-index: 40;
+        }
+        .sidebar-header {
+            display: flex; align-items: center; gap: 12px; color: white;
+            font-weight: 900; font-size: 1.25rem; margin-bottom: 24px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            text-decoration: none;
+        }
+
+        .sidebar-header:hover {
+            transform: translateX(4px);
+            opacity: 0.9;
+        }
+
+        .sidebar-header:active {
+            transform: scale(0.98);
+        }
+        .sidebar-logo {
+            width: 60px;
+            height: 60px;
+            object-fit: contain;
+            border-radius: 6px;
+        }
+        .nav-item {
+            display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+            border-radius: 12px; color: rgba(255, 255, 255, 0.7); text-decoration: none; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative; border-left: 3px solid transparent;
+        }
+        .nav-item:hover { background-color: rgba(255, 255, 255, 0.1); color: white; transform: translateX(4px); }
+        .nav-item.active { background-color: rgba(255, 255, 255, 0.2); color: white; font-weight: bold; border-left-color: rgba(255, 255, 255, 0.8); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); }
+
+        .main-wrapper { margin-left: 260px; padding: 40px; min-height: 100vh; padding-bottom: 80px; }
+
+        .card { background: white; border-radius: 24px; border: 1px solid #f3f4f6; box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .card:hover { box-shadow: 0 8px 24px rgba(0,0,0,0.1); transform: translateY(-2px); }
+        .stats-card {
+            background-color: #800000; border-radius: 24px; padding: 24px; color: white;
+            display: flex; align-items: center; gap: 16px; box-shadow: 0 10px 15px -3px rgba(128, 0, 0, 0.2);
+        }
+        .stats-card .stats-icon-bg { flex-shrink: 0; }
+        .stats-card > div { flex: 1; }
+
+        .filter-btn { 
+            padding: 8px 16px; border-radius: 8px; font-size: 10px; font-weight: 900; 
+            text-transform: uppercase; cursor: pointer; transition: 0.3s;
+        }
+        .filter-btn.active { background: white; color: #800000; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .filter-btn:not(.active) { color: #9ca3af; }
+
+        .switch { position: relative; display: inline-block; width: 34px; height: 20px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #cbd5e1; transition: .3s cubic-bezier(0.4, 0, 0.2, 1); border-radius: 20px; }
+        .slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: white; transition: .3s cubic-bezier(0.4, 0, 0.2, 1); border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        input:checked + .slider { background-color: #800000; }
+        input:checked + .slider:before { transform: translateX(14px); }
+
+        .border-status-normal { border-top: 4px solid #10b981 !important; }
+        .border-status-high { border-top: 4px solid #ef4444 !important; }
+        .border-status-low { border-top: 4px solid #3b82f6 !important; }
+
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(4px); display: none; align-items: center;
+            justify-content: center; z-index: 100;
+        }
+        .modal-content {
+            background: white; width: 90%; max-width: 420px; border-radius: 40px;
+            padding: 32px; position: relative; border-top: 6px solid #800000;
+        }
+        .modal-row { display: flex; justify-content: space-between; padding: 12px 16px; background: #f9fafb; border-radius: 16px; margin-bottom: 8px; border: 1px solid #f3f4f6; }
+        .modal-highlight { background: #800000; color: white; padding: 16px; border-radius: 16px; display: flex; justify-content: space-between; align-items: center; }
+
+        .add-input { width: 100%; padding: 12px; border-radius: 12px; border: 1px solid #f3f4f6; background: #f9fafb; font-weight: bold; margin-bottom: 15px; outline: none; }
+        .add-label { display: block; font-size: 10px; font-weight: 900; color: #9ca3af; text-transform: uppercase; margin-bottom: 5px; }
+
+        .conn-footer {
+            position: fixed; bottom: 0; left: 260px; right: 0;
+            background: white; border-top: 1px solid #f3f4f6;
+            padding: 12px 40px; display: flex; justify-content: space-between;
+            align-items: center; z-index: 30;
+        }
+
+        /* Smooth Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes scaleIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        @keyframes modalFadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes modalScaleIn {
+            from { opacity: 0; transform: scale(0.9) translateY(-20px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        .animate-fade-in {
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+
+        .animate-scale-in {
+            animation: scaleIn 0.3s ease-out forwards;
+        }
+
+        .animate-slide-in {
+            animation: slideIn 0.3s ease-out forwards;
+        }
+
+        .modal-overlay {
+            animation: modalFadeIn 0.2s ease-out forwards;
+        }
+
+        .modal-content {
+            animation: modalScaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+
+        /* Button Hover Effects */
+        button {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        button:hover {
+            transform: translateY(-1px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        /* Card Hover Effect */
+        .card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Smooth Scroll */
+        html {
+            scroll-behavior: smooth;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .sidebar { transform: translateX(-100%); }
+            .main-wrapper { margin-left: 0; padding: 20px; padding-bottom: 80px; }
+            .conn-footer { left: 0; padding: 12px 20px; }
+            .stats-card { padding: 16px; }
+            .stats-card h2 { font-size: 1.5rem; }
+            .card { padding: 16px; }
+            .filter-btn { padding: 6px 12px; font-size: 9px; }
+        }
+
+        @media (max-width: 480px) {
+            .main-wrapper { padding: 16px; padding-bottom: 80px; }
+            .stats-card { padding: 12px; gap: 12px; }
+            .stats-card h2 { font-size: 1.25rem; }
+            .stats-card p { font-size: 8px; }
+            .card { padding: 12px; border-radius: 16px; }
+            .filter-btn { padding: 4px 8px; font-size: 8px; }
+            .add-input { padding: 10px; font-size: 14px; }
+            .modal-content { padding: 20px; }
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div id="addRoomModal" class="modal-overlay" onclick="closeAddModal(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="font-black text-xl text-gray-800 uppercase">Add Laboratory</h2>
+                <button onclick="document.getElementById('addRoomModal').style.display='none'"><i data-lucide="x-circle" class="text-gray-300"></i></button>
+            </div>
+            
+            <label class="add-label">Room ID (e.g. Room 406)</label>
+            <input type="text" id="newRoomId" placeholder="Room 406" class="add-input" oninput="this.value = this.value.replace(/ /g, '_')">
+            
+            <label class="add-label">Room Number (e.g. 406)</label>
+            <input type="text" id="newRoomLabel" placeholder="406" class="add-input">
+
+            <button onclick="saveNewRoom()" class="w-full bg-[#800000] text-white font-black py-4 rounded-2xl shadow-lg hover:bg-[#600000] transition-all">
+                CREATE ROOM
+            </button>
+        </div>
+    </div>
+
+    <div id="infoModal" class="modal-overlay" onclick="closeModal(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-start mb-5">
+                <div>
+                    <h2 id="modalTitle" class="font-black text-xl text-gray-800 uppercase">ROOM ---</h2>
+                    <p class="text-[10px] font-bold text-gray-400 uppercase">Room & Device Details</p>
+                </div>
+                <button onclick="document.getElementById('infoModal').style.display='none'" class="text-gray-300 hover:text-red-500 transition-colors">
+                    <i data-lucide="x-circle" class="w-7 h-7"></i>
+                </button>
+            </div>
+
+            <div class="modal-row">
+                <span class="text-[10px] font-bold text-gray-400 uppercase">Location</span>
+                <span id="modalLocation" class="text-[11px] font-black text-gray-800">--</span>
+            </div>
+
+            <div class="modal-row">
+                <span class="text-[10px] font-bold text-gray-400 uppercase">AC Type</span>
+                <span id="modalType" class="text-[11px] font-black text-[#800000]">--</span>
+            </div>
+
+            <div class="modal-row">
+                <span class="text-[10px] font-bold text-gray-400 uppercase">AC Model</span>
+                <span id="modalModel" class="text-[11px] font-black text-gray-800">--</span>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-3 mb-3">
+                <div class="bg-[#f9fafb] p-3 rounded-2xl text-center border border-gray-100">
+                    <p class="text-[8px] font-bold text-gray-400 uppercase mb-1">Cooling (BTU)</p>
+                    <p id="modalCooling" class="text-sm font-black">--</p>
+                </div>
+                <div class="bg-[#f9fafb] p-3 rounded-2xl text-center border border-gray-100">
+                    <p class="text-[8px] font-bold text-gray-400 uppercase mb-1">Power Input (W)</p>
+                    <p id="modalPower" class="text-sm font-black">--</p>
+                </div>
+            </div>
+
+            <div class="modal-highlight">
+                <span class="text-[10px] font-bold opacity-80 uppercase">Rating</span>
+                <span id="modalRating" class="text-xs font-black">--</span>
+            </div>
+        </div>
+    </div>
+
+    <button id="menu-toggle" class="sm:hidden p-4 absolute top-0 left-0 text-[#800000] z-50"><i data-lucide="menu"></i></button>
+
+    <aside id="sidebar" class="sidebar">
+        <button class="mobile-menu-toggle">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+        </button>
+        
+        <a href="1_dashboard_trial.html" class="sidebar-header flex items-center gap-3">
+            <img class="sidebar-logo" src="statswhite.png">
+            <span>PCC S.T.A.T.S.</span>
+        </a>
+        <nav class="flex-grow mt-6">
+            <a href="1_dashboard_trial.html" class="nav-item active"><i data-lucide="layout-dashboard"></i> Dashboard</a>
+            <a href="2_analytics_trial.html" class="nav-item"><i data-lucide="bar-chart-3"></i> Analytics</a>
+            <a href="3_alert_trial.html" class="nav-item"><i data-lucide="bell"></i> Alerts</a>
+            <a href="IRreciverPage.html" class="nav-item"><i data-lucide="radio"></i> IR Receiver</a>
+            <a href="4_settings_trial.html" class="nav-item"><i data-lucide="settings"></i> Settings</a>
+            <button onclick="document.getElementById('addRoomModal').style.display='flex'" class="nav-item w-full mt-4 bg-white/5 border border-white/10 text-left">
+                <i data-lucide="plus-circle"></i> Add Room
+            </button>
+        </nav>
+        <div class="p-4 border-t border-white/10">
+            <button onclick="confirmLogout()" class="nav-item opacity-60 w-full text-left">
+                <i data-lucide="log-out"></i> Logout
+            </button>
+        </div>
+    </aside>
+
+    <main class="main-wrapper">
+        <div class="max-w-[1440px] mx-auto">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+                <div class="stats-card">
+                    <div class="stats-icon-bg maroon flex-shrink-0"><i data-lucide="layers" class="w-6 h-6"></i></div>
+                    <div class="flex-1"><p class="text-[10px] uppercase font-bold opacity-70 tracking-widest">Total Labs</p><h2 id="total-count" class="text-4xl font-black">0</h2></div>
+                </div>
+                <div class="card border-l-4 border-green-500 flex items-center gap-4 p-6">
+                    <div class="stats-icon-bg green flex-shrink-0"><i data-lucide="check-circle" class="w-6 h-6"></i></div>
+                    <div class="flex-1"><p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Normal</p><h2 id="normal-count" class="text-3xl font-black">--</h2></div>
+                </div>
+                <div class="card border-l-4 border-yellow-500 flex items-center gap-4 p-6">
+                    <div class="stats-icon-bg yellow flex-shrink-0"><i data-lucide="alert-triangle" class="w-6 h-6"></i></div>
+                    <div class="flex-1"><p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Critical</p><h2 id="alert-count" class="text-3xl font-black">--</h2></div>
+                </div>
+                <div class="card border-l-4 border-blue-500 flex items-center gap-4 p-6">
+                    <div class="stats-icon-bg blue flex-shrink-0"><i data-lucide="thermometer" class="w-6 h-6"></i></div>
+                    <div class="flex-1"><p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Avg Temp</p><h2 id="avg-temp" class="text-3xl font-black">--</h2></div>
+                </div>
+            </div>
+
+            <div class="flex flex-col md:flex-row items-center justify-between gap-4 mb-8">
+                <div class="relative w-full md:w-96">
+                    <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"></i>
+                    <input type="text" id="labSearch" placeholder="Search Laboratory (e.g. 401)..." 
+                           class="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#800000]/20 transition-all shadow-sm">
+                </div>
+                <div class="flex bg-gray-200/50 p-1 rounded-xl w-full md:w-auto">
+                    <button onclick="setFilter('all')" id="btn-all" class="filter-btn active">All Rooms</button>
+                    <button onclick="setFilter('on')" id="btn-on" class="filter-btn">Turned On</button>
+                    <button onclick="setFilter('off')" id="btn-off" class="filter-btn">Turned Off</button>
+                </div>
+            </div>
+
+            <div id="lab-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+        </div>
+    </main>
+
+    <footer class="conn-footer">
+        <div class="flex items-center gap-2">
+            <div id="conn-indicator" class="w-2.5 h-2.5 rounded-full bg-gray-400 animate-pulse"></div>
+            <span id="conn-text" class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Checking Connection...</span>
+        </div>
+        <div class="text-[10px] font-bold text-gray-300 uppercase tracking-tighter">
+            System Status: <span id="system-clock">00:00:00 AM</span>
+        </div>
+    </footer>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyAv9fvbotQfi21Nu7LNZYBuzNUJOD5Vj0E",
+            databaseURL: "https://pcc-stats-default-rtdb.asia-southeast1.firebasedatabase.app/",
+            projectId: "pcc-stats"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // Analytics tracking variables
+        let roomUsage = JSON.parse(localStorage.getItem('roomUsage')) || {};
+
+        db.ref(".info/connected").on("value", (snap) => {
+            const indicator = document.getElementById('conn-indicator');
+            const text = document.getElementById('conn-text');
+            if (snap.val() === true) {
+                indicator.className = "w-2.5 h-2.5 rounded-full bg-green-500";
+                text.innerText = "Connected to Firebase";
+                text.className = "text-[10px] font-black text-green-600 uppercase tracking-widest";
+            } else {
+                indicator.className = "w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse";
+                text.innerText = "Disconnected - Retrying";
+                text.className = "text-[10px] font-black text-red-600 uppercase tracking-widest";
+            }
+        });
+
+        setInterval(() => {
+            document.getElementById('system-clock').innerText = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+        }, 1000);
+
+        let labs = [];
+        let roomLabels = [];
+        let latestData = [];
+        let currentFilter = 'all'; 
+        let searchQuery = '';
+        let pendingUpdates = {}; // Track rooms with pending AC updates
+        let deviceOfflineFlags = {}; // Track offline alert state per room
+        let heartbeatListeners = {}; // Track heartbeat listeners to prevent duplicates
+        const HEARTBEAT_TIMEOUT = 15000; // 15 seconds - device offline if no heartbeat for this duration
+        const CHECK_INTERVAL_MS = 10000; // 10 seconds
+        
+        // Force periodic re-render to ensure heartbeat status updates in real-time
+        setInterval(() => {
+            renderDashboard();
+        }, 4000); // Check every 4 seconds to catch connection changes quickly
+
+        function loadRoomsFromFirebase() {
+            console.log('[loadRoomsFromFirebase] Starting Firebase connection...');
+            
+            // Test Firebase connection
+            db.ref('.info/connected').on('value', (snapshot) => {
+                const connected = snapshot.val();
+                console.log('[Firebase] Connection status:', connected ? 'CONNECTED' : 'DISCONNECTED');
+            });
+            
+            db.ref().on("value", (snapshot) => {
+                const data = snapshot.val();
+                if (!data) {
+                    console.log('[loadRoomsFromFirebase] No data received from Firebase');
+                    return;
+                }
+
+                console.log('[loadRoomsFromFirebase] Firebase data received, keys:', Object.keys(data));
+                console.log('[loadRoomsFromFirebase] Room_1 data:', JSON.stringify(data['Room_1']));
+                console.log('[loadRoomsFromFirebase] Room_1 last_seen:', data['Room_1']?.last_seen);
+                console.log('[loadRoomsFromFirebase] Room_1 temperature:', data['Room_1']?.temperature);
+
+                // Only reset arrays if this is initial load (check if labs is empty)
+                const isInitialLoad = labs.length === 0;
+                if (isInitialLoad) {
+                    labs = [];
+                    roomLabels = [];
+                    latestData = [];
+                    labKeys = [];
+                    labsData = {};
+                    console.log('[loadRoomsFromFirebase] Initial load - resetting arrays');
+                } else {
+                    console.log('[loadRoomsFromFirebase] Update received - preserving existing arrays');
+                }
+                
+                Object.keys(data).forEach((key) => {
+                    // Check if the key starts with "Room_" to avoid processing meta keys like "info"
+                    if (key.startsWith("Room_") && typeof data[key] === 'object' && data[key] !== null) {
+                        console.log(`[loadRoomsFromFirebase] Processing room: ${key}`);
+                        
+                        // Check if room already exists in our tracking
+                        const roomExists = labKeys.includes(key);
+                        
+                        // Add room if it doesn't exist
+                        if (!roomExists) {
+                            labs.push(key);
+                            labKeys.push(key);
+                            // Use roomName from data if available, otherwise format key
+                            let displayLabel = data[key].roomName || key.replace(/_/g, ' ');
+                            // Map Room_1 to Room 401 for display
+                            if (key === "Room_1") displayLabel = "Room 401";
+                            roomLabels.push(displayLabel);
+                            console.log(`[loadRoomsFromFirebase] Added new room: ${key} as ${displayLabel}`);
+                        }
+                        
+                        // localStorage is authoritative for AC state - never override with Firebase
+                        const localACState = localStorage.getItem(`ac_state_${key}`);
+                        
+                        // Create room data but EXCLUDE 'ac' field from Firebase to prevent any override
+                        const { ac: firebaseAC, ...roomDataWithoutAC } = data[key];
+                        const roomData = roomDataWithoutAC;
+                        
+                        if (localACState !== null) {
+                            // Always use localStorage state - it's the authoritative source
+                            roomData.ac = localACState === 'true';
+                            console.log(`[loadRoomsFromFirebase] Using localStorage AC state for ${key}: ${roomData.ac} (Firebase AC excluded)`);
+                        } else {
+                            // Initialize localStorage from Firebase if not set
+                            localStorage.setItem(`ac_state_${key}`, firebaseAC ? 'true' : 'false');
+                            roomData.ac = firebaseAC;
+                            console.log(`[loadRoomsFromFirebase] Initializing localStorage from Firebase for ${key}: ${firebaseAC}`);
+                        }
+                        
+                        // Initialize Firebase timestamp if it doesn't exist
+                        if (!data[key].ac_timestamp) {
+                            db.ref(`${key}/ac_timestamp`).set(Date.now());
+                            console.log(`[loadRoomsFromFirebase] Initialized Firebase timestamp for ${key}`);
+                        }
+                        
+                        // Update or add to data structures
+                        if (isInitialLoad) {
+                            latestData.push(roomData);
+                        } else {
+                            // For updates, find and update existing entry
+                            const index = labKeys.indexOf(key);
+                            if (index !== -1) {
+                                latestData[index] = roomData;
+                            }
+                        }
+
+                        // Track AC usage for analytics
+                        const now = Date.now();
+                        if (!roomUsage[key]) roomUsage[key] = { totalMs: 0, lastStart: null, isActive: false };
+                        
+                        // Check AC state - handle both single-unit and dual-unit rooms
+                        let acOn = false;
+                        if (roomData.ac === true || roomData.ac === "ON" || roomData.ac === 1) {
+                            acOn = true;
+                        } else if (roomData.units) {
+                            const unit1On = (roomData.units?.unit_1?.ac === true || roomData.units?.unit_1?.ac === "ON" || roomData.units?.unit_1?.ac === 1);
+                            const unit2On = (roomData.units?.unit_2?.ac === true || roomData.units?.unit_2?.ac === "ON" || roomData.units?.unit_2?.ac === 1);
+                            acOn = unit1On || unit2On;
+                        }
+                        
+                        if (acOn && !roomUsage[key].isActive) {
+                            roomUsage[key].lastStart = now;
+                            roomUsage[key].isActive = true;
+                        } else if (!acOn && roomUsage[key].isActive) {
+                            roomUsage[key].totalMs += (now - roomUsage[key].lastStart);
+                            roomUsage[key].isActive = false;
+                        }
+                        
+                        localStorage.setItem('roomUsage', JSON.stringify(roomUsage));
+                        labsData[key] = roomData;
+                        
+                        console.log(`[loadRoomsFromFirebase] Found room: ${key} with AC state: ${roomData.ac}, last_seen: ${roomData.last_seen}`);
+                    }
+                });
+                
+                if (isInitialLoad) {
+                    console.log('[loadRoomsFromFirebase] Final room list:', labKeys);
+                    console.log('[loadRoomsFromFirebase] labsData:', labsData);
+                    
+                    // Start heartbeat monitoring for all rooms (only once on initial load)
+                    labKeys.forEach(roomId => {
+                        if (!deviceOfflineFlags[roomId]) {
+                            watchDeviceOnline(roomId);
+                        }
+                        
+                        // Add specific listener for last_seen to update heartbeat animation immediately (prevent duplicates)
+                        if (!heartbeatListeners[roomId]) {
+                            heartbeatListeners[roomId] = true;
+                            console.log(`[Heartbeat] Setting up listener for /${roomId}/last_seen`);
+                            db.ref(`/${roomId}/last_seen`).on('value', (snapshot) => {
+                                const lastSeen = snapshot.val();
+                                console.log(`[Heartbeat] /${roomId}/last_seen updated:`, lastSeen ? new Date(lastSeen).toISOString() : 'null');
+                                
+                                // Update the room data with new last_seen regardless of value
+                                const index = labKeys.indexOf(roomId);
+                                if (index !== -1 && labsData[roomId]) {
+                                    // Preserve localStorage AC state (CRITICAL)
+                                    const localACState = localStorage.getItem(`ac_state_${roomId}`);
+                                    const localUnit1State = localStorage.getItem(`ac_state_${roomId}_unit_1`);
+                                    const localUnit2State = localStorage.getItem(`ac_state_${roomId}_unit_2`);
+                                    
+                                    labsData[roomId].last_seen = lastSeen || 0;
+                                    latestData[index].last_seen = lastSeen || 0;
+                                    if (localACState !== null) {
+                                        labsData[roomId].ac = localACState === 'true';
+                                        latestData[index].ac = localACState === 'true';
+                                    }
+                                    if (localUnit1State !== null && labsData[roomId].units) {
+                                        labsData[roomId].units.unit_1.ac = localUnit1State === 'true';
+                                        latestData[index].units.unit_1.ac = localUnit1State === 'true';
+                                    }
+                                    if (localUnit2State !== null && labsData[roomId].units) {
+                                        labsData[roomId].units.unit_2.ac = localUnit2State === 'true';
+                                        latestData[index].units.unit_2.ac = localUnit2State === 'true';
+                                    }
+                                    console.log(`[Heartbeat] Updating ${roomId} in UI - re-rendering, last_seen: ${lastSeen}`);
+                                    // Re-render to update heartbeat animation
+                                    renderDashboard();
+                                    
+                                    // Set a timeout to check if device goes offline (no new updates for HEARTBEAT_TIMEOUT)
+                                    clearTimeout(heartbeatListeners[`${roomId}_timeout`]);
+                                    heartbeatListeners[`${roomId}_timeout`] = setTimeout(() => {
+                                        console.log(`[Heartbeat] ${roomId} timeout - checking if offline`);
+                                        const timeSinceLastSeen = Date.now() - (lastSeen || 0);
+                                        if (timeSinceLastSeen > HEARTBEAT_TIMEOUT) {
+                                            console.log(`[Heartbeat] ${roomId} detected as offline (timeout exceeded)`);
+                                            renderDashboard();
+                                        }
+                                    }, HEARTBEAT_TIMEOUT);
+                                }
+                            });
+                        }
+                        
+                        // Add specific listener for target temperature changes to ensure real-time sync with settings page
+                        if (roomId === "Room_1") {
+                            // Listen for unit_1 target temperature changes
+                            db.ref(`${roomId}/units/unit_1/targetTemp`).on('value', (snapshot) => {
+                                const newTarget = snapshot.val();
+                                console.log(`[TargetTemp] ${roomId}/unit_1 targetTemp updated:`, newTarget);
+                                if (newTarget !== null && labsData[roomId]) {
+                                    const index = labKeys.indexOf(roomId);
+                                    if (index !== -1) {
+                                        if (!labsData[roomId].units) labsData[roomId].units = {};
+                                        if (!labsData[roomId].units.unit_1) labsData[roomId].units.unit_1 = {};
+                                        labsData[roomId].units.unit_1.targetTemp = newTarget;
+                                        latestData[index].units.unit_1.targetTemp = newTarget;
+                                        console.log(`[TargetTemp] Updated ${roomId}/unit_1 targetTemp to ${newTarget} - re-rendering`);
+                                        renderDashboard();
+                                    } else {
+                                        console.log(`[TargetTemp] ERROR: Could not find room index for ${roomId}`);
+                                    }
+                                } else {
+                                    console.log(`[TargetTemp] ERROR: newTarget is null or labsData[${roomId}] is missing`);
+                                }
+                            });
+                            
+                            // Listen for unit_2 target temperature changes
+                            db.ref(`${roomId}/units/unit_2/targetTemp`).on('value', (snapshot) => {
+                                const newTarget = snapshot.val();
+                                console.log(`[TargetTemp] ${roomId}/unit_2 targetTemp updated:`, newTarget);
+                                if (newTarget !== null && labsData[roomId]) {
+                                    const index = labKeys.indexOf(roomId);
+                                    if (index !== -1) {
+                                        if (!labsData[roomId].units) labsData[roomId].units = {};
+                                        if (!labsData[roomId].units.unit_2) labsData[roomId].units.unit_2 = {};
+                                        labsData[roomId].units.unit_2.targetTemp = newTarget;
+                                        latestData[index].units.unit_2.targetTemp = newTarget;
+                                        console.log(`[TargetTemp] Updated ${roomId}/unit_2 targetTemp to ${newTarget} - re-rendering`);
+                                        renderDashboard();
+                                    } else {
+                                        console.log(`[TargetTemp] ERROR: Could not find room index for ${roomId}`);
+                                    }
+                                } else {
+                                    console.log(`[TargetTemp] ERROR: newTarget is null or labsData[${roomId}] is missing`);
+                                }
+                            });
+                        } else {
+                            // Listen for single room target temperature changes
+                            db.ref(`${roomId}/targetTemp`).on('value', (snapshot) => {
+                                const newTarget = snapshot.val();
+                                console.log(`[TargetTemp] ${roomId} targetTemp updated:`, newTarget);
+                                if (newTarget !== null && labsData[roomId]) {
+                                    const index = labKeys.indexOf(roomId);
+                                    if (index !== -1) {
+                                        labsData[roomId].targetTemp = newTarget;
+                                        latestData[index].targetTemp = newTarget;
+                                        console.log(`[TargetTemp] Updating ${roomId} in UI - re-rendering`);
+                                        renderDashboard();
+                                    }
+                                }
+                            });
+                        }
+                    });
+                }
+                
+                renderDashboard();
+            });
+        }
+
+        function saveNewRoom() {
+            const id = document.getElementById('newRoomId').value.trim();
+            const label = document.getElementById('newRoomLabel').value.trim();
+            
+            if(!id || !label) {
+                Swal.fire({
+                    title: 'Missing Information',
+                    text: 'Please fill in both Room ID and Room Number fields.',
+                    icon: 'warning',
+                    confirmButtonColor: '#800000'
+                });
+                return;
+            }
+
+            // Check for duplicates in existing rooms
+            db.ref().once('value', (snapshot) => {
+                const data = snapshot.val() || {};
+                const existingRooms = Object.keys(data).filter(key => key.startsWith('Room_'));
+                
+                // Check for duplicate Room ID
+                if (data[id]) {
+                    Swal.fire({
+                        title: 'Duplicate Room ID',
+                        text: `A room with ID "${id}" already exists. Please use a different Room ID.`,
+                        icon: 'error',
+                        confirmButtonColor: '#800000'
+                    });
+                    return;
+                }
+
+                // No duplicates found, proceed to create room
+                const newRoomData = {
+                    temperature: 25.0, 
+                    humidity: 50, 
+                    ac: false, 
+                    ac_command: "POWER_OFF",
+                    roomName: "Room " + label,
+                    status: "NORMAL",
+                    thresholds: { minTemp: 20, maxTemp: 30 },
+                    specs: { building: "St. Joseph", floor: "4th Floor", acModel: "Standard", acType: "Split Type", cooling: "12,000 BTU", power: "1.2 kW", rating: "5 Star" }
+                };
+                
+                db.ref(id).set(newRoomData).then(() => {
+                    // Manually add the new room to local arrays for immediate display
+                    if (!labKeys.includes(id)) {
+                        labs.push(id);
+                        labKeys.push(id);
+                        const displayLabel = newRoomData.roomName || id.replace(/_/g, ' ');
+                        roomLabels.push(displayLabel);
+                        console.log(`[saveNewRoom] Added room to local arrays: ${id} as ${displayLabel}`);
+                    }
+                    
+                    Swal.fire({
+                        title: 'Room Created!',
+                        text: `Room "${id}" has been successfully added.`,
+                        icon: 'success',
+                        confirmButtonColor: '#800000'
+                    });
+                    document.getElementById('addRoomModal').style.display = 'none';
+                    document.getElementById('newRoomId').value = "";
+                    document.getElementById('newRoomLabel').value = "";
+                    renderDashboard();
+                }).catch((error) => {
+                    Swal.fire({
+                        title: 'Error',
+                        text: 'Failed to create room. Please try again.',
+                        icon: 'error',
+                        confirmButtonColor: '#800000'
+                    });
+                    console.error('Error creating room:', error);
+                });
+            });
+        }
+
+        function setFilter(type) {
+            currentFilter = type;
+            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`btn-${type}`).classList.add('active');
+            renderDashboard();
+        }
+
+        document.getElementById('labSearch').addEventListener('input', (e) => {
+            searchQuery = e.target.value.toLowerCase();
+            renderDashboard();
+        });
+
+        function toggleAC(roomPath, isChecked) {
+            console.log(`[Dashboard] Toggle ${roomPath} to ${isChecked ? 'ON' : 'OFF'}`);
+            
+            // Persist to localStorage for persistence across refreshes (authoritative source)
+            localStorage.setItem(`ac_state_${roomPath}`, isChecked.toString());
+            console.log(`[Dashboard] Saved to localStorage: ac_state_${roomPath} = ${isChecked.toString()}`);
+            
+            // Track timestamp for duration calculation in Firebase
+            const timestamp = Date.now();
+            db.ref(`${roomPath}/ac_timestamp`).set(timestamp);
+            console.log(`[Dashboard] Saved timestamp to Firebase: ${roomPath}/ac_timestamp = ${timestamp}`);
+            
+            // Set optimistic UI state to prevent immediate re-render conflicts
+            pendingUpdates[roomPath] = isChecked;
+            
+            // Update database - Arduino expects "ON" or "OFF"
+            const cmd = isChecked ? "ON" : "OFF";
+            db.ref(roomPath).update({ ac: isChecked, ac_command: cmd })
+                .then(() => {
+                    console.log(`[Dashboard] Update succeeded for ${roomPath}`);
+                    // Clear pending flag once update completes
+                    delete pendingUpdates[roomPath];
+                })
+                .catch((error) => {
+                    console.error(`[Dashboard] Failed to update AC for ${roomPath}:`, error);
+                    delete pendingUpdates[roomPath];
+                });
+            
+            // Force immediate re-render to show the change
+            renderDashboard();
+        }
+
+        function toggleUnitAC(roomPath, unit, isChecked) {
+            const unitPath = `${roomPath}/units/${unit}`;
+            const cmd = isChecked ? "ON" : "OFF";
+            console.log(`[Dashboard] Toggle ${unitPath} to ${isChecked ? 'ON' : 'OFF'}`);
+            
+            // Persist to localStorage for persistence across refreshes
+            localStorage.setItem(`ac_state_${roomPath}_${unit}`, isChecked.toString());
+            console.log(`[Dashboard] Saved to localStorage: ac_state_${roomPath}_${unit} = ${isChecked.toString()}`);
+            
+            // Track timestamp for duration calculation in Firebase
+            const timestamp = Date.now();
+            db.ref(`${unitPath}/ac_timestamp`).set(timestamp);
+            console.log(`[Dashboard] Saved timestamp to Firebase: ${unitPath}/ac_timestamp = ${timestamp}`);
+            
+            // Update unit-specific Firebase path
+            db.ref(unitPath).update({ ac: isChecked, ac_command: cmd })
+                .then(() => {
+                    console.log(`[Dashboard] Unit ${unit} update succeeded for ${roomPath}`);
+                })
+                .catch((error) => {
+                    console.error(`[Dashboard] Failed to update Unit ${unit} for ${roomPath}:`, error);
+                });
+            
+            // Force immediate re-render to show the change
+            renderDashboard();
+        }
+        
+        function formatDuration(timestamp) {
+            if (!timestamp) return 'Unknown';
+            const now = Date.now();
+            const diff = now - parseInt(timestamp);
+            
+            const seconds = Math.floor(diff / 1000);
+            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(minutes / 60);
+            const days = Math.floor(hours / 24);
+            
+            if (days > 0) {
+                return `${days} day${days > 1 ? 's' : ''}`;
+            } else if (hours > 0) {
+                return `${hours} hour${hours > 1 ? 's' : ''}`;
+            } else if (minutes > 0) {
+                return `${minutes} min`;
+            } else {
+                return 'Just now';
+            }
+        }
+        
+        function getDurationDisplay(roomPath, unit = null) {
+            const stateKey = unit ? `ac_state_${roomPath}_${unit}` : `ac_state_${roomPath}`;
+            const state = localStorage.getItem(stateKey);
+            
+            // Get timestamp from Firebase data
+            const firebasePath = unit ? `${roomPath}/units/${unit}/ac_timestamp` : `${roomPath}/ac_timestamp`;
+            const timestamp = labsData[roomPath]?.units?.[unit]?.ac_timestamp || labsData[roomPath]?.ac_timestamp;
+            
+            console.log(`[Duration] ${roomPath} ${unit || ''}: timestamp=${timestamp}, state=${state}`);
+            
+            if (!timestamp || !state) {
+                console.log(`[Duration] ${roomPath} ${unit || ''}: Missing data, returning Unknown`);
+                return 'Unknown';
+            }
+            
+            // Check if timestamp is older than 24 hours, reset if needed
+            const now = Date.now();
+            const hoursSinceTimestamp = (now - timestamp) / (1000 * 60 * 60);
+            
+            if (hoursSinceTimestamp >= 24) {
+                console.log(`[Duration] ${roomPath} ${unit || ''}: Timestamp is ${hoursSinceTimestamp.toFixed(1)}h old, resetting`);
+                // Reset timestamp to current time
+                const newTimestamp = now;
+                const updatePath = unit ? `${roomPath}/units/${unit}` : roomPath;
+                db.ref(`${updatePath}/ac_timestamp`).set(newTimestamp);
+                return 'Just now ' + (state === 'true' ? 'online' : 'offline');
+            }
+            
+            const duration = formatDuration(timestamp);
+            const isOn = state === 'true';
+            
+            const result = `${duration} ${isOn ? 'online' : 'offline'}`;
+            console.log(`[Duration] ${roomPath} ${unit || ''}: Returning ${result}`);
+            return result;
+        }
+        
+        // Test function for debugging - call from console: testGreenDot()
+        function testGreenDot() {
+            console.log('[Test] Forcing green dot animation test');
+            const testDot = document.querySelector('.rounded-full.bg-green-500');
+            if (testDot) {
+                console.log('[Test] Found green dot, adding animation');
+                testDot.classList.add('animate-ping');
+            } else {
+                console.log('[Test] No green dot found in DOM');
+            }
+            
+            // Check if any status dots exist
+            const allDots = document.querySelectorAll('[id^="status-dot-"]');
+            console.log('[Test] Found', allDots.length, 'status dots');
+            allDots.forEach((dot, i) => {
+                console.log('[Test] Status dot', i, ':', dot.className);
+            });
+        }
+
+        function adjustUnitTargetTemp(roomPath, unit, change) {
+            const unitPath = `${roomPath}/units/${unit}`;
+            const currentData = labsData[roomPath];
+            const currentTarget = currentData?.units?.[unit]?.targetTemp || 24;
+            const newVal = currentTarget + change;
+            if (newVal < 16 || newVal > 30) return;
+            
+            const cmd = change > 0 ? "TEMP_UP" : "TEMP_DOWN";
+            console.log(`[Dashboard] Adjust ${unitPath} target temp to ${newVal}°C (${cmd})`);
+            
+            db.ref(unitPath).update({ targetTemp: newVal, ac_command: cmd })
+                .then(() => {
+                    console.log(`[Dashboard] Unit ${unit} target temp updated to ${newVal}°C`);
+                })
+                .catch((error) => {
+                    console.error(`[Dashboard] Failed to update Unit ${unit} target temp:`, error);
+                });
+        }
+
+        function initializeRoom1DualUnits() {
+            const roomPath = "Room_1";
+            console.log("[Init] Initializing dual-unit structure for Room_1");
+            
+            const unit1Data = {
+                ac: false,
+                ac_command: "IDLE",
+                targetTemp: 24,
+                status: "NORMAL"
+            };
+            
+            const unit2Data = {
+                ac: false,
+                ac_command: "IDLE",
+                targetTemp: 24,
+                status: "NORMAL"
+            };
+            
+            // Initialize unit structure
+            db.ref(`${roomPath}/units/unit_1`).set(unit1Data)
+                .then(() => console.log("[Init] Unit 1 initialized"))
+                .catch(err => console.error("[Init] Unit 1 failed:", err));
+                
+            db.ref(`${roomPath}/units/unit_2`).set(unit2Data)
+                .then(() => console.log("[Init] Unit 2 initialized"))
+                .catch(err => console.error("[Init] Unit 2 failed:", err));
+        }
+
+        function showInfo(roomIndex) {
+            const data = latestData[roomIndex];
+            if (!data) return;
+            const specs = data.specs || {};
+            document.getElementById('modalTitle').innerText = roomLabels[roomIndex].toUpperCase();
+            document.getElementById('modalLocation').innerText = (specs.building || "N/A") + " Bldg, " + (specs.floor || "N/A");
+            document.getElementById('modalType').innerText = specs.acType || "N/A";
+            document.getElementById('modalModel').innerText = specs.acModel || "N/A";
+            document.getElementById('modalCooling').innerText = specs.coolingBtu ? specs.coolingBtu.toLocaleString() + " BTU" : "N/A";
+            document.getElementById('modalPower').innerText = specs.powerInput ? specs.powerInput.toLocaleString() + " W" : "N/A";
+            document.getElementById('modalRating').innerText = specs.rating || "--";
+            document.getElementById('infoModal').style.display = 'flex';
+        }
+
+        function closeModal(e) { if (e.target.id === 'infoModal') document.getElementById('infoModal').style.display = 'none'; }
+        function closeAddModal(e) { if (e.target.id === 'addRoomModal') document.getElementById('addRoomModal').style.display = 'none'; }
+        function confirmLogout() { 
+            if(confirm("Are you sure you want to logout?")) logout();
+        }
+        function logout() { window.location.href = "login.html"; }
+
+        function renderDashboard() {
+            let sumT = 0, criticalCount = 0, gridHtml = "", activeRooms = 0;
+
+            console.log('[renderDashboard] latestData:', latestData);
+            console.log('[renderDashboard] labKeys:', labKeys);
+            console.log('[renderDashboard] labsData:', labsData);
+
+            latestData.forEach((d, i) => {
+                if (!d) return;
+                activeRooms++;
+                
+                const label = roomLabels[i];
+                const roomPath = labs[i];    
+                const temp = d.temperature || 0;
+                const hum = d.humidity || 0;
+                const minT = d.thresholds?.minTemp || 20;
+                const maxT = d.thresholds?.maxTemp || 30;
+                
+                // Check device online status based on last_seen ONLY
+                // Only rooms with active ESP32 connections will have recent last_seen timestamps
+                let lastSeen = d.last_seen || 0;
+                
+                // Fix timestamp format issue - ESP32 might send seconds instead of milliseconds
+                // If timestamp is too old (before 2000), it's likely in seconds format
+                if (lastSeen > 0 && lastSeen < 946684800000) {
+                    // Timestamp is in seconds, convert to milliseconds
+                    lastSeen = lastSeen * 1000;
+                    console.log(`[Dashboard] ${roomPath} - Converted timestamp from seconds to milliseconds`);
+                }
+                
+                const timeSinceLastSeen = Date.now() - lastSeen;
+                
+                // Device is online only if we have a recent last_seen timestamp (within HEARTBEAT_TIMEOUT)
+                const isDeviceOnline = lastSeen > 0 && timeSinceLastSeen < HEARTBEAT_TIMEOUT;
+                
+                console.log(`[Dashboard] ${roomPath} - last_seen: ${lastSeen} (${lastSeen ? new Date(lastSeen).toISOString() : 'null'}), timeSinceLastSeen: ${Math.floor(timeSinceLastSeen/1000)}s, isOnline: ${isDeviceOnline}`);
+                
+                // Check if this is a dual-unit room (Room_1)
+                const isDualUnitRoom = roomPath === "Room_1" && d.units;
+                
+                // Get unit states for dual-unit rooms (with localStorage backup)
+                let unit1State = false, unit2State = false;
+                if (isDualUnitRoom) {
+                    const unit1Local = localStorage.getItem(`ac_state_${roomPath}_unit_1`);
+                    const unit2Local = localStorage.getItem(`ac_state_${roomPath}_unit_2`);
+                    const firebaseUnit1 = d.units?.unit_1?.ac;
+                    const firebaseUnit2 = d.units?.unit_2?.ac;
+                    
+                    console.log(`[Dashboard] ${roomPath} - Firebase units: unit1=${firebaseUnit1}, unit2=${firebaseUnit2}`);
+                    console.log(`[Dashboard] ${roomPath} - localStorage units: unit1=${unit1Local}, unit2=${unit2Local}`);
+                    
+                    unit1State = unit1Local !== null ? (unit1Local === 'true') : (firebaseUnit1 || false);
+                    unit2State = unit2Local !== null ? (unit2Local === 'true') : (firebaseUnit2 || false);
+                    
+                    console.log(`[Dashboard] ${roomPath} - Final unit states: unit1=${unit1State}, unit2=${unit2State}`);
+                    
+                    // Initialize localStorage if not set
+                    if (unit1Local === null && firebaseUnit1 !== undefined) {
+                        localStorage.setItem(`ac_state_${roomPath}_unit_1`, firebaseUnit1.toString());
+                        console.log(`[Dashboard] ${roomPath} - Initialized localStorage unit1 from Firebase: ${firebaseUnit1}`);
+                    }
+                    if (unit2Local === null && firebaseUnit2 !== undefined) {
+                        localStorage.setItem(`ac_state_${roomPath}_unit_2`, firebaseUnit2.toString());
+                        console.log(`[Dashboard] ${roomPath} - Initialized localStorage unit2 from Firebase: ${firebaseUnit2}`);
+                    }
+                    
+                    // Initialize Firebase timestamps for units if they don't exist
+                    if (!d.units?.unit_1?.ac_timestamp) {
+                        db.ref(`${roomPath}/units/unit_1/ac_timestamp`).set(Date.now());
+                        console.log(`[Dashboard] ${roomPath} - Initialized Firebase timestamp for unit_1`);
+                    }
+                    if (!d.units?.unit_2?.ac_timestamp) {
+                        db.ref(`${roomPath}/units/unit_2/ac_timestamp`).set(Date.now());
+                        console.log(`[Dashboard] ${roomPath} - Initialized Firebase timestamp for unit_2`);
+                    }
+                }
+                
+                // Use localStorage as authoritative source for AC state - completely ignore Firebase if localStorage exists
+                const localACState = localStorage.getItem(`ac_state_${roomPath}`);
+                let isPoweredOn;
+                if (isDualUnitRoom) {
+                    isPoweredOn = unit1State || unit2State;  // At least one unit is on
+                    console.log(`[Dashboard] ${roomPath} - Dual unit: unit1=${unit1State}, unit2=${unit2State}, isPoweredOn=${isPoweredOn}`);
+                } else if (localACState !== null) {
+                    // localStorage exists - use it as the truth
+                    isPoweredOn = localACState === 'true';
+                    console.log(`[Dashboard] ${roomPath} - Using localStorage: ${localACState}, isPoweredOn=${isPoweredOn}`);
+                } else if (pendingUpdates[roomPath] !== undefined) {
+                    // Use pending state if available
+                    isPoweredOn = pendingUpdates[roomPath];
+                    console.log(`[Dashboard] ${roomPath} - Using pending state: ${pendingUpdates[roomPath]}, isPoweredOn=${isPoweredOn}`);
+                } else {
+                    // Fall back to Firebase only if localStorage doesn't exist
+                    isPoweredOn = d.ac === true;
+                    console.log(`[Dashboard] ${roomPath} - Using Firebase: ${d.ac}, isPoweredOn=${isPoweredOn}`);
+                }
+                
+                console.log(`[Dashboard] ${roomPath} - Final state: isOnline=${isDeviceOnline}, isPoweredOn=${isPoweredOn}`);
+                
+                const isTooHigh = temp > maxT;
+                const isTooLow = temp < minT;
+                sumT += temp;
+                if (isTooHigh || d.status === "ALARM") criticalCount++;
+
+                const searchMatch = label.toLowerCase().includes(searchQuery);
+
+                if (searchMatch && (currentFilter === 'all' || (currentFilter === 'on' && isPoweredOn) || (currentFilter === 'off' && !isPoweredOn))) {
+                    const progressWidth = Math.min(Math.max((temp - minT) / (maxT - minT) * 100, 0), 100);
+                    
+                    let statusClass = isTooHigh ? "border-status-high" : (isTooLow ? "border-status-low" : "border-status-normal");
+                    const powerStyle = isPoweredOn ? statusClass : "border-gray-200 opacity-60 grayscale-[0.5]";
+
+                    gridHtml += `
+                        <div class="card p-6 transition-all duration-500 border-t-4 ${powerStyle} hover:shadow-xl hover:scale-[1.02]">
+                            <div class="flex justify-between items-center mb-5">
+                                <div class="flex items-center gap-3">
+                                    <div class="relative">
+                                        <div class="w-3 h-3 rounded-full ${isDeviceOnline ? 'bg-green-500' : 'bg-gray-300'}" id="status-dot-${i}"></div>
+                                        ${isDeviceOnline ? '<div class="absolute inset-0 rounded-full bg-green-500 animate-ping opacity-75" id="ping-dot-${i}"></div>' : ''}
+                                    </div>
+                                    <div>
+                                        <h3 class="font-black text-gray-800 tracking-tight uppercase text-sm">${label}</h3>
+                                        <p class="text-[8px] font-bold text-gray-400 uppercase">${isDeviceOnline ? 'Online' : 'Offline'}</p>
+                                    </div>
+                                    <button onclick="showInfo(${i})" class="p-2 bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl text-gray-400 hover:text-[#800000] hover:from-[#800000] hover:to-[#600000] hover:text-white transition-all shadow-sm">
+                                        <i data-lucide="info" class="w-4 h-4"></i>
+                                    </button>
+                                </div>
+                                <div class="flex flex-col items-center">
+                                    ${isDualUnitRoom ? `
+                                        <span class="text-[9px] font-bold text-[#800000] bg-[#800000]/10 px-3 py-1 rounded-full uppercase">Dual Units</span>
+                                    ` : `
+                                        <label class="switch">
+                                            <input type="checkbox" ${isPoweredOn ? 'checked' : ''} onchange="toggleAC('${roomPath}', this.checked)">
+                                            <span class="slider"></span>
+                                        </label>
+                                        <div class="flex flex-col items-center mt-1">
+                                            <span class="text-[8px] font-bold text-gray-400 uppercase">AC Power</span>
+                                            <span class="text-[10px] font-bold text-[#800000] bg-[#800000]/10 px-3 py-1 rounded-lg shadow-sm">${getDurationDisplay(roomPath)}</span>
+                                        </div>
+                                    `}
+                                </div>
+                            </div>
+                            <div class="mb-4 flex items-center gap-2">
+                                <span class="px-3 py-1.5 rounded-full text-[9px] font-black uppercase ${!isPoweredOn ? 'bg-gray-100 text-gray-400' : (isTooHigh ? 'bg-red-100 text-red-600' : (isTooLow ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'))}">
+                                    ${!isPoweredOn ? '○ Power Off' : (isTooHigh ? '● Too High' : (isTooLow ? '● Too Low' : '● Normal'))}
+                                </span>
+                                ${isDualUnitRoom ? `<span class="text-[8px] font-bold text-gray-400">(${unit1State && unit2State ? 'Both Units' : (unit1State ? 'Unit 1' : (unit2State ? 'Unit 2' : 'No Units'))} Active)</span>` : ''}
+                            </div>
+                            <div class="grid grid-cols-2 gap-4 mb-5">
+                                <div class="bg-gradient-to-br from-red-50 to-red-100/50 rounded-2xl p-5 text-center border border-red-200 shadow-sm">
+                                    <div class="w-10 h-10 mx-auto mb-2 rounded-full ${isTooHigh && isPoweredOn ? 'bg-red-500' : 'bg-red-200'} flex items-center justify-center">
+                                        <i data-lucide="thermometer" class="w-5 h-5 ${isTooHigh && isPoweredOn ? 'text-white' : 'text-red-400'}"></i>
+                                    </div>
+                                    <h2 class="text-3xl font-black ${isTooHigh && isPoweredOn ? 'text-red-600' : 'text-gray-800'}">${temp.toFixed(1)}°C</h2>
+                                    <p class="text-[9px] font-bold text-red-400 uppercase tracking-widest mt-1">Temperature</p>
+                                </div>
+                                <div class="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-2xl p-5 text-center border border-blue-200 shadow-sm">
+                                    <div class="w-10 h-10 mx-auto mb-2 rounded-full bg-blue-200 flex items-center justify-center">
+                                        <i data-lucide="droplets" class="w-5 h-5 text-blue-400"></i>
+                                    </div>
+                                    <h2 class="text-3xl font-black text-blue-900">${hum}%</h2>
+                                    <p class="text-[9px] font-bold text-blue-400 uppercase tracking-widest mt-1">Humidity</p>
+                                </div>
+                            </div>
+                            ${isDualUnitRoom ? `
+                            <div class="grid grid-cols-2 gap-4 mb-5">
+                                <div class="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-4 border border-gray-200 shadow-sm">
+                                    <div class="flex justify-between items-center mb-2">
+                                        <p class="text-[9px] font-bold text-gray-600 uppercase">Unit 1</p>
+                                        <label class="switch scale-75">
+                                            <input type="checkbox" ${unit1State ? 'checked' : ''} onchange="toggleUnitAC('${roomPath}', 'unit_1', this.checked)">
+                                            <span class="slider"></span>
+                                        </label>
+                                    </div>
+                                    <p class="text-[10px] font-bold text-[#800000] text-center bg-[#800000]/10 px-3 py-1 rounded-lg shadow-sm">${getDurationDisplay(roomPath, 'unit_1')}</p>
+                                </div>
+                                <div class="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-4 border border-gray-200 shadow-sm">
+                                    <div class="flex justify-between items-center mb-2">
+                                        <p class="text-[9px] font-bold text-gray-600 uppercase">Unit 2</p>
+                                        <label class="switch scale-75">
+                                            <input type="checkbox" ${unit2State ? 'checked' : ''} onchange="toggleUnitAC('${roomPath}', 'unit_2', this.checked)">
+                                            <span class="slider"></span>
+                                        </label>
+                                    </div>
+                                    <p class="text-[10px] font-bold text-[#800000] text-center bg-[#800000]/10 px-3 py-1 rounded-lg shadow-sm">${getDurationDisplay(roomPath, 'unit_2')}</p>
+                                </div>
+                            </div>
+                            ` : ''}
+                            <div class="bg-gray-50 rounded-2xl p-4">
+                                <div class="flex mb-3 items-center justify-between text-[9px] font-bold text-gray-500 uppercase">
+                                    <span class="flex items-center gap-1"><i data-lucide="arrow-down" class="w-3 h-3"></i> Min ${minT}°C</span>
+                                    <span class="flex items-center gap-1"><i data-lucide="arrow-up" class="w-3 h-3"></i> Max ${maxT}°C</span>
+                                </div>
+                                <div class="overflow-hidden h-3 rounded-full bg-gray-200 shadow-inner">
+                                    <div style="width:${progressWidth}%" class="h-full transition-all duration-1000 rounded-full ${!isPoweredOn ? 'bg-gradient-to-r from-gray-300 to-gray-400' : (isTooHigh ? 'bg-gradient-to-r from-red-400 to-red-600' : (isTooLow ? 'bg-gradient-to-r from-blue-400 to-blue-600' : 'bg-gradient-to-r from-green-400 to-green-600'))}"></div>
+                                </div>
+                            </div>
+                        </div>`;
+                }
+            });
+
+            document.getElementById('total-count').innerText = activeRooms;
+            document.getElementById('lab-grid').innerHTML = gridHtml || `<div class="col-span-full py-20 text-center text-gray-400 text-xs font-bold uppercase tracking-widest">No matching rooms found</div>`;
+            lucide.createIcons();
+            
+            // Use shared utility for summary cards
+            const stats = calculateStats(labsData, labKeys);
+            updateSummaryCards(stats, {
+                total: 'total-count',
+                normal: 'normal-count',
+                critical: 'alert-count',
+                avgTemp: 'avg-temp'
+            });
+        }
+
+        function watchDeviceOnline(roomId) {
+            const roomLabel = roomId.replace('_', ' ');
+            console.log(`[Offline Detection] Starting monitor for ${roomId} (${roomLabel})`);
+            console.log(`[Offline Detection] Listening to path: ${roomId}/last_seen`);
+            
+            db.ref(`${roomId}/last_seen`).on('value', (snapshot) => {
+                const lastSeen = snapshot.val();
+                console.log(`[Offline Detection] ${roomId} last_seen update:`, lastSeen ? new Date(lastSeen).toISOString() : 'null');
+                
+                if (!lastSeen) {
+                    console.log(`[Offline Detection] ${roomId} - No last_seen value yet, waiting...`);
+                    return;
+                }
+                
+                const timeDiff = Date.now() - lastSeen;
+                const isOffline = timeDiff > OFFLINE_THRESHOLD_MS;
+                console.log(`[Offline Detection] ${roomId} - Time diff: ${Math.floor(timeDiff / 1000)}s, Threshold: ${OFFLINE_THRESHOLD_MS / 1000}s, Offline: ${isOffline}`);
+                
+                // Update room data and re-render dashboard to show heartbeat animation
+                const roomIndex = labKeys.indexOf(roomId);
+                if (roomIndex !== -1 && labsData[roomId]) {
+                    labsData[roomId].last_seen = lastSeen;
+                    renderDashboard();
+                }
+                
+                // Check if we need to alert
+                if (isOffline && !deviceOfflineFlags[roomId]) {
+                    // Device just went offline - create alert
+                    deviceOfflineFlags[roomId] = true;
+                    console.log(`[Offline Detection] ${roomId} - OFFLINE DETECTED! Creating alert...`);
+                    
+                    const alertData = {
+                        type: 'device_offline',
+                        room: roomId,
+                        roomLabel: roomLabel,
+                        title: `Device Offline: ${roomLabel}`,
+                        message: `No heartbeat received for ${Math.floor(timeDiff / 1000)} seconds`,
+                        timestamp: firebase.database.ServerValue.TIMESTAMP,
+                        acknowledged: false
+                    };
+                    
+                    db.ref('alerts').push(alertData);
+                    console.log(`[Offline Detection] Alert created for ${roomId}`);
+                    
+                    // Send browser notification if permitted
+                    if (Notification.permission === 'granted') {
+                        new Notification('Device Offline Alert', {
+                            body: `${roomLabel} has stopped responding`,
+                            icon: 'pcctruelogo.png'
+                        });
+                    }
+                } else if (!isOffline && deviceOfflineFlags[roomId]) {
+                    // Device came back online - reset flag
+                    deviceOfflineFlags[roomId] = false;
+                    console.log(`[Offline Detection] ${roomId} is back online`);
+                }
+            });
+            
+            // Periodic check every 10 seconds
+            setInterval(() => {
+                db.ref(`${roomId}/last_seen`).once('value').then((snapshot) => {
+                    const lastSeen = snapshot.val();
+                    console.log(`[Offline Detection] Periodic check for ${roomId} - last_seen:`, lastSeen ? new Date(lastSeen).toISOString() : 'null');
+                    
+                    if (!lastSeen) {
+                        console.log(`[Offline Detection] Periodic check - ${roomId} has no last_seen yet`);
+                        return;
+                    }
+                    
+                    const timeDiff = Date.now() - lastSeen;
+                    const isOffline = timeDiff > OFFLINE_THRESHOLD_MS;
+                    console.log(`[Offline Detection] Periodic check - ${roomId} Time diff: ${Math.floor(timeDiff / 1000)}s, Offline: ${isOffline}`);
+                    
+                    if (isOffline && !deviceOfflineFlags[roomId]) {
+                        deviceOfflineFlags[roomId] = true;
+                        console.log(`[Offline Detection] Periodic check - ${roomId} OFFLINE DETECTED! Creating alert...`);
+                        
+                        const alertData = {
+                            type: 'device_offline',
+                            room: roomId,
+                            roomLabel: roomLabel,
+                            title: `Device Offline: ${roomLabel}`,
+                            message: `No heartbeat received for ${Math.floor(timeDiff / 1000)} seconds`,
+                            timestamp: firebase.database.ServerValue.TIMESTAMP,
+                            acknowledged: false
+                        };
+                        
+                        db.ref('alerts').push(alertData);
+                        console.log(`[Offline Detection] Periodic check - Alert created for ${roomId}`);
+                        
+                        if (Notification.permission === 'granted') {
+                            new Notification('Device Offline Alert', {
+                                body: `${roomLabel} has stopped responding`,
+                                icon: 'pcctruelogo.png'
+                            });
+                        }
+                    } else if (!isOffline && deviceOfflineFlags[roomId]) {
+                        deviceOfflineFlags[roomId] = false;
+                        console.log(`[Offline Detection] Periodic check - ${roomId} is back online`);
+                    }
+                }).catch((error) => {
+                    console.error(`[Offline Detection] Periodic check error for ${roomId}:`, error);
+                });
+            }, CHECK_INTERVAL_MS);
+        }
+
+        function requestNotificationPermission() {
+            if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission().then((permission) => {
+                    console.log(`Notification permission: ${permission}`);
+                });
+            }
+        }
+
+        loadRoomsFromFirebase();
+        initializeRoom1DualUnits(); // Initialize dual-unit structure for Room_1
+        requestNotificationPermission();
+
+        document.getElementById('menu-toggle').addEventListener('click', () => {
+            document.getElementById('sidebar').classList.toggle('hidden');
+        });
+    </script>
+</body>
+</html>

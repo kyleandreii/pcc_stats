@@ -1,0 +1,1231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PCC S.T.A.T.S. | Settings</title>
+    <link rel="icon" type="image/png" href="pcctruelogo.png">
+    <link rel="stylesheet" href="style.css">
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="shared-utils.js"></script>
+    <script src="ui-enhancements.js"></script>
+
+    <style>
+        .sidebar { position: fixed; left: 0; top: 0; height: 100vh; width: 260px; background-color: #800000; padding: 24px; display: flex; flex-direction: column; z-index: 40; transition: 0.3s; }
+        .sidebar-header { display: flex; align-items: center; gap: 12px; color: white; font-weight: 900; font-size: 1.25rem; margin-bottom: 24px; }
+        .nav-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 12px; color: rgba(255, 255, 255, 0.7); text-decoration: none; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); font-size: 14px; position: relative; border-left: 3px solid transparent; }
+        .nav-item:hover { background-color: rgba(255, 255, 255, 0.1); color: white; transform: translateX(4px); }
+        .nav-item.active { background-color: rgba(255, 255, 255, 0.2); color: white; font-weight: bold; border-left-color: rgba(255, 255, 255, 0.8); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); }
+        .main-wrapper { margin-left: 260px; padding: 40px; min-height: 100vh; }
+        .card { background: white; border-radius: 24px; border: 1px solid #f3f4f6; box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .card:hover { box-shadow: 0 8px 24px rgba(0,0,0,0.1); transform: translateY(-2px); }
+        .stats-card { display: flex; align-items: center; gap: 1rem; padding: 1.5rem; border-radius: 24px; background-color: #800000; color: white; box-shadow: 0 10px 15px -3px rgba(128, 0, 0, 0.2); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .stats-card .stats-icon-bg { flex-shrink: 0; }
+        .stats-card > div { flex: 1; }
+        .circular-progress { position: relative; }
+        .circular-progress svg { transform: rotate(-90deg); }
+        .circular-progress .progress-ring { stroke-dasharray: 251.2; stroke-dashoffset: 251.2; transition: stroke-dashoffset 0.5s ease; }
+        .input-threshold, .info-input { background: #f9fafb; border: 1px solid #e5e7eb; padding: 12px 16px; border-radius: 12px; font-weight: bold; font-size: 14px; }
+        
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 100; }
+        .modal-content { background: white; width: 90%; max-width: 420px; border-radius: 40px; padding: 32px; position: relative; border-top: 6px solid #800000; }
+
+        .remote-btn { background: #f3f4f6; color: #800000; transition: 0.2s; border: 1px solid #e5e7eb; cursor: pointer; }
+        .remote-btn:hover { background: #800000; color: white; border-color: #800000; }
+        .remote-display { border: 4px solid #f3f4f6; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); }
+
+        /* Smooth Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes scaleIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .animate-fade-in {
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+
+        .animate-scale-in {
+            animation: scaleIn 0.3s ease-out forwards;
+        }
+
+        .animate-slide-in {
+            animation: slideIn 0.3s ease-out forwards;
+        }
+
+        /* Button Hover Effects */
+        button {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        button:hover {
+            transform: translateY(-1px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        /* Card Hover Effect */
+        .card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Smooth Scroll */
+        html {
+            scroll-behavior: smooth;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.show { transform: translateX(0); }
+            .main-wrapper { margin-left: 0; padding: 20px; }
+            .stats-card { padding: 16px; }
+            .stats-card h2 { font-size: 1.5rem; }
+            .card { padding: 16px; }
+            .input-threshold, .info-input { padding: 10px 12px; font-size: 13px; }
+        }
+
+        @media (max-width: 480px) {
+            .main-wrapper { padding: 16px; }
+            .stats-card { padding: 12px; gap: 12px; }
+            .stats-card h2 { font-size: 1.25rem; }
+            .stats-card p { font-size: 8px; }
+            .card { padding: 12px; border-radius: 16px; }
+            .input-threshold, .info-input { padding: 8px 10px; font-size: 12px; }
+            .modal-content { padding: 20px; }
+            .remote-btn { padding: 8px 12px; font-size: 12px; }
+        }
+
+        .sidebar-logo { width: 60px; height: 60px; object-fit: contain; border-radius: 6px; }
+        .sidebar-header {
+            display: flex; align-items: center; gap: 12px; color: white;
+            font-weight: 900; font-size: 1.25rem; margin-bottom: 24px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            text-decoration: none;
+        }
+
+        .sidebar-header:hover {
+            transform: translateX(4px);
+            opacity: 0.9;
+        }
+
+        .sidebar-header:active {
+            transform: scale(0.98);
+        }
+    </style>
+</head>
+<body class="antialiased bg-gray-50">
+
+    <div id="logoutModal" class="modal-overlay" onclick="closeLogoutModal(event)">
+        <div class="modal-content text-center" onclick="event.stopPropagation()">
+            <div class="flex justify-center mb-4">
+                <div class="p-4 bg-red-50 rounded-full text-[#800000]">
+                    <i data-lucide="log-out" class="w-10 h-10"></i>
+                </div>
+            </div>
+            <h2 class="font-black text-xl text-gray-800 uppercase mb-2">Confirm Logout</h2>
+            <p class="text-[10px] font-bold text-gray-400 uppercase mb-8">Are you sure you want to end your session?</p>
+            <div class="flex gap-3">
+                <button onclick="document.getElementById('logoutModal').style.display='none'" class="flex-1 bg-gray-100 text-gray-400 font-black py-4 rounded-2xl hover:bg-gray-200 transition-all uppercase text-xs">Cancel</button>
+                <button onclick="logout()" class="flex-1 bg-[#800000] text-white font-black py-4 rounded-2xl shadow-lg hover:bg-[#600000] transition-all uppercase text-xs">Logout</button>
+            </div>
+        </div>
+    </div>
+
+    <button id="menu-toggle" class="sm:hidden p-4 absolute top-0 left-0 text-[#800000] z-50"><i data-lucide="menu"></i></button>
+
+    <button class="mobile-menu-toggle">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+    </button>
+
+    <aside id="sidebar" class="sidebar">
+        <a href="1_dashboard_trial.html" class="sidebar-header">
+            <img id="sidebar-logo" src="statswhite.png" class="sidebar-logo">
+            <span>PCC S.T.A.T.S.</span>
+        </a>
+        <nav class="flex-grow mt-6">
+            <a href="1_dashboard_trial.html" class="nav-item"><i data-lucide="layout-dashboard"></i> Dashboard</a>
+            <a href="2_analytics_trial.html" class="nav-item"><i data-lucide="bar-chart-3"></i> Analytics</a>
+            <a href="3_alert_trial.html" class="nav-item"><i data-lucide="bell"></i> Alerts</a>
+            <a href="IRreciverPage.html" class="nav-item"><i data-lucide="radio"></i> IR Receiver</a>
+            <a href="4_settings_trial.html" class="nav-item active"><i data-lucide="settings"></i> Settings</a>
+        </nav>
+        <div class="p-4 border-t border-white/10">
+            <button onclick="confirmLogout()" class="nav-item opacity-60 w-full text-left"><i data-lucide="log-out"></i> Logout</button>
+        </div>
+    </aside>
+
+    <main class="main-wrapper">
+        <div class="max-w-[1440px] mx-auto">
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+                <div class="stats-card">
+                    <div class="stats-icon-bg maroon flex-shrink-0"><i data-lucide="layers" class="w-6 h-6"></i></div>
+                    <div class="flex-1"><p class="text-[10px] uppercase font-bold opacity-70 tracking-widest">Total Labs</p><h2 id="total-labs-count" class="text-4xl font-black">0</h2></div>
+                </div>
+                <div class="card border-l-4 border-green-500 flex items-center gap-4 p-6">
+                    <div class="stats-icon-bg green flex-shrink-0"><i data-lucide="check-circle" class="w-6 h-6"></i></div>
+                    <div class="flex-1"><p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Normal</p><h2 id="normal-labs-count" class="text-3xl font-black">0</h2></div>
+                </div>
+                <div class="card border-l-4 border-yellow-500 flex items-center gap-4 p-6">
+                    <div class="stats-icon-bg yellow flex-shrink-0"><i data-lucide="alert-triangle" class="w-6 h-6"></i></div>
+                    <div class="flex-1"><p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Critical</p><h2 id="alert-count" class="text-3xl font-black">0</h2></div>
+                </div>
+                <div class="card border-l-4 border-blue-500 flex items-center gap-4 p-6">
+                    <div class="stats-icon-bg blue flex-shrink-0"><i data-lucide="thermometer" class="w-6 h-6"></i></div>
+                    <div class="flex-1"><p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Avg Temp</p><h2 id="avg-temp" class="text-3xl font-black">--°C</h2></div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-20">
+                <div class="lg:col-span-4 card p-6 h-fit">
+                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-6">Select Laboratory</h3>
+                    <div id="lab-list" class="space-y-3"></div>
+                </div>
+
+                <div class="lg:col-span-8 space-y-6">
+
+                    <!-- SCHEDULER SECTION -->
+                    <div class="card p-8 border-l-8 border-[#800000]">
+                        <div class="flex items-center justify-between mb-8 border-b border-gray-100 pb-4">
+                            <div class="flex items-center gap-3">
+                                <i data-lucide="clock" class="text-[#800000] w-5 h-5"></i>
+                                <h3 class="font-bold text-gray-700 uppercase tracking-wider text-xs">AC Power Automation</h3>
+                                <span id="schedule-unit-badge" class="hidden text-[9px] font-bold px-2 py-1 bg-[#800000]/10 text-[#800000] rounded-full uppercase">Unit 1</span>
+                            </div>
+                            <div class="flex items-center gap-4">
+                                <div id="schedule-status" class="text-[9px] font-black uppercase px-4 py-1.5 bg-gray-100 rounded-full text-gray-400">No Active Schedule</div>
+                                <div id="ac-state" class="text-[9px] font-black uppercase px-4 py-1.5 bg-gray-100 rounded-full text-gray-400">AC: --</div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                            <div class="space-y-3">
+                                <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Automatic ON Time</label>
+                                <input type="time" id="input-on-time" class="input-threshold w-full outline-none focus:ring-4 focus:ring-green-500/10 transition-all">
+                            </div>
+                            <div class="space-y-3">
+                                <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Automatic OFF Time</label>
+                                <input type="time" id="input-off-time" class="input-threshold w-full outline-none focus:ring-4 focus:ring-red-500/10 transition-all">
+                            </div>
+                        </div>
+
+                        <button onclick="saveSchedule()" class="w-full bg-gray-100 hover:bg-[#800000] hover:text-white text-[#800000] font-black py-4 rounded-2xl flex items-center justify-center gap-3 transition-all uppercase tracking-widest text-[11px]">
+                            <i data-lucide="calendar-check" class="w-4 h-4"></i> Apply Schedule to <span id="sched-room-name">...</span>
+                        </button>
+                    </div>
+
+                    <!-- AUTOMATION SECTION -->
+                    <div class="card p-8 border-l-8 border-green-600">
+                        <div class="flex items-center justify-between mb-8 border-b border-gray-100 pb-4">
+                            <div class="flex items-center gap-3">
+                                <i data-lucide="bot" class="text-green-600 w-5 h-5"></i>
+                                <h3 class="font-bold text-gray-700 uppercase tracking-wider text-sm">Smart Automation</h3>
+                                <span id="automation-unit-badge" class="hidden text-xs font-bold px-2 py-1 bg-green-600/10 text-green-600 rounded-full uppercase">Unit 1</span>
+                            </div>
+                            <div class="flex items-center gap-4">
+                                <label class="flex items-center gap-3 cursor-pointer">
+                                    <span class="text-xs font-bold text-gray-500 uppercase">Enable Automation</span>
+                                    <label class="switch">
+                                        <input type="checkbox" id="automation-enabled" onmousedown="handleAutomationToggle(event)" onclick="event.preventDefault()">
+                                        <span class="slider"></span>
+                                    </label>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div id="automation-controls" class="space-y-6 transition-all">
+                            <div class="bg-blue-50/50 border border-blue-100 rounded-2xl p-6">
+                                <div class="flex items-center gap-2 mb-4">
+                                    <i data-lucide="users" class="text-blue-500 w-4 h-4"></i>
+                                    <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest">Occupancy Detection (Humidity)</h4>
+                                </div>
+                                <p class="text-xs text-gray-500 mb-4 leading-relaxed">Automatically lower AC temperature when humidity rises (people present) and raise temperature when humidity drops (room empty).</p>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div class="space-y-2">
+                                        <label class="text-xs font-bold text-gray-600 uppercase">Occupied Threshold (%)</label>
+                                        <input type="number" id="humidity-occupied-threshold" class="input-threshold w-full" placeholder="e.g. 60" min="0" max="100">
+                                        <p class="text-xs text-gray-400">Lower AC temperature when humidity exceeds this value</p>
+                                    </div>
+                                    <div class="space-y-2">
+                                        <label class="text-xs font-bold text-gray-600 uppercase">Empty Threshold (%)</label>
+                                        <input type="number" id="humidity-empty-threshold" class="input-threshold w-full" placeholder="e.g. 50" min="0" max="100">
+                                        <p class="text-xs text-gray-400">Raise AC temperature when humidity drops below this value</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="bg-orange-50/50 border border-orange-100 rounded-2xl p-6">
+                                <div class="flex items-center gap-2 mb-4">
+                                    <i data-lucide="shield-alert" class="text-orange-500 w-4 h-4"></i>
+                                    <h4 class="text-xs font-black text-orange-600 uppercase tracking-widest">Temperature Safety</h4>
+                                </div>
+                                <p class="text-xs text-gray-500 leading-relaxed">Uses existing min/max temperature thresholds. Priority over occupancy - will override temperature adjustments to prevent equipment damage.</p>
+                                <div class="flex items-center gap-2 mt-3">
+                                    <i data-lucide="check-circle" class="w-4 h-4 text-green-500"></i>
+                                    <p class="text-xs text-gray-500">Temp > maxTemp: Lower temperature to cool down</p>
+                                </div>
+                                <div class="flex items-center gap-2 mt-1">
+                                    <i data-lucide="check-circle" class="w-4 h-4 text-green-500"></i>
+                                    <p class="text-xs text-gray-500">Temp < minTemp: Raise temperature to warm up</p>
+                                </div>
+                            </div>
+
+                            <button onclick="saveAutomationSettings()" class="w-full bg-green-600 hover:bg-green-700 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-3 transition-all uppercase tracking-widest text-sm">
+                                <i data-lucide="save" class="w-4 h-4"></i> Save Automation Settings
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="card p-8">
+                        <div class="flex items-center justify-between mb-8 border-b border-gray-100 pb-4">
+                            <div class="flex items-center gap-3">
+                                <i data-lucide="sliders" class="text-[#800000] w-5 h-5"></i>
+                                <h3 class="font-bold text-gray-700 uppercase tracking-wider text-xs">Threshold Configuration</h3>
+                            </div>
+                            <div class="flex items-center gap-4">
+                                <span id="config-lab-name" class="text-[10px] bg-[#800000] text-white font-bold px-4 py-1.5 rounded-full uppercase tracking-widest">Select a Room</span>
+                                <!-- Unit tabs for dual-unit rooms -->
+                                <div id="unit-tabs" class="hidden flex gap-2">
+                                    <button id="tab-unit-1" onclick="switchUnitTab('unit_1')" class="text-[9px] font-bold px-3 py-1.5 rounded-full bg-[#800000] text-white uppercase tracking-widest">Unit 1</button>
+                                    <button id="tab-unit-2" onclick="switchUnitTab('unit_2')" class="text-[9px] font-bold px-3 py-1.5 rounded-full bg-gray-200 text-gray-600 uppercase tracking-widest">Unit 2</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
+                            <div class="bg-gray-50 rounded-xl p-6 text-center border border-gray-100">
+                                <p id="curr-temp-display" class="text-4xl font-black text-gray-800">--</p>
+                                <p class="text-[10px] text-gray-400 mt-2 uppercase font-bold tracking-widest">Live Temp</p>
+                            </div>
+                            <div class="bg-blue-50 rounded-xl p-6 text-center border border-blue-100">
+                                <p id="curr-min-display" class="text-4xl font-black text-blue-600">--</p>
+                                <p class="text-[10px] text-blue-400 mt-2 uppercase font-bold tracking-widest">Active Min</p>
+                            </div>
+                            <div class="bg-red-50 rounded-xl p-6 text-center border border-red-100">
+                                <p id="curr-max-display" class="text-4xl font-black text-red-600">--</p>
+                                <p class="text-[10px] text-red-400 mt-2 uppercase font-bold tracking-widest">Active Max</p>
+                            </div>
+                        </div>
+
+                        <div class="bg-gray-50/50 border border-gray-100 rounded-3xl p-6 mb-8">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 divide-y md:divide-y-0 md:divide-x divide-gray-200">
+                                
+                                <div class="pb-6 md:pb-0">
+                                    <div class="flex items-center gap-2 mb-6">
+                                        <i data-lucide="thermometer" class="text-gray-400 w-4 h-4"></i>
+                                        <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Air Condition Temperature Set</h4>
+                                    </div>
+                                    
+                                    <div id="temp-controls-container">
+                                        <!-- Single unit controls (for non-Room_1 rooms) -->
+                                        <div id="single-unit-temp-controls" class="flex items-center justify-center gap-8">
+                                            <div class="circular-progress w-28 h-28 rounded-full bg-white flex flex-col items-center justify-center relative">
+                                                <svg class="absolute inset-0 w-full h-full" viewBox="0 0 100 100">
+                                                    <circle cx="50" cy="50" r="40" stroke="#f3f4f6" stroke-width="8" fill="none"/>
+                                                    <circle id="temp-progress-ring" cx="50" cy="50" r="40" stroke="#800000" stroke-width="8" fill="none" class="progress-ring" stroke-linecap="round"/>
+                                                </svg>
+                                                <span id="manual-temp-val" class="text-3xl font-black text-[#800000] relative z-10">--</span>
+                                                <span class="text-[8px] font-bold text-gray-300 uppercase tracking-tighter relative z-10">Target °C</span>
+                                            </div>
+
+                                            <div class="flex flex-col gap-2">
+                                                <button onclick="adjustManualTemp(1)" class="remote-btn w-12 h-12 rounded-xl flex items-center justify-center shadow-sm">
+                                                    <i data-lucide="chevron-up" class="w-6 h-6"></i>
+                                                </button>
+                                                <button onclick="adjustManualTemp(-1)" class="remote-btn w-12 h-12 rounded-xl flex items-center justify-center shadow-sm">
+                                                    <i data-lucide="chevron-down" class="w-6 h-6"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Dual unit controls (for Room_1) -->
+                                        <div id="dual-unit-temp-controls" class="hidden">
+                                            <div class="grid grid-cols-2 gap-4">
+                                                <!-- Unit 1 -->
+                                                <div class="flex flex-col items-center">
+                                                    <p class="text-[9px] font-bold text-gray-500 uppercase mb-2">Unit 1</p>
+                                                    <div class="flex items-center justify-center gap-4">
+                                                        <div class="circular-progress w-20 h-20 rounded-full bg-white flex flex-col items-center justify-center relative">
+                                                            <svg class="absolute inset-0 w-full h-full" viewBox="0 0 100 100">
+                                                                <circle cx="50" cy="50" r="35" stroke="#f3f4f6" stroke-width="6" fill="none"/>
+                                                                <circle id="temp-progress-ring-unit1" cx="50" cy="50" r="35" stroke="#800000" stroke-width="6" fill="none" class="progress-ring" stroke-linecap="round"/>
+                                                            </svg>
+                                                            <span id="manual-temp-val-unit1" class="text-2xl font-black text-[#800000] relative z-10">--</span>
+                                                            <span class="text-[7px] font-bold text-gray-300 uppercase tracking-tighter relative z-10">°C</span>
+                                                        </div>
+
+                                                        <div class="flex flex-col gap-2">
+                                                            <button onclick="adjustManualTemp(1, 1)" class="remote-btn w-10 h-10 rounded-xl flex items-center justify-center shadow-sm">
+                                                                <i data-lucide="chevron-up" class="w-5 h-5"></i>
+                                                            </button>
+                                                            <button onclick="adjustManualTemp(-1, 1)" class="remote-btn w-10 h-10 rounded-xl flex items-center justify-center shadow-sm">
+                                                                <i data-lucide="chevron-down" class="w-5 h-5"></i>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                
+                                                <!-- Unit 2 -->
+                                                <div class="flex flex-col items-center">
+                                                    <p class="text-[9px] font-bold text-gray-500 uppercase mb-2">Unit 2</p>
+                                                    <div class="flex items-center justify-center gap-4">
+                                                        <div class="circular-progress w-20 h-20 rounded-full bg-white flex flex-col items-center justify-center relative">
+                                                            <svg class="absolute inset-0 w-full h-full" viewBox="0 0 100 100">
+                                                                <circle cx="50" cy="50" r="35" stroke="#f3f4f6" stroke-width="6" fill="none"/>
+                                                                <circle id="temp-progress-ring-unit2" cx="50" cy="50" r="35" stroke="#800000" stroke-width="6" fill="none" class="progress-ring" stroke-linecap="round"/>
+                                                            </svg>
+                                                            <span id="manual-temp-val-unit2" class="text-2xl font-black text-[#800000] relative z-10">--</span>
+                                                            <span class="text-[7px] font-bold text-gray-300 uppercase tracking-tighter relative z-10">°C</span>
+                                                        </div>
+
+                                                        <div class="flex flex-col gap-2">
+                                                            <button onclick="adjustManualTemp(1, 2)" class="remote-btn w-10 h-10 rounded-xl flex items-center justify-center shadow-sm">
+                                                                <i data-lucide="chevron-up" class="w-5 h-5"></i>
+                                                            </button>
+                                                            <button onclick="adjustManualTemp(-1, 2)" class="remote-btn w-10 h-10 rounded-xl flex items-center justify-center shadow-sm">
+                                                                <i data-lucide="chevron-down" class="w-5 h-5"></i>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="pt-6 md:pt-0 md:pl-8">
+                                    <div class="flex items-center gap-2 mb-6">
+                                        <i data-lucide="droplets" class="text-gray-400 w-4 h-4"></i>
+                                        <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Humidity Percentage Set</h4>
+                                    </div>
+                                    
+                                    <div class="flex items-center justify-center gap-8">
+                                        <div class="remote-display w-28 h-28 rounded-full bg-white flex flex-col items-center justify-center border-dashed">
+                                            <span class="text-3xl font-black text-gray-400">--</span>
+                                            <span class="text-[8px] font-bold text-gray-300 uppercase tracking-tighter">Target %</span>
+                                        </div>
+
+                                        <div class="flex flex-col gap-2">
+                                            <button class="remote-btn opacity-50 cursor-not-allowed w-12 h-12 rounded-xl flex items-center justify-center shadow-sm">
+                                                <i data-lucide="chevron-up" class="w-6 h-6"></i>
+                                            </button>
+                                            <button class="remote-btn opacity-50 cursor-not-allowed w-12 h-12 rounded-xl flex items-center justify-center shadow-sm">
+                                                <i data-lucide="chevron-down" class="w-6 h-6"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
+                            <div class="space-y-3">
+                                <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Set New Minimum (°C)</label>
+                                <input type="number" id="input-min" class="input-threshold w-full outline-none focus:ring-4 focus:ring-[#800000]/10 transition-all">
+                            </div>
+                            <div class="space-y-3">
+                                <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Set New Maximum (°C)</label>
+                                <input type="number" id="input-max" class="input-threshold w-full outline-none focus:ring-4 focus:ring-[#800000]/10 transition-all">
+                            </div>
+                        </div>
+
+                        <button onclick="saveSettings()" class="w-full bg-[#800000] hover:bg-black text-white font-black py-6 rounded-2xl flex items-center justify-center gap-4 shadow-xl active:scale-[0.97] transition-all uppercase tracking-widest">
+                            <i data-lucide="zap" class="w-6 h-6"></i> Sync to ESP32 Hardware
+                        </button>
+                    </div>
+
+                    <div class="card p-8">
+                        <div class="flex items-center gap-3 mb-8 border-b border-gray-100 pb-4">
+                            <i data-lucide="info" class="text-[#800000] w-5 h-5"></i>
+                            <h3 class="font-bold text-gray-700 uppercase tracking-wider text-xs">Laboratory Information Settings</h3>
+                            <span id="lab-info-unit-badge" class="hidden text-[9px] font-bold px-2 py-1 bg-[#800000]/10 text-[#800000] rounded-full uppercase">Unit 1</span>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                            <div class="space-y-2">
+                                <label class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Building Name</label>
+                                <input type="text" id="input-building" class="info-input w-full" placeholder="e.g. St. Joseph Building">
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Floor Level</label>
+                                <input type="text" id="input-floor" class="info-input w-full" placeholder="e.g. 4th Floor">
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">AC Model/Brand</label>
+                                <input type="text" id="input-ac-model" class="info-input w-full" placeholder="e.g. Koppel 1KU536">
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Indoor Model</label>
+                                <input type="text" id="input-model-indoor" class="info-input w-full" placeholder="e.g. 1KU536P7A">
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Outdoor Model</label>
+                                <input type="text" id="input-model-outdoor" class="info-input w-full" placeholder="e.g. 1KC536P7A">
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Unit Type</label>
+                                <select id="input-unit-type" class="info-input w-full">
+                                    <option value="ceiling_suspended_split">Ceiling Suspended Split</option>
+                                    <option value="wall_mounted_split">Wall Mounted Split</option>
+                                    <option value="floor_standing">Floor Standing</option>
+                                    <option value="cassette">Cassette</option>
+                                    <option value="window">Window Type</option>
+                                </select>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Aircon Type</label>
+                                <select id="input-ac-type" class="info-input w-full">
+                                    <option value="non_inverter">Non-Inverter</option>
+                                    <option value="inverter">Inverter</option>
+                                </select>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Refrigerant</label>
+                                <input type="text" id="input-refrigerant" class="info-input w-full" placeholder="e.g. R22">
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Cooling Capacity (BTU)</label>
+                                <input type="number" id="input-cooling-btu" class="info-input w-full" placeholder="e.g. 36000">
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Rated Watts (Power Input)</label>
+                                <input type="number" id="input-power-input" class="info-input w-full" placeholder="e.g. 4020">
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Rated Amps</label>
+                                <input type="number" step="0.1" id="input-rated-amps" class="info-input w-full" placeholder="e.g. 19.0">
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Voltage (V)</label>
+                                <input type="number" id="input-voltage" class="info-input w-full" placeholder="e.g. 230">
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Serial Number</label>
+                                <input type="text" id="input-serial-no" class="info-input w-full" placeholder="e.g. DV250087">
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Duty Cycle</label>
+                                <input type="number" step="0.01" id="input-duty-cycle" class="info-input w-full" placeholder="e.g. 0.65">
+                            </div>
+                            <div class="md:col-span-2 space-y-2">
+                                <label class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Energy Rating</label>
+                                <input type="text" id="input-rating" class="info-input w-full" placeholder="e.g. 5-Star or Standard">
+                            </div>
+                        </div>
+
+                        <button onclick="saveLabInfo()" class="w-full bg-gray-800 hover:bg-black text-white font-black py-6 rounded-2xl flex items-center justify-center gap-4 shadow-xl active:scale-[0.97] transition-all uppercase tracking-widest">
+                            <i data-lucide="save" class="w-6 h-6"></i> Update Dashboard Info
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-gray-400 px-2 pb-10">
+                <div class="flex items-center gap-2">
+                    <span class="flex h-2.5 w-2.5 rounded-full bg-green-500 animate-pulse"></span>
+                    Real-time Database Connection: Active
+                </div>
+                <div id="last-update" class="bg-gray-200 px-3 py-1 rounded text-gray-600 tracking-tighter">WAITING FOR SIGNAL...</div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        lucide.createIcons();
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAv9fvbotQfi21Nu7LNZYBuzNUJOD5Vj0E",
+            databaseURL: "https://pcc-stats-default-rtdb.asia-southeast1.firebasedatabase.app/",
+            projectId: "pcc-stats"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let labKeys = [];
+        let labsData = {};
+        let selectedRoom = null;
+        let lastAutomationAction = {}; 
+
+        function getRoomLabel(key) {
+            const num = key.split('_')[1];
+            if (num === "1") return "Room 401";
+            return "Room " + num;
+        }
+
+        function startRealtimeSync() {
+            db.ref().on('value', (snapshot) => {
+                const data = snapshot.val();
+                if (!data) return;
+                labsData = data;
+                
+                labKeys = Object.keys(data)
+                    .filter(key => key.startsWith("Room_"))
+                    .sort((a, b) => parseInt(a.split('_')[1]) - parseInt(b.split('_')[1]));
+                
+                if (!selectedRoom && labKeys.length > 0) selectedRoom = labKeys[0];
+                updateGlobalUI();
+                renderLabList();
+                if (selectedRoom) refreshConfigUI();
+            });
+        }
+
+        function renderLabList() {
+            const container = document.getElementById('lab-list');
+            container.innerHTML = labKeys.map((key) => {
+                const isActive = key === selectedRoom;
+                const roomData = labsData[key];
+                const temp = roomData.temperature || 0;
+                const acOn = roomData.ac === true;
+                const label = getRoomLabel(key); 
+                
+                return `
+                    <div onclick="selectLab('${key}')" class="p-4 rounded-xl flex justify-between items-center cursor-pointer transition-all border ${isActive ? 'active-lab-card shadow-lg' : 'bg-white border-gray-100 text-gray-800 hover:bg-gray-50 hover:shadow-md hover:border-gray-200'}">
+                        <div class="flex items-center gap-3">
+                            <span class="font-bold text-sm tracking-tighter uppercase">${label}</span>
+                            <div class="flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full ${acOn ? 'bg-green-500' : 'bg-gray-300'}" title="AC ${acOn ? 'ON' : 'OFF'}"></span>
+                                <span class="text-[10px] font-black ${isActive ? 'text-white' : 'text-[#800000]'}">${parseFloat(temp).toFixed(1)}°</span>
+                                ${isActive ? '<i data-lucide="check" class="w-4 h-4"></i>' : '<i data-lucide="chevron-right" class="w-3 h-3 opacity-20"></i>'}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            lucide.createIcons();
+        }
+
+        function selectLab(roomKey) {
+            selectedRoom = roomKey;
+            refreshConfigUI();
+            renderLabList();
+        }
+        
+        let targetTempListeners = {}; // Track target temp listeners to prevent duplicates
+        
+        function setupTargetTempListeners(roomId) {
+            // Clear existing listeners for this room
+            if (targetTempListeners[roomId]) {
+                Object.keys(targetTempListeners[roomId]).forEach(path => {
+                    db.ref(path).off();
+                });
+            }
+            targetTempListeners[roomId] = {};
+            
+            if (roomId === "Room_1") {
+                // Listen for unit_1 target temperature
+                const unit1Path = `${roomId}/units/unit_1/targetTemp`;
+                db.ref(unit1Path).on('value', (snapshot) => {
+                    const newTarget = snapshot.val();
+                    console.log(`[Settings] ${roomId}/unit_1 targetTemp updated:`, newTarget);
+                    if (newTarget !== null) {
+                        document.getElementById('manual-temp-val-unit1').innerText = newTarget;
+                    }
+                });
+                targetTempListeners[roomId][unit1Path] = true;
+                
+                // Listen for unit_2 target temperature
+                const unit2Path = `${roomId}/units/unit_2/targetTemp`;
+                db.ref(unit2Path).on('value', (snapshot) => {
+                    const newTarget = snapshot.val();
+                    console.log(`[Settings] ${roomId}/unit_2 targetTemp updated:`, newTarget);
+                    if (newTarget !== null) {
+                        document.getElementById('manual-temp-val-unit2').innerText = newTarget;
+                    }
+                });
+                targetTempListeners[roomId][unit2Path] = true;
+            } else {
+                // Listen for single room target temperature
+                const singlePath = `${roomId}/targetTemp`;
+                db.ref(singlePath).on('value', (snapshot) => {
+                    const newTarget = snapshot.val();
+                    console.log(`[Settings] ${roomId} targetTemp updated:`, newTarget);
+                    if (newTarget !== null) {
+                        document.getElementById('manual-temp-val').innerText = newTarget;
+                    }
+                });
+                targetTempListeners[roomId][singlePath] = true;
+            }
+        }
+
+        function refreshConfigUI() {
+            if (!selectedRoom || !labsData[selectedRoom]) return;
+            const data = labsData[selectedRoom];
+            const thresholds = data.thresholds || { minTemp: 0, maxTemp: 0 };
+            const specs = data.specs || {};
+            const schedule = data.schedule || { onTime: "", offTime: "" };
+            
+            document.getElementById('config-lab-name').innerText = getRoomLabel(selectedRoom).toUpperCase();
+            document.getElementById('sched-room-name').innerText = getRoomLabel(selectedRoom);
+            
+            document.getElementById('curr-temp-display').innerText = (data.temperature || 0).toFixed(1) + "°";
+            document.getElementById('curr-min-display').innerText = (thresholds.minTemp || 0) + "°";
+            document.getElementById('curr-max-display').innerText = (thresholds.maxTemp || 0) + "°";
+            
+            // Set up Firebase listeners for target temperature to ensure persistence
+            setupTargetTempListeners(selectedRoom);
+            
+            // Check if this is Room_1 with dual-unit structure
+            const isDualUnitRoom = selectedRoom === "Room_1" && data.units;
+            
+            if (isDualUnitRoom) {
+                // Show unit tabs
+                document.getElementById('unit-tabs').classList.remove('hidden');
+                // Show dual-unit controls
+                document.getElementById('single-unit-temp-controls').classList.add('hidden');
+                document.getElementById('dual-unit-temp-controls').classList.remove('hidden');
+                
+                // Populate unit-specific target temperatures
+                const unit1Target = data.units?.unit_1?.targetTemp || 24;
+                const unit2Target = data.units?.unit_2?.targetTemp || 24;
+                document.getElementById('manual-temp-val-unit1').innerText = unit1Target;
+                document.getElementById('manual-temp-val-unit2').innerText = unit2Target;
+                
+                // Set unit-specific thresholds if available
+                const unit1Min = data.units?.unit_1?.thresholds?.minTemp || thresholds.minTemp;
+                const unit1Max = data.units?.unit_1?.thresholds?.maxTemp || thresholds.maxTemp;
+                const unit2Min = data.units?.unit_2?.thresholds?.minTemp || thresholds.minTemp;
+                const unit2Max = data.units?.unit_2?.thresholds?.maxTemp || thresholds.maxTemp;
+                
+                // Store unit-specific thresholds for tab switching
+                window.unitThresholds = {
+                    unit_1: { min: unit1Min, max: unit1Max },
+                    unit_2: { min: unit2Min, max: unit2Max }
+                };
+                
+                // Default to Unit 1 tab
+                switchUnitTab('unit_1');
+            } else {
+                // Hide unit tabs
+                document.getElementById('unit-tabs').classList.add('hidden');
+                // Show single-unit controls
+                document.getElementById('single-unit-temp-controls').classList.remove('hidden');
+                document.getElementById('dual-unit-temp-controls').classList.add('hidden');
+                
+                const displayTarget = data.targetTemp !== undefined ? data.targetTemp : 24;
+                document.getElementById('manual-temp-val').innerText = displayTarget;
+            }
+
+            document.getElementById('input-on-time').value = schedule.onTime || "";
+            document.getElementById('input-off-time').value = schedule.offTime || "";
+            
+            const statusBox = document.getElementById('schedule-status');
+            if(schedule.onTime && schedule.offTime) {
+                statusBox.innerText = `Automation: Active (${schedule.onTime} - ${schedule.offTime})`;
+                statusBox.className = "text-[9px] font-black uppercase px-3 py-1 bg-green-100 rounded text-green-600";
+            } else {
+                statusBox.innerText = "No Active Schedule";
+                statusBox.className = "text-[9px] font-black uppercase px-3 py-1 bg-gray-100 rounded text-gray-400";
+            }
+
+            // Load automation settings
+            const automation = data.automation || { enabled: false, humidityOccupiedThreshold: 60, humidityEmptyThreshold: 50 };
+            document.getElementById('automation-enabled').checked = automation.enabled || false;
+            document.getElementById('humidity-occupied-threshold').value = automation.humidityOccupiedThreshold || 60;
+            document.getElementById('humidity-empty-threshold').value = automation.humidityEmptyThreshold || 50;
+            
+            // Don't auto-disable controls - let user control them manually
+            // toggleAutomation();
+
+            if (document.activeElement.tagName !== 'INPUT') {
+                document.getElementById('input-min').value = thresholds.minTemp || "";
+                document.getElementById('input-building').value = specs.building || "";
+                document.getElementById('input-floor').value = specs.floor || "";
+                document.getElementById('input-ac-type').value = specs.acType || "non_inverter";
+                document.getElementById('input-ac-model').value = specs.acModel || "";
+                document.getElementById('input-model-indoor').value = specs.modelIndoor || "";
+                document.getElementById('input-model-outdoor').value = specs.modelOutdoor || "";
+                document.getElementById('input-unit-type').value = specs.unitType || "ceiling_suspended_split";
+                document.getElementById('input-refrigerant').value = specs.refrigerant || "";
+                document.getElementById('input-cooling-btu').value = specs.coolingBtu || "";
+                document.getElementById('input-power-input').value = specs.powerInput || "";
+                document.getElementById('input-rated-amps').value = specs.ratedAmps || "";
+                document.getElementById('input-voltage').value = specs.voltage || "";
+                document.getElementById('input-serial-no').value = specs.serialNo || "";
+                document.getElementById('input-duty-cycle').value = specs.dutyCycle || "";
+                document.getElementById('input-rating').value = specs.rating || "";
+            }
+            // Update AC state display
+            const acStateEl = document.getElementById('ac-state');
+            if (acStateEl) {
+                const acOn = data.ac === true;
+                acStateEl.innerText = `AC: ${acOn ? 'ON' : 'OFF'}`;
+                acStateEl.className = acOn ? "text-[9px] font-black uppercase px-3 py-1 bg-green-100 rounded text-green-600" : "text-[9px] font-black uppercase px-3 py-1 bg-gray-100 rounded text-gray-400";
+            }
+        }
+
+        // Helper utilities for time comparisons (HH:MM)
+        function toMinutes(timeStr) {
+            const parts = (timeStr || '').split(':');
+            if (parts.length < 2) return null;
+            const hh = parseInt(parts[0], 10);
+            const mm = parseInt(parts[1], 10);
+            return hh * 60 + mm;
+        }
+
+        function isTimeBetween(current, start, end) {
+            if (!start || !end) return false;
+            const c = toMinutes(current);
+            const s = toMinutes(start);
+            const e = toMinutes(end);
+            if (c === null || s === null || e === null) return false;
+            if (s <= e) {
+                return c >= s && c < e; // within same day (end exclusive)
+            }
+            // overnight (e.g., 23:00 -> 06:00)
+            return c >= s || c < e;
+        }
+
+        function saveSchedule() {
+            if (!selectedRoom) return;
+            const onTime = document.getElementById('input-on-time').value;
+            const offTime = document.getElementById('input-off-time').value;
+
+            if(!onTime || !offTime) {
+                Swal.fire({ icon: 'error', title: 'Invalid Time', text: 'Please set both ON and OFF times.' });
+                return;
+            }
+
+            // Check if this is a dual-unit room and a unit tab is selected
+            const savePath = (selectedRoom === "Room_1" && window.selectedUnit) 
+                ? `${selectedRoom}/units/${window.selectedUnit}/schedule`
+                : `${selectedRoom}/schedule`;
+
+            db.ref(savePath).set({ onTime, offTime })
+            .then(() => {
+                const unitLabel = window.selectedUnit ? (window.selectedUnit === 'unit_1' ? 'Unit 1' : 'Unit 2') : '';
+                Swal.fire({ icon: 'success', title: 'Automation Set', text: `${unitLabel} AC will trigger at ${onTime} and ${offTime}`, timer: 2000, showConfirmButton: false });
+                // Reset tracker for this room to allow immediate action if current time matches
+                lastAutomationAction[selectedRoom] = null;
+
+                // Apply immediate state: if current time is within the scheduled range, mark AC ON, otherwise OFF
+                const now = new Date();
+                const nowTime = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+                const within = isTimeBetween(nowTime, onTime, offTime);
+                
+                if (selectedRoom === "Room_1" && window.selectedUnit) {
+                    // Update unit-specific AC state
+                    const acPath = `${selectedRoom}/units/${window.selectedUnit}`;
+                    if (within) {
+                        db.ref(acPath).update({ ac_command: 'ON', ac: true })
+                            .then(() => console.log(`Automation: ${acPath} immediate ON`));
+                    } else {
+                        db.ref(acPath).update({ ac_command: 'OFF', ac: false })
+                            .then(() => console.log(`Automation: ${acPath} immediate OFF`));
+                    }
+                } else {
+                    // Update room-level AC state
+                    if (within) {
+                        db.ref(`${selectedRoom}`).update({ ac_command: 'ON', ac: true })
+                            .then(() => console.log(`Automation: ${selectedRoom} immediate ON`));
+                        lastAutomationAction[selectedRoom] = `${selectedRoom}_${nowTime}_ON`;
+                    } else {
+                        db.ref(`${selectedRoom}`).update({ ac_command: 'OFF', ac: false })
+                            .then(() => console.log(`Automation: ${selectedRoom} immediate OFF`));
+                        lastAutomationAction[selectedRoom] = `${selectedRoom}_${nowTime}_OFF`;
+                    }
+                }
+            });
+        }
+
+        function runAutomationCheck() {
+            const now = new Date();
+            const currentTime = now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes().toString().padStart(2, '0');
+            
+            labKeys.forEach(room => {
+                const roomData = labsData[room];
+                const sched = roomData?.schedule;
+                if (!sched || !sched.onTime || !sched.offTime) return;
+
+                const actionKey = `${room}_${currentTime}`;
+                let debugMsg = `[Automation] ${room} - Current: ${currentTime}, Schedule: ${sched.onTime}-${sched.offTime}`;
+
+                // Exact-time triggers (send commands at configured minutes)
+                if (sched.onTime === currentTime && lastAutomationAction[room] !== actionKey + "_ON") {
+                    console.log(debugMsg + " → TRIGGER ON");
+                    db.ref(`${room}`).update({ ac_command: "ON", ac: true })
+                        .then(() => console.log(`[Automation] ${room} turned ON successfully`));
+                    lastAutomationAction[room] = actionKey + "_ON";
+                    return;
+                }
+
+                if (sched.offTime === currentTime && lastAutomationAction[room] !== actionKey + "_OFF") {
+                    console.log(debugMsg + " → TRIGGER OFF");
+                    db.ref(`${room}`).update({ ac_command: "OFF", ac: false })
+                        .then(() => console.log(`[Automation] ${room} turned OFF successfully`));
+                    lastAutomationAction[room] = actionKey + "_OFF";
+                    return;
+                }
+                // NOTE: Removed continuous schedule window enforcement to respect manual toggles from dashboard
+            });
+        }
+
+        function adjustManualTemp(change, unitNumber = null) {
+            if (!selectedRoom) return;
+            const currentData = labsData[selectedRoom];
+            const cmd = change > 0 ? "TEMP_UP" : "TEMP_DOWN";
+            
+            // Check if this is Room_1 and unitNumber is provided (dual-unit mode)
+            if (selectedRoom === "Room_1" && unitNumber !== null) {
+                const unitKey = `unit_${unitNumber}`;
+                const currentTarget = currentData.units?.[unitKey]?.targetTemp || 24;
+                const newVal = currentTarget + change;
+                if (newVal < 16 || newVal > 30) return;
+                
+                db.ref(`${selectedRoom}/units/${unitKey}`).update({ targetTemp: newVal, ac_command: cmd });
+            } else {
+                // Single unit mode (legacy)
+                const currentTarget = currentData.targetTemp !== undefined ? currentData.targetTemp : 24;
+                const newVal = currentTarget + change;
+                if (newVal < 16 || newVal > 30) return;
+                
+                db.ref(`${selectedRoom}`).update({ targetTemp: newVal, ac_command: cmd });
+            }
+        }
+
+        function switchUnitTab(unit) {
+            // Update tab styling
+            document.getElementById('tab-unit-1').className = unit === 'unit_1' 
+                ? 'text-[9px] font-bold px-3 py-1.5 rounded-full bg-[#800000] text-white uppercase tracking-widest'
+                : 'text-[9px] font-bold px-3 py-1.5 rounded-full bg-gray-200 text-gray-600 uppercase tracking-widest';
+            document.getElementById('tab-unit-2').className = unit === 'unit_2'
+                ? 'text-[9px] font-bold px-3 py-1.5 rounded-full bg-[#800000] text-white uppercase tracking-widest'
+                : 'text-[9px] font-bold px-3 py-1.5 rounded-full bg-gray-200 text-gray-600 uppercase tracking-widest';
+            
+            // Update threshold displays and inputs based on selected unit
+            if (window.unitThresholds && window.unitThresholds[unit]) {
+                const thresholds = window.unitThresholds[unit];
+                document.getElementById('curr-min-display').innerText = thresholds.min + "°";
+                document.getElementById('curr-max-display').innerText = thresholds.max + "°";
+                
+                // Update input fields if not currently focused
+                if (document.activeElement.tagName !== 'INPUT') {
+                    document.getElementById('input-min').value = thresholds.min;
+                    document.getElementById('input-max').value = thresholds.max;
+                }
+            }
+            
+            // Show unit badges in all sections
+            const unitLabel = unit === 'unit_1' ? 'Unit 1' : 'Unit 2';
+            document.getElementById('schedule-unit-badge').classList.remove('hidden');
+            document.getElementById('schedule-unit-badge').innerText = unitLabel;
+            document.getElementById('lab-info-unit-badge').classList.remove('hidden');
+            document.getElementById('lab-info-unit-badge').innerText = unitLabel;
+            
+            // Load unit-specific schedule and lab info
+            loadUnitSchedule(unit);
+            loadUnitLabInfo(unit);
+            
+            // Store currently selected unit for saving
+            window.selectedUnit = unit;
+        }
+
+        function loadUnitSchedule(unit) {
+            if (!selectedRoom) return;
+            const unitPath = `${selectedRoom}/units/${unit}`;
+            db.ref(`${unitPath}/schedule`).once('value').then((snapshot) => {
+                const schedule = snapshot.val() || { onTime: "", offTime: "" };
+                document.getElementById('input-on-time').value = schedule.onTime || "";
+                document.getElementById('input-off-time').value = schedule.offTime || "";
+                
+                const statusBox = document.getElementById('schedule-status');
+                if(schedule.onTime && schedule.offTime) {
+                    statusBox.innerText = `Automation: Active (${schedule.onTime} - ${schedule.offTime})`;
+                    statusBox.className = "text-[9px] font-black uppercase px-3 py-1 bg-green-100 rounded text-green-600";
+                } else {
+                    statusBox.innerText = "No Active Schedule";
+                    statusBox.className = "text-[9px] font-black uppercase px-3 py-1 bg-gray-100 rounded text-gray-400";
+                }
+            });
+        }
+
+        function loadUnitLabInfo(unit) {
+            if (!selectedRoom) return;
+            const unitPath = `${selectedRoom}/units/${unit}`;
+            db.ref(`${unitPath}/specs`).once('value').then((snapshot) => {
+                const specs = snapshot.val() || {};
+                document.getElementById('input-building').value = specs.building || "";
+                document.getElementById('input-floor').value = specs.floor || "";
+                document.getElementById('input-ac-model').value = specs.acModel || "";
+                document.getElementById('input-model-indoor').value = specs.modelIndoor || "";
+                document.getElementById('input-model-outdoor').value = specs.modelOutdoor || "";
+                document.getElementById('input-unit-type').value = specs.unitType || "ceiling_suspended_split";
+                document.getElementById('input-ac-type').value = specs.acType || "non_inverter";
+                document.getElementById('input-refrigerant').value = specs.refrigerant || "";
+                document.getElementById('input-cooling-btu').value = specs.coolingBtu || "";
+                document.getElementById('input-power-input').value = specs.powerInput || "";
+                document.getElementById('input-rated-amps').value = specs.ratedAmps || "";
+                document.getElementById('input-voltage').value = specs.voltage || "";
+                document.getElementById('input-serial-no').value = specs.serialNo || "";
+                document.getElementById('input-duty-cycle').value = specs.dutyCycle || "";
+                document.getElementById('input-rating').value = specs.rating || "";
+            });
+        }
+
+        function handleAutomationToggle(event) {
+            event.preventDefault();
+            const checkbox = document.getElementById('automation-enabled');
+            const currentState = checkbox.checked;
+            const newState = !currentState;
+            
+            Swal.fire({
+                title: newState ? 'Enable Automation?' : 'Disable Automation?',
+                text: newState ? 'This will enable smart automation to automatically adjust AC temperature based on humidity levels.' : 'This will disable smart automation. AC temperature will no longer be automatically adjusted.',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: newState ? '#16a34a' : '#dc2626',
+                cancelButtonColor: '#6b7280',
+                confirmButtonText: newState ? 'Yes, Enable' : 'Yes, Disable',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Update checkbox state
+                    checkbox.checked = newState;
+                    toggleAutomation();
+                    
+                    // Update Firebase directly
+                    if (selectedRoom) {
+                        db.ref(`${selectedRoom}/automation/enabled`).set(newState)
+                            .then(() => {
+                                console.log(`Automation ${newState ? 'enabled' : 'disabled'} for ${selectedRoom}`);
+                            })
+                            .catch((error) => {
+                                console.error('Error updating automation state:', error);
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'Update Failed',
+                                    text: 'Failed to update automation state in Firebase.'
+                                });
+                                // Revert checkbox state on error
+                                checkbox.checked = currentState;
+                                toggleAutomation();
+                            });
+                    }
+                }
+                // If cancelled, checkbox stays in current state (no change needed)
+            });
+        }
+
+        function toggleAutomation() {
+            const isEnabled = document.getElementById('automation-enabled').checked;
+            const controls = document.getElementById('automation-controls');
+            
+            if (isEnabled) {
+                controls.classList.remove('opacity-50', 'pointer-events-none');
+            } else {
+                controls.classList.add('opacity-50', 'pointer-events-none');
+            }
+        }
+
+        function saveAutomationSettings() {
+            if (!selectedRoom) return;
+            
+            const enabled = document.getElementById('automation-enabled').checked;
+            const occupiedThreshold = parseFloat(document.getElementById('humidity-occupied-threshold').value);
+            const emptyThreshold = parseFloat(document.getElementById('humidity-empty-threshold').value);
+            
+            // Validation: occupied threshold must be higher than empty threshold
+            if (occupiedThreshold <= emptyThreshold) {
+                Swal.fire({ 
+                    icon: 'error', 
+                    title: 'Invalid Thresholds', 
+                    text: 'Occupied threshold must be higher than empty threshold to prevent rapid switching.' 
+                });
+                return;
+            }
+            
+            // Validation: thresholds must be between 0 and 100
+            if (occupiedThreshold < 0 || occupiedThreshold > 100 || emptyThreshold < 0 || emptyThreshold > 100) {
+                Swal.fire({ 
+                    icon: 'error', 
+                    title: 'Invalid Thresholds', 
+                    text: 'Humidity thresholds must be between 0 and 100 percent.' 
+                });
+                return;
+            }
+            
+            const automationData = {
+                enabled: enabled,
+                humidityOccupiedThreshold: occupiedThreshold,
+                humidityEmptyThreshold: emptyThreshold
+            };
+            
+            // Save to Firebase
+            db.ref(`${selectedRoom}/automation`).set(automationData)
+            .then(() => {
+                Swal.fire({ 
+                    icon: 'success', 
+                    title: 'Automation Settings Saved', 
+                    text: enabled ? 'Smart automation is now active' : 'Smart automation disabled',
+                    timer: 2000, 
+                    showConfirmButton: false 
+                });
+            })
+            .catch((error) => {
+                Swal.fire({ 
+                    icon: 'error', 
+                    title: 'Save Failed', 
+                    text: error.message 
+                });
+            });
+        }
+
+        function updateGlobalUI() {
+            // Use shared utility for summary cards
+            const stats = calculateStats(labsData, labKeys);
+            updateSummaryCards(stats, {
+                total: 'total-labs-count',
+                normal: 'normal-labs-count',
+                critical: 'alert-count',
+                avgTemp: 'avg-temp'
+            });
+            document.getElementById('last-update').innerText = "LAST SYNC: " + new Date().toLocaleTimeString();
+        }
+
+        function saveSettings() {
+            if (!selectedRoom) return;
+            const min = parseFloat(document.getElementById('input-min').value);
+            const max = parseFloat(document.getElementById('input-max').value);
+            
+            // Check if this is a dual-unit room and a unit tab is selected
+            if (selectedRoom === "Room_1" && window.selectedUnit) {
+                // Save to unit-specific thresholds
+                db.ref(`${selectedRoom}/units/${window.selectedUnit}/thresholds`).update({ minTemp: min, maxTemp: max })
+                .then(() => {
+                    // Update the stored thresholds
+                    if (window.unitThresholds) {
+                        window.unitThresholds[window.selectedUnit] = { min, max };
+                    }
+                    Swal.fire({ icon: 'success', title: `Unit ${window.selectedUnit === 'unit_1' ? '1' : '2'} Thresholds Synced`, timer: 1000, showConfirmButton: false });
+                });
+            } else {
+                // Save to room-level thresholds (legacy)
+                db.ref(`${selectedRoom}/thresholds`).update({ minTemp: min, maxTemp: max })
+                .then(() => Swal.fire({ icon: 'success', title: 'Hardware Synced', timer: 1000, showConfirmButton: false }));
+            }
+        }
+
+        function saveLabInfo() {
+            if (!selectedRoom) return;
+            const specs = {
+                building: document.getElementById('input-building').value,
+                floor: document.getElementById('input-floor').value,
+                acType: document.getElementById('input-ac-type').value,
+                acModel: document.getElementById('input-ac-model').value,
+                modelIndoor: document.getElementById('input-model-indoor').value,
+                modelOutdoor: document.getElementById('input-model-outdoor').value,
+                unitType: document.getElementById('input-unit-type').value,
+                refrigerant: document.getElementById('input-refrigerant').value,
+                coolingBtu: parseFloat(document.getElementById('input-cooling-btu').value) || 0,
+                powerInput: parseFloat(document.getElementById('input-power-input').value) || 0,
+                ratedAmps: parseFloat(document.getElementById('input-rated-amps').value) || 0,
+                voltage: parseFloat(document.getElementById('input-voltage').value) || 0,
+                serialNo: document.getElementById('input-serial-no').value,
+                dutyCycle: parseFloat(document.getElementById('input-duty-cycle').value) || 0,
+                rating: document.getElementById('input-rating').value
+            };
+            
+            // Check if this is a dual-unit room and a unit tab is selected
+            if (selectedRoom === "Room_1" && window.selectedUnit) {
+                // Save to unit-specific specs
+                db.ref(`${selectedRoom}/units/${window.selectedUnit}/specs`).update(specs);
+                
+                // Save to config/rooms for cost calculation (unit-specific)
+                const airconConfig = {
+                    aircon_type: specs.acType,
+                    rated_watts: specs.powerInput,
+                    hp_rating: null,
+                    duty_cycle: specs.dutyCycle
+                };
+                db.ref(`config/rooms/${selectedRoom}/${window.selectedUnit}`).set(airconConfig);
+                
+                const unitLabel = window.selectedUnit === 'unit_1' ? 'Unit 1' : 'Unit 2';
+                Swal.fire({ icon: 'success', title: `${unitLabel} Info Updated`, timer: 1000, showConfirmButton: false });
+            } else {
+                // Save to room-level specs (legacy)
+                db.ref(`${selectedRoom}/specs`).update(specs);
+                
+                // Save to config/rooms for cost calculation
+                const airconConfig = {
+                    aircon_type: specs.acType,
+                    rated_watts: specs.powerInput,
+                    hp_rating: null,
+                    duty_cycle: specs.dutyCycle
+                };
+                db.ref(`config/rooms/${selectedRoom}`).set(airconConfig);
+                
+                Swal.fire({ icon: 'success', title: 'Info Updated', timer: 1000, showConfirmButton: false });
+            }
+        }
+
+        document.getElementById('menu-toggle').addEventListener('click', () => {
+            document.getElementById('sidebar').classList.toggle('show');
+        });
+
+        function logout() { window.location.href = "login.html"; }
+        function confirmLogout() { document.getElementById('logoutModal').style.display = 'flex'; lucide.createIcons(); }
+
+        startRealtimeSync();
+        // Check automation status every 10 seconds to ensure it catches the correct minute
+        setInterval(runAutomationCheck, 10000);
+
+        // Initialize Room_1 with Koppel unit specs if not already present in specs
+        db.ref("Room_1/specs").once("value", (snapshot) => {
+            const existingSpecs = snapshot.val();
+            if (!existingSpecs || !existingSpecs.powerInput) {
+                const koppelSpecs = {
+                    building: "St. Joseph",
+                    floor: "4th Floor",
+                    acType: "non_inverter",
+                    acModel: "Koppel 1KU536",
+                    modelIndoor: "1KU536P7A",
+                    modelOutdoor: "1KC536P7A",
+                    unitType: "ceiling_suspended_split",
+                    refrigerant: "R22",
+                    coolingBtu: 36000,
+                    powerInput: 4020,
+                    ratedAmps: 19.0,
+                    voltage: 230,
+                    serialNo: "DV250087",
+                    dutyCycle: 0.65,
+                    rating: "Standard"
+                };
+                
+                // Save to specs
+                db.ref("Room_1/specs").set(koppelSpecs);
+                
+                // Save to config/rooms for cost calculation
+                db.ref("config/rooms/Room_1").set({
+                    aircon_type: "non_inverter",
+                    rated_watts: 4020,
+                    hp_rating: null,
+                    duty_cycle: 0.65
+                });
+                console.log("Koppel unit configuration initialized for Room_1");
+            }
+        });
+    </script>
+</body>
+</html>

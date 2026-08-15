@@ -1,0 +1,153 @@
+#include <Firebase_ESP_Client.h>
+#include <Wire.h>
+#include <Arduino.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <DHT.h>
+#include <WiFi.h>
+#include <IRremoteESP8266.h>
+#include <IRsend.h>
+
+// --- I2C PIN CONFIGURATION ---
+#define OLED_SDA 21
+#define OLED_SCL 22
+
+// --- CONFIGURATION ---
+#define WIFI_SSID "HUAWEI"
+#define WIFI_PASSWORD "252acdppc"
+#define DATABASE_SECRET "IkugP85EjZi21u7inX36DZdHEaYQqhBWv5rk7zNP"
+#define DATABASE_URL "https://iot-capstone-44337-default-rtdb.asia-southeast1.firebasedatabase.app" 
+
+// --- IR CONFIGURATION ---
+const uint16_t kIrLedPin = 4; 
+IRsend irsend(kIrLedPin);
+const uint16_t kFrequency = 38; 
+
+// Koppel AC RAW Data
+uint16_t rawOn[149] = {4850, 2500, 382, 428, 358, 406, 378, 424, 362, 956, 358, 924, 380, 426, 360, 404, 406, 388, 384, 422, 360, 946, 384, 402, 356, 442, 356, 426, 358, 948, 358, 404, 382, 404, 392, 424, 360, 426, 360, 426, 384, 930, 384, 400, 362, 944, 358, 426, 360, 416, 380, 948, 358, 428, 356, 428, 360, 436, 358, 424, 360, 924, 406, 400, 362, 416, 380, 426, 360, 424, 360, 428, 358, 438, 356, 430, 358, 426, 358, 406, 404, 414, 384, 400, 360, 426, 360, 424, 358, 438, 360, 426, 360, 428, 358, 402, 382, 436, 362, 424, 382, 898, 382, 426, 360, 436, 360, 426, 360, 924, 382, 390, 400, 428, 358, 924, 406, 404, 358, 404, 380, 956, 358, 428, 360, 402, 382, 428, 358, 436, 360, 424, 360, 426, 384, 404, 358, 436, 360, 940, 364, 924, 380, 946, 358, 428, 358, 21474, 4852};
+uint16_t rawOff[149] = {4908, 2466, 416, 334, 452, 372, 412, 372, 414, 924, 392, 914, 390, 372, 414, 372, 414, 404, 392, 394, 390, 914, 390, 298, 488, 404, 392, 378, 408, 914, 390, 394, 390, 406, 390, 396, 390, 372, 414, 300, 486, 404, 390, 914, 390, 914, 390, 370, 416, 404, 390, 914, 392, 394, 390, 394, 392, 404, 392, 394, 390, 914, 390, 394, 392, 404, 392, 394, 390, 396, 390, 396, 390, 406, 390, 396, 390, 396, 390, 396, 390, 406, 392, 396, 390, 396, 390, 396, 390, 406, 390, 396, 390, 396, 390, 396, 390, 406, 390, 394, 392, 914, 390, 396, 370, 426, 388, 396, 366, 938, 390, 396, 390, 384, 390, 936, 390, 372, 412, 372, 412, 926, 390, 372, 414, 370, 414, 370, 416, 380, 416, 370, 414, 370, 416, 370, 416, 380, 416, 370, 416, 370, 416, 370, 416, 370, 416, 21416, 4908};
+
+FirebaseData fbdo;
+FirebaseData stream; 
+FirebaseAuth auth;
+FirebaseConfig config;
+
+#define SCREEN_WIDTH 128 
+#define SCREEN_HEIGHT 64 
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+
+#define DHTPIN 26
+#define DHTTYPE DHT11
+#define LED_PIN 27
+#define RELAY_PIN 25 
+DHT dht(DHTPIN, DHTTYPE);
+
+float minTemp = 20.0;
+float maxTemp = 30.0;
+unsigned long sendDataPrevMillis = 0;
+
+void handleACCommand(String cmd);
+
+void setup() {
+  Serial.begin(115200);
+  Wire.begin(OLED_SDA, OLED_SCL);
+  irsend.begin();
+  
+  pinMode(LED_PIN, OUTPUT);
+  pinMode(RELAY_PIN, OUTPUT);
+  dht.begin();
+
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { 
+    Serial.println("OLED Failed");
+    for(;;); 
+  }
+
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
+  Serial.println("\nWiFi Connected");
+
+  config.signer.tokens.legacy_token = DATABASE_SECRET;
+  config.database_url = DATABASE_URL;
+  Firebase.begin(&config, &auth);
+  Firebase.reconnectWiFi(true);
+
+  if (!Firebase.RTDB.beginStream(&stream, "/Room_1")) {
+    Serial.println("Stream Error: " + stream.errorReason());
+  } else {
+    Serial.println("Stream OK - Listening to /Room_1");
+  }
+}
+
+void loop() {
+  // --- REAL-TIME STREAM LISTENER ---
+  if (Firebase.ready() && Firebase.RTDB.readStream(&stream)) {
+    if (stream.streamAvailable()) {
+      String path = stream.dataPath(); 
+      
+      // Update Thresholds via Stream
+      if (path == "/minTemp") {
+        minTemp = stream.floatData();
+        Serial.printf("New Min: %.1f\n", minTemp);
+      } 
+      else if (path == "/maxTemp") {
+        maxTemp = stream.floatData();
+        Serial.printf("New Max: %.1f\n", maxTemp);
+      }
+      // Update AC Commands via Stream
+      else if (path.endsWith("ac_command")) {
+        handleACCommand(stream.stringData());
+      }
+      // Handle Multi-update JSON
+      else if (path == "/") {
+        FirebaseJson &json = stream.jsonObject();
+        FirebaseJsonData jsonData;
+        if (json.get(jsonData, "ac_command")) handleACCommand(jsonData.stringValue);
+        if (json.get(jsonData, "minTemp")) minTemp = jsonData.floatValue;
+        if (json.get(jsonData, "maxTemp")) maxTemp = jsonData.floatValue;
+      }
+    }
+  }
+
+  // --- SENSOR & OLED LOGIC ---
+  float t = dht.readTemperature();
+  bool isAlarm = (t < minTemp || t > maxTemp);
+  digitalWrite(LED_PIN, isAlarm ? HIGH : LOW);
+
+  display.clearDisplay();
+  display.fillScreen(SSD1306_WHITE); 
+  display.setTextColor(SSD1306_BLACK); 
+  display.setTextSize(1);
+  display.setCursor(5, 5);
+  display.printf("MIN:%.1f MAX:%.1f", minTemp, maxTemp); 
+  display.setCursor(25, 30);
+  display.setTextSize(2);
+  if (isnan(t)) display.print("ERR");
+  else { display.print(t, 1); display.print(" C"); }
+  display.display();
+
+  // --- DATA UPLOAD (Every 10s) ---
+  if (millis() - sendDataPrevMillis > 10000) {
+    sendDataPrevMillis = millis();
+    FirebaseJson updateData;
+    updateData.add("temperature", t);
+    updateData.add("status", isAlarm ? "ALARM" : "NORMAL");
+    Firebase.RTDB.updateNode(&fbdo, "/Room_1", &updateData);
+  }
+}
+
+void handleACCommand(String cmd) {
+  if (cmd == "IDLE") return;
+
+  Serial.println("Command Received: " + cmd);
+
+  if (cmd == "ON") {
+    Serial.println(">>> SENDING IR: ON");
+    irsend.sendRaw(rawOn, 149, kFrequency);
+    Firebase.RTDB.setString(&fbdo, "/Room_1/ac_command", "IDLE"); 
+  } 
+  else if (cmd == "OFF") {
+    Serial.println(">>> SENDING IR: OFF");
+    irsend.sendRaw(rawOff, 149, kFrequency);
+    Firebase.RTDB.setString(&fbdo, "/Room_1/ac_command", "IDLE");
+  }
+}

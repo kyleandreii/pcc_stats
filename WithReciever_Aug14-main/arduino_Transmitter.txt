@@ -1,0 +1,26 @@
+#include <Arduino.h>
+#include <IRremoteESP8266.h>
+#include <IRsend.h>
+
+const uint16_t kIrLedPin = 4; // The pin connected to your 1k resistor
+IRsend irsend(kIrLedPin);
+
+// The exact ON state you captured earlier
+uint8_t panasonicOn[27] = {0x02, 0x20, 0xE0, 0x04, 0x00, 0x00, 0x00, 0x06, 0x02, 0x20, 0xE0, 0x04, 0x00, 0x38, 0x2A, 0x80, 0x73, 0x00, 0x00, 0x0E, 0xE0, 0x00, 0x00, 0x89, 0x00, 0x00, 0xD2};
+
+void setup() {
+  irsend.begin();
+  Serial.begin(115200);
+  Serial.println("IR Sender Ready. Type 'SEND' to test.");
+}
+
+void loop() {
+  if (Serial.available()) {
+    String cmd = Serial.readStringUntil('\n');
+    cmd.trim();
+    if (cmd == "SEND") {
+      Serial.println("Sending Panasonic ON command...");
+      irsend.sendPanasonicAC(panasonicOn);
+    }
+  }
+}

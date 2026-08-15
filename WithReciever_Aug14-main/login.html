@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login | PCC S.T.A.T.S.</title>
+   
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+ 
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+ 
+    <style>
+        .bg-maroon { background-color: #800000; }
+        .text-maroon { color: #800000; }
+        .focus-maroon:focus { border-color: #800000; outline: none; box-shadow: 0 0 0 4px rgba(128, 0, 0, 0.15), 0 0 0 1px #800000; transition: all 0.2s ease; }
+       
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .animate-spin-slow { animation: spin 2s linear infinite; }
+       
+        .input-field { transition: all 0.2s ease; }
+        .input-field:focus { transform: translateY(-1px); }
+       
+        body {
+            background-image: url('114logo.png');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            position: relative;
+        }
+       
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0.8) 100%);
+            pointer-events: none;
+            z-index: 0;
+        }
+       
+        body > * {
+            position: relative;
+            z-index: 1;
+        }
+       
+        .login-container {
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.7), 0 0 60px rgba(0, 0, 0, 0.65), 0 30px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4 font-sans">
+ 
+    <div class="max-w-md w-full bg-white rounded-3xl shadow-2xl overflow-hidden transform transition-all hover:scale-[1.01] login-container">
+        <div class="bg-maroon p-10 text-center relative overflow-hidden">
+            <div class="absolute -top-10 -right-10 w-32 h-32 bg-white/5 rounded-full"></div>
+            <div class="absolute -bottom-10 -left-10 w-24 h-24 bg-white/5 rounded-full"></div>
+ 
+            <div class="mb-4 flex justify-center relative z-10">
+                <div class="w-24 h-24 bg-white/10 rounded-2xl flex items-center justify-center border-2 border-white/20 backdrop-blur-md shadow-xl">
+                    <img src="pcctruelogo.png" alt="PCC Logo" class="w-full h-full object-contain">
+                </div>
+            </div>
+           
+            <h2 class="text-2xl font-black text-white tracking-tight uppercase relative z-10">PCC S.T.A.T.S.</h2>
+            <p class="text-white/70 text-[10px] mt-1 font-bold tracking-[0.2em] uppercase relative z-10">Smart Thermal Adjustment & Tracking System</p>
+        </div>
+ 
+        <div class="p-8 md:p-10">
+            <form id="login-form" class="space-y-5">
+                <div>
+                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">Institutional Email</label>
+                    <div class="relative group">
+                        <span class="absolute inset-y-0 left-0 pl-4 flex items-center text-gray-400 group-focus-within:text-maroon transition-colors">
+                            <i data-lucide="mail" class="w-5 h-5"></i>
+                        </span>
+                        <input type="email" id="email" required
+                            class="input-field block w-full pl-12 pr-4 py-4 border border-gray-200 rounded-2xl leading-5 bg-gray-50 placeholder-gray-400 focus-maroon sm:text-sm"
+                            placeholder="admin@pccnet.edu.ph">
+                    </div>
+                </div>
+ 
+                <div>
+                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">Security Key</label>
+                    <div class="relative group">
+                        <span class="absolute inset-y-0 left-0 pl-4 flex items-center text-gray-400 group-focus-within:text-maroon transition-colors">
+                            <i data-lucide="lock" class="w-5 h-5"></i>
+                        </span>
+                        <input type="password" id="password" required
+                            class="input-field block w-full pl-12 pr-4 py-4 border border-gray-200 rounded-2xl leading-5 bg-gray-50 placeholder-gray-400 focus-maroon sm:text-sm"
+                            placeholder="••••••••">
+                    </div>
+                </div>
+ 
+                <div class="flex items-center justify-between px-1">
+                    <label class="flex items-center cursor-pointer group">
+                        <input type="checkbox" class="h-4 w-4 text-maroon focus:ring-maroon border-gray-300 rounded transition-all">
+                        <span class="ml-2 text-xs font-semibold text-gray-500 group-hover:text-gray-700">Stay logged in</span>
+                    </label>
+                    <a href="#" id="forgot-password" class="text-xs font-bold text-maroon hover:underline decoration-2 underline-offset-4">Forgot Key?</a>
+                </div>
+ 
+                <div class="pt-2 space-y-3">
+                    <button type="submit" id="submit-btn"
+                        class="group relative w-full flex justify-center py-4 px-4 border border-transparent text-sm font-black rounded-2xl text-white bg-maroon hover:opacity-95 active:scale-[0.98] focus:outline-none transition-all shadow-xl shadow-maroon/20 uppercase tracking-widest">
+                        <span id="btn-text" class="flex items-center gap-2">
+                            Sign In To System <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                        </span>
+                    </button>
+ 
+                    <button type="button" id="register-btn"
+                        class="w-full flex justify-center py-3 px-4 border-2 border-gray-200 text-[10px] font-black rounded-2xl text-gray-500 bg-transparent hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700 active:scale-[0.98] focus:outline-none transition-all uppercase tracking-widest">
+                        <span id="reg-btn-text">Register New Account</span>
+                    </button>
+                </div>
+            </form>
+ 
+            <p id="error-msg" class="text-red-600 text-[11px] font-bold text-center mt-4 hidden italic"></p>
+            <p id="success-msg" class="text-green-600 text-[11px] font-bold text-center mt-4 hidden italic"></p>
+ 
+            <div class="mt-10 pt-8 border-t border-gray-100 text-center">
+                <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-relaxed">
+                    &copy; 2026 ICTC Department <br>
+                    <span class="text-maroon opacity-60">Authorized Personnel Only</span>
+                </p>
+            </div>
+        </div>
+    </div>
+ 
+    <script>
+        // --- 1. FIREBASE CONFIGURATION ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyAv9fvbotQfi21Nu7LNZYBuzNUJOD5Vj0E",
+            databaseURL: "https://pcc-stats-default-rtdb.asia-southeast1.firebasedatabase.app/",
+            projectId: "pcc-stats"
+        };
+       
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const auth = firebase.auth();
+ 
+        const loginForm = document.getElementById('login-form');
+        const submitBtn = document.getElementById('submit-btn');
+        const registerBtn = document.getElementById('register-btn');
+        const btnText = document.getElementById('btn-text');
+        const regBtnText = document.getElementById('reg-btn-text');
+        const errorMsg = document.getElementById('error-msg');
+        const successMsg = document.getElementById('success-msg');
+        const forgotPasswordLink = document.getElementById('forgot-password');
+ 
+        // Helper to reset messages
+        function resetMessages() {
+            errorMsg.classList.add('hidden');
+            successMsg.classList.add('hidden');
+        }
+ 
+        // --- 2. LOGIN LOGIC ---
+        loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            resetMessages();
+           
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+ 
+            if (!email.endsWith('@pccnet.edu.ph')) {
+                errorMsg.innerText = "Access Denied: Please use your @pccnet.edu.ph email.";
+                errorMsg.classList.remove('hidden');
+                return;
+            }
+ 
+            btnText.innerHTML = '<i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i> Verifying...';
+            submitBtn.disabled = true;
+            lucide.createIcons();
+ 
+            auth.signInWithEmailAndPassword(email, password)
+                .then(() => {
+                    window.location.href = "1_dashboard_trial.html";
+                })
+                .catch((error) => {
+                    console.error(error.code);
+                    errorMsg.innerText = "Access Denied: Invalid Username or Password.";
+                    errorMsg.classList.remove('hidden');
+                    btnText.innerHTML = 'Sign In To System <i data-lucide="chevron-right" class="w-4 h-4"></i>';
+                    submitBtn.disabled = false;
+                    lucide.createIcons();
+                });
+        });
+ 
+        // --- 3. CREATE ACCOUNT (REGISTER) LOGIC ---
+        registerBtn.addEventListener('click', () => {
+            resetMessages();
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+ 
+            if (!email || !password) {
+                errorMsg.innerText = "Please provide both Email and Password to register.";
+                errorMsg.classList.remove('hidden');
+                return;
+            }
+ 
+            if (!email.endsWith('@pccnet.edu.ph')) {
+                errorMsg.innerText = "Registration Denied: Must use @pccnet.edu.ph domain.";
+                errorMsg.classList.remove('hidden');
+                return;
+            }
+ 
+            if (password.length < 6) {
+                errorMsg.innerText = "Security Key must be at least 6 characters.";
+                errorMsg.classList.remove('hidden');
+                return;
+            }
+ 
+            regBtnText.innerHTML = '<i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> Creating...';
+            registerBtn.disabled = true;
+            lucide.createIcons();
+ 
+            auth.createUserWithEmailAndPassword(email, password)
+                .then(() => {
+                    successMsg.innerText = "Account Created Successfully! You may now sign in.";
+                    successMsg.classList.remove('hidden');
+                    regBtnText.innerText = "Register New Account";
+                    registerBtn.disabled = false;
+                })
+                .catch((error) => {
+                    console.error(error.code);
+                    if (error.code === 'auth/email-already-in-use') {
+                        errorMsg.innerText = "This email is already registered.";
+                    } else {
+                        errorMsg.innerText = "Registration failed. Please try again.";
+                    }
+                    errorMsg.classList.remove('hidden');
+                    regBtnText.innerText = "Register New Account";
+                    registerBtn.disabled = false;
+                });
+        });
+ 
+        // --- 4. FORGOT PASSWORD LOGIC ---
+        forgotPasswordLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            resetMessages();
+            const email = document.getElementById('email').value.trim();
+ 
+            if (!email || !email.endsWith('@pccnet.edu.ph')) {
+                errorMsg.innerText = "Please enter a valid institutional email first.";
+                errorMsg.classList.remove('hidden');
+                return;
+            }
+ 
+            auth.sendPasswordResetEmail(email)
+                .then(() => {
+                    alert("A password reset link has been sent to " + email);
+                })
+                .catch((error) => {
+                    errorMsg.innerText = "Error: Could not send reset link.";
+                    errorMsg.classList.remove('hidden');
+                });
+        });
+ 
+        lucide.createIcons();
+    </script>
+</body>
+</html>

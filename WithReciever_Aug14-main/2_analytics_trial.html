@@ -1,0 +1,3084 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PCC S.T.A.T.S. | Analytics</title>
+    <link rel="icon" type="image/png" href="pcctruelogo.png">
+    <link rel="stylesheet" href="style.css">
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="shared-utils.js"></script>
+    <script src="ui-enhancements.js"></script>
+    <script src="aircon-cost-calculator.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
+        
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(6px); display: none; align-items: center;
+            justify-content: center; z-index: 100;
+        }
+        .modal-content {
+            background: white; width: 90%; max-width: 420px; border-radius: 32px;
+            padding: 40px; position: relative; border-top: 8px solid #800000;
+        }
+        .sidebar-logo {
+            width: 60px;
+            height: 60px;
+            object-fit: contain;
+            border-radius: 6px;
+        }
+        .sidebar-header {
+            display: flex; align-items: center; gap: 12px; color: white;
+            font-weight: 900; font-size: 1.25rem; margin-bottom: 24px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            text-decoration: none;
+        }
+
+        .sidebar-header:hover {
+            transform: translateX(4px);
+            opacity: 0.9;
+        }
+
+        .sidebar-header:active {
+            transform: scale(0.98);
+        }
+        .table-container::-webkit-scrollbar { height: 8px; }
+        .table-container::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .table-container::-webkit-scrollbar-track { background: #f1f5f9; }
+        
+        .nav-item { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); position: relative; border-left: 3px solid transparent; }
+        .nav-item:hover { transform: translateX(4px); }
+        .nav-item.active { border-left-color: rgba(255, 255, 255, 0.8); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); }
+        th, td { white-space: nowrap; }
+
+        /* New Analytics Styles */
+        .period-tab {
+            color: #6b7280;
+            background: transparent;
+        }
+
+        /* Smooth Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes scaleIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .animate-fade-in {
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+
+        .animate-scale-in {
+            animation: scaleIn 0.3s ease-out forwards;
+        }
+
+        .animate-slide-in {
+            animation: slideIn 0.3s ease-out forwards;
+        }
+
+        /* Date Picker Modal Animation */
+        #date-picker-modal {
+            transition: opacity 0.3s ease;
+        }
+
+        #date-picker-modal.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #date-picker-modal:not(.hidden) {
+            opacity: 1;
+        }
+
+        #date-picker-modal > div {
+            animation: scaleIn 0.3s ease-out;
+        }
+
+        /* Metric Tab Animations */
+        .metric-tab {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .metric-tab:hover {
+            transform: translateY(-2px);
+        }
+
+        .metric-tab.active {
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        /* Period Tab Animations */
+        .period-tab {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .period-tab:hover {
+            transform: scale(1.05);
+        }
+
+        .period-tab.active {
+            animation: scaleIn 0.3s ease-out;
+        }
+
+        /* Button Hover Effects */
+        button {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        button:hover {
+            transform: translateY(-1px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        /* Chart Container Animation */
+        .chart-container {
+            transition: all 0.3s ease;
+        }
+
+        /* Summary Section Animation */
+        #period-stat {
+            transition: all 0.3s ease;
+        }
+
+        /* Room Breakdown Bar Animation */
+        #room-breakdown-bar > div {
+            transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Comparison Badge Animation */
+        #comparison-badge {
+            animation: fadeIn 0.4s ease-out;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .metric-tab {
+                padding: 0.5rem;
+            }
+
+            .metric-tab span {
+                font-size: 8px;
+            }
+
+            .metric-tab i {
+                width: 16px;
+                height: 16px;
+            }
+
+            #date-display {
+                font-size: 0.875rem;
+            }
+
+            #period-stat {
+                font-size: 2rem;
+            }
+
+            #period-summary {
+                font-size: 0.75rem;
+            }
+
+            .period-tab {
+                padding: 0.5rem 1rem;
+                font-size: 0.75rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .metric-tab {
+                gap: 0.25rem;
+                padding: 0.375rem;
+            }
+
+            .metric-tab i {
+                width: 14px;
+                height: 14px;
+            }
+
+            .metric-tab span {
+                font-size: 7px;
+            }
+
+            #date-display {
+                font-size: 0.75rem;
+            }
+
+            #period-stat {
+                font-size: 1.5rem;
+            }
+
+            #period-summary {
+                font-size: 0.625rem;
+            }
+
+            .period-tab {
+                padding: 0.375rem 0.75rem;
+                font-size: 0.625rem;
+            }
+
+            #date-picker-modal > div {
+                padding: 1rem;
+                width: 95%;
+            }
+
+            .calendar-day {
+                height: 32px;
+                font-size: 0.75rem;
+            }
+        }
+
+        /* Calendar Day Button Animation */
+        .calendar-day {
+            transition: all 0.2s ease;
+        }
+
+        .calendar-day:hover {
+            transform: scale(1.1);
+        }
+
+        /* Year Selector Animation */
+        #year-selector {
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        /* Smooth Scroll */
+        html {
+            scroll-behavior: smooth;
+        }
+
+        /* Card Hover Effect */
+        .card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+        .period-tab:hover {
+            color: #374151;
+            background: rgba(255, 255, 255, 0.5);
+        }
+        .period-tab.active {
+            background: white;
+            color: #800000;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        .period-tab {
+            pointer-events: auto !important;
+            cursor: pointer !important;
+            position: relative;
+            z-index: 10;
+        }
+
+        .metric-tab {
+            color: #9ca3af;
+            background: transparent;
+            pointer-events: auto !important;
+            cursor: pointer !important;
+            position: relative;
+            z-index: 10;
+        }
+        .metric-tab:hover {
+            color: #6b7280;
+            background: #f3f4f6;
+        }
+        .metric-tab.active {
+            color: #800000;
+            background: #fef2f2;
+        }
+    </style>
+</head>
+<body class="antialiased bg-gray-50 text-gray-900">
+
+    <div id="logoutModal" class="modal-overlay" onclick="closeLogoutModal(event)">
+        <div class="modal-content text-center" onclick="event.stopPropagation()">
+            <div class="flex justify-center mb-6">
+                <div class="p-5 bg-red-50 rounded-full text-[#800000]">
+                    <i data-lucide="log-out" class="w-12 h-12"></i>
+                </div>
+            </div>
+            <h2 class="font-black text-2xl text-gray-800 uppercase mb-3">Confirm Logout</h2>
+            <p class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-10">Are you sure you want to end your session?</p>
+            <div class="flex gap-4">
+                <button onclick="document.getElementById('logoutModal').style.display='none'" class="flex-1 bg-gray-100 text-gray-500 font-black py-4 rounded-2xl hover:bg-gray-200 transition-all uppercase text-sm">Cancel</button>
+                <button onclick="logout()" class="flex-1 bg-[#800000] text-white font-black py-4 rounded-2xl shadow-lg hover:bg-[#600000] transition-all uppercase text-sm">Logout</button>
+            </div>
+        </div>
+    </div>
+
+    <button class="mobile-menu-toggle">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+    </button>
+
+    <aside id="sidebar" class="sidebar">
+        <a href="1_dashboard_trial.html" class="sidebar-header flex items-center gap-3">
+            <img src="statswhite.png" alt="PCC Logo" class="sidebar-logo">
+            <span class="tracking-tight font-black whitespace-nowrap">PCC S.T.A.T.S.</span>
+        </a>
+        <nav class="flex-grow mt-8">
+            <a href="1_dashboard_trial.html" class="nav-item"><i data-lucide="layout-dashboard"></i> Dashboard</a>
+            <a href="2_analytics_trial.html" class="nav-item active"><i data-lucide="bar-chart-3"></i> Analytics</a>
+            <a href="3_alert_trial.html" class="nav-item"><i data-lucide="bell"></i> Alerts</a>
+            <a href="IRreciverPage.html" class="nav-item"><i data-lucide="radio"></i> IR Receiver</a>
+            <a href="4_settings_trial.html" class="nav-item"><i data-lucide="settings"></i> Settings</a>
+        </nav>
+        <div class="p-4 border-t border-white/10">
+            <button onclick="confirmLogout()" class="nav-item opacity-70 w-full text-left font-bold"><i data-lucide="log-out"></i> Logout</button>
+        </div>
+    </aside>
+
+    <main class="main-wrapper">
+        <div class="max-w-[1440px] mx-auto p-4 md:p-10 min-h-[calc(100vh-80px)] flex flex-col">
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+                <div class="stats-card">
+                    <div class="stats-icon-bg maroon flex-shrink-0"><i data-lucide="layers" class="w-6 h-6"></i></div>
+                    <div class="flex-1"><p class="text-[10px] uppercase font-bold opacity-70 tracking-widest">Total Labs</p><h2 id="total-labs" class="text-4xl font-black">--</h2></div>
+                </div>
+                <div class="card border-l-4 border-green-500 flex items-center gap-4 p-6">
+                    <div class="stats-icon-bg green flex-shrink-0"><i data-lucide="check-circle" class="w-6 h-6"></i></div>
+                    <div class="flex-1"><p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Normal</p><h2 id="normal-count" class="text-3xl font-black">--</h2></div>
+                </div>
+                <div class="card border-l-4 border-yellow-500 flex items-center gap-4 p-6">
+                    <div class="stats-icon-bg yellow flex-shrink-0"><i data-lucide="alert-triangle" class="w-6 h-6"></i></div>
+                    <div class="flex-1"><p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Active Alerts</p><h2 id="alert-count" class="text-3xl font-black">--</h2></div>
+                </div>
+                <div class="card border-l-4 border-blue-500 flex items-center gap-4 p-6">
+                    <div class="stats-icon-bg blue flex-shrink-0"><i data-lucide="thermometer" class="w-6 h-6"></i></div>
+                    <div class="flex-1"><p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Avg Temp</p><h2 id="avg-temp" class="text-3xl font-black">--</h2></div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between mb-8">
+                <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-2 bg-gray-100 rounded-xl px-4 py-2">
+                        <span class="text-[10px] font-black text-gray-500 uppercase">From:</span>
+                        <input type="date" id="export-date-from" class="text-[10px] font-black text-gray-600 bg-transparent border-none outline-none cursor-pointer">
+                        <span class="text-[10px] font-black text-gray-500 uppercase">To:</span>
+                        <input type="date" id="export-date-to" class="text-[10px] font-black text-gray-600 bg-transparent border-none outline-none cursor-pointer">
+                        <label class="flex items-center gap-1 cursor-pointer">
+                            <input type="checkbox" id="export-to-today" class="w-3 h-3 accent-[#800000]">
+                            <span class="text-[10px] font-black text-gray-600 uppercase">Today</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <button onclick="exportAnalytics()" class="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-2xl font-black transition-all uppercase text-sm flex items-center gap-2 shadow-lg">
+                    <i data-lucide="download" class="w-5 h-5"></i> Export CSV
+                </button>
+            </div>
+
+            <!-- NEW REDESIGNED ANALYTICS SECTION -->
+            <div class="card bg-white p-8 rounded-3xl shadow-sm border border-gray-100 animate-fade-in">
+                <!-- Time Period Tabs -->
+                <div class="flex items-center justify-center gap-2 mb-6">
+                    <button onclick="setPeriodTab('day')" id="period-day" class="period-tab active px-4 py-2 rounded-xl font-black text-xs uppercase">Day</button>
+                    <button onclick="setPeriodTab('week')" id="period-week" class="period-tab px-4 py-2 rounded-xl font-black text-xs uppercase">Week</button>
+                    <button onclick="setPeriodTab('month')" id="period-month" class="period-tab px-4 py-2 rounded-xl font-black text-xs uppercase">Month</button>
+                    <button onclick="setPeriodTab('year')" id="period-year" class="period-tab px-4 py-2 rounded-xl font-black text-xs uppercase">Year</button>
+                    <button onclick="setPeriodTab('total')" id="period-total" class="period-tab px-4 py-2 rounded-xl font-black text-xs uppercase">Total</button>
+                </div>
+
+                <!-- Date Range Navigator -->
+                <div class="flex items-center justify-center gap-6 mb-6">
+                    <button onclick="navigateDate(-1)" class="p-2 hover:bg-gray-100 rounded-full transition-all">
+                        <i data-lucide="chevron-left" class="w-6 h-6 text-gray-600"></i>
+                    </button>
+                    <button onclick="openDatePicker()" id="date-display" class="text-lg font-black text-gray-800 hover:text-[#800000] transition-all cursor-pointer">
+                        07 Aug 2026
+                    </button>
+                    <button onclick="navigateDate(1)" class="p-2 hover:bg-gray-100 rounded-full transition-all">
+                        <i data-lucide="chevron-right" class="w-6 h-6 text-gray-600"></i>
+                    </button>
+                </div>
+
+                <!-- Metric Icon Tabs -->
+                <div class="flex items-center justify-center gap-3 mb-8">
+                    <button onclick="setMetricTab('temperature')" id="metric-temperature" class="metric-tab active flex flex-col items-center gap-1 p-3 rounded-xl transition-all">
+                        <i data-lucide="thermometer" class="w-5 h-5"></i>
+                        <span class="text-[10px] font-black uppercase">Temp</span>
+                    </button>
+                    <button onclick="setMetricTab('humidity')" id="metric-humidity" class="metric-tab flex flex-col items-center gap-1 p-3 rounded-xl transition-all">
+                        <i data-lucide="droplet" class="w-5 h-5"></i>
+                        <span class="text-[10px] font-black uppercase">Humidity</span>
+                    </button>
+                    <button onclick="setMetricTab('cost')" id="metric-cost" class="metric-tab flex flex-col items-center gap-1 p-3 rounded-xl transition-all">
+                        <i data-lucide="currency" class="w-5 h-5"></i>
+                        <span class="text-[10px] font-black uppercase">Cost</span>
+                    </button>
+                    <button onclick="setMetricTab('usage')" id="metric-usage" class="metric-tab flex flex-col items-center gap-1 p-3 rounded-xl transition-all">
+                        <i data-lucide="clock" class="w-5 h-5"></i>
+                        <span class="text-[10px] font-black uppercase">Usage</span>
+                    </button>
+                </div>
+
+                <!-- Summary Line -->
+                <div class="text-center mb-6 animate-fade-in">
+                    <p id="period-summary" class="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">07 Aug 2026 Friday</p>
+                    <h2 id="period-stat" class="text-4xl font-black text-gray-800">₱452.05</h2>
+                    <div id="comparison-badge" class="inline-flex items-center gap-1.5 mt-2 px-3 py-1 rounded-full text-xs font-black">
+                        <!-- Comparison will be added dynamically -->
+                    </div>
+                </div>
+
+                <!-- Chart -->
+                <div class="relative h-80 mb-4 chart-container animate-scale-in">
+                    <canvas id="analyticsChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Summary Section with Room Breakdown -->
+            <div class="card bg-white p-8 rounded-3xl shadow-sm border border-gray-100 mb-8">
+                <h3 id="summary-title" class="font-black text-gray-800 uppercase tracking-widest text-xs mb-6">Daily Total Cost</h3>
+                <div class="text-center mb-6">
+                    <h2 id="summary-total" class="text-5xl font-black text-gray-800">₱452.05</h2>
+                </div>
+                <div class="h-4 bg-gray-100 rounded-full overflow-hidden mb-4" id="room-breakdown-bar">
+                    <!-- Room segments will be added dynamically -->
+                </div>
+                <div id="room-legend" class="flex flex-wrap justify-center gap-4">
+                    <!-- Room legend items will be added dynamically -->
+                </div>
+            </div>
+
+            <!-- Date Picker Modal -->
+            <div id="date-picker-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
+                <div class="bg-white rounded-3xl shadow-2xl p-6 w-full max-w-md mx-4">
+                    <!-- Header -->
+                    <div class="flex items-center justify-between mb-4">
+                        <button onclick="closeDatePicker()" class="text-gray-500 hover:text-gray-700 font-black text-sm uppercase">Cancel</button>
+                        <h3 id="picker-title" class="font-black text-gray-800 uppercase tracking-widest text-xs">Select Date</h3>
+                        <button onclick="confirmDateSelection()" class="text-[#800000] hover:text-[#600000] font-black text-sm uppercase">Confirm</button>
+                    </div>
+
+                    <!-- Month Navigation -->
+                    <div id="calendar-nav" class="flex items-center justify-between mb-4">
+                        <button onclick="navigateCalendarMonth(-1)" class="p-2 hover:bg-gray-100 rounded-full transition-all">
+                            <i data-lucide="chevron-left" class="w-5 h-5 text-gray-600"></i>
+                        </button>
+                        <button onclick="openYearSelector()" id="calendar-month-year" class="font-black text-gray-800 uppercase tracking-wider text-sm hover:text-[#800000] transition-all cursor-pointer"></button>
+                        <button onclick="navigateCalendarMonth(1)" class="p-2 hover:bg-gray-100 rounded-full transition-all">
+                            <i data-lucide="chevron-right" class="w-5 h-5 text-gray-600"></i>
+                        </button>
+                    </div>
+
+                    <!-- Year Selector Modal (hidden by default) -->
+                    <div id="year-selector" class="hidden">
+                        <div class="grid grid-cols-4 gap-2 mb-4">
+                            <!-- Year buttons will be added dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- Calendar Grid -->
+                    <div id="calendar-grid" class="grid grid-cols-7 gap-1 mb-4">
+                        <!-- Day headers -->
+                        <div class="text-center text-[10px] font-black text-gray-400 uppercase">Sun</div>
+                        <div class="text-center text-[10px] font-black text-gray-400 uppercase">Mon</div>
+                        <div class="text-center text-[10px] font-black text-gray-400 uppercase">Tue</div>
+                        <div class="text-center text-[10px] font-black text-gray-400 uppercase">Wed</div>
+                        <div class="text-center text-[10px] font-black text-gray-400 uppercase">Thu</div>
+                        <div class="text-center text-[10px] font-black text-gray-400 uppercase">Fri</div>
+                        <div class="text-center text-[10px] font-black text-gray-400 uppercase">Sat</div>
+                        <!-- Calendar days will be added dynamically -->
+                    </div>
+
+                    <!-- Month/Year Picker (for Month/Year views) -->
+                    <div id="month-year-picker" class="hidden">
+                        <div class="flex gap-4">
+                            <div class="flex-1">
+                                <label class="block text-[10px] font-black text-gray-500 uppercase mb-2">Month</label>
+                                <select id="month-select" class="w-full border border-gray-200 rounded-lg px-3 py-2 font-black text-sm">
+                                    <option value="0">January</option>
+                                    <option value="1">February</option>
+                                    <option value="2">March</option>
+                                    <option value="3">April</option>
+                                    <option value="4">May</option>
+                                    <option value="5">June</option>
+                                    <option value="6">July</option>
+                                    <option value="7">August</option>
+                                    <option value="8">September</option>
+                                    <option value="9">October</option>
+                                    <option value="10">November</option>
+                                    <option value="11">December</option>
+                                </select>
+                            </div>
+                            <div class="flex-1">
+                                <label class="block text-[10px] font-black text-gray-500 uppercase mb-2">Year</label>
+                                <select id="year-select" class="w-full border border-gray-200 rounded-lg px-3 py-2 font-black text-sm">
+                                    <!-- Years will be added dynamically -->
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LEGACY CHARTS (hidden for now, will be removed after migration) -->
+            <div class="grid grid-cols-1 gap-10 mb-12 hidden">
+                <div class="card bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 class="font-black text-gray-800 uppercase tracking-widest text-xs">Temperature Real-time Trends (°C)</h3>
+                        <div class="flex items-center gap-2">
+                            <button id="back-to-live-temp" onclick="goToLive()" class="hidden bg-[#800000] hover:bg-[#600000] text-white px-3 py-1.5 rounded-lg font-black transition-all uppercase text-[10px] flex items-center gap-1">
+                                <i data-lucide="radio" class="w-3 h-3"></i> Back to Live
+                            </button>
+                            <div class="flex items-center gap-2">
+                                <span id="date-label-temp" class="text-[10px] font-black text-gray-500 uppercase">Live</span>
+                                <input type="date" id="date-picker-temp" class="text-[10px] font-black text-gray-600 bg-gray-100 border border-gray-200 rounded-lg px-2 py-1.5 cursor-pointer hover:bg-gray-200 transition-all" onchange="loadHistoricalData(this.value)">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="h-72"><canvas id="tempChart"></canvas></div>
+                    <div id="timezone-label-temp" class="hidden text-[9px] text-gray-400 font-black uppercase tracking-wider mt-2 text-center">Times shown in Philippine Time (PHT, UTC+8)</div>
+                </div>
+                <div class="card bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 class="font-black text-gray-800 uppercase tracking-widest text-xs">Humidity Real-time Trends (%)</h3>
+                        <div class="flex items-center gap-2">
+                            <button id="back-to-live-hum" onclick="goToLive()" class="hidden bg-[#800000] hover:bg-[#600000] text-white px-3 py-1.5 rounded-lg font-black transition-all uppercase text-[10px] flex items-center gap-1">
+                                <i data-lucide="radio" class="w-3 h-3"></i> Back to Live
+                            </button>
+                            <div class="flex items-center gap-2">
+                                <span id="date-label-hum" class="text-[10px] font-black text-gray-500 uppercase">Live</span>
+                                <input type="date" id="date-picker-hum" class="text-[10px] font-black text-gray-600 bg-gray-100 border border-gray-200 rounded-lg px-2 py-1.5 cursor-pointer hover:bg-gray-200 transition-all" onchange="loadHistoricalData(this.value)">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="h-72"><canvas id="humChart"></canvas></div>
+                    <div id="timezone-label-hum" class="hidden text-[9px] text-gray-400 font-black uppercase tracking-wider mt-2 text-center">Times shown in Philippine Time (PHT, UTC+8)</div>
+                </div>
+            </div>
+
+            <div class="card bg-white p-8 rounded-3xl shadow-sm border border-gray-100 mb-12">
+                <div class="flex items-center justify-between mb-8">
+                    <div class="flex items-center gap-4">
+                        <h3 class="font-black text-gray-800 uppercase tracking-widest text-xs">Real-time Alert Frequency</h3>
+                        <div id="audio-status" class="flex items-center gap-2 text-[9px] text-gray-500 font-black bg-gray-100 px-3 py-1 rounded-full uppercase">
+                            <i data-lucide="volume-x" class="w-3 h-3"></i> Audio Muted
+                        </div>
+                    </div>
+                    <button onclick="resetPersistentData()" class="text-[9px] bg-red-100 text-red-700 px-3 py-1.5 rounded-lg font-black hover:bg-red-200 transition-all uppercase">Global Reset (24H)</button>
+                </div>
+                <div class="h-80"><canvas id="alertChart"></canvas></div>
+            </div>
+
+
+            <div class="flex flex-col md:flex-row items-center justify-between text-[11px] font-black uppercase tracking-widest text-gray-400 px-4 mt-auto pt-12 pb-8 border-t border-gray-100 gap-4">
+                <div class="flex items-center gap-3">
+                    <span id="sync-indicator" class="flex h-3 w-3 rounded-full bg-gray-300"></span>
+                    <span id="sync-text">System Standby...</span>
+                </div>
+                <div id="last-update" class="bg-gray-100 text-gray-600 px-4 py-2 rounded-full shadow-inner tracking-tight">--:--:--</div>
+            </div>
+        </div>
+    </main>
+
+    <audio id="alert-sound" src="https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3" preload="auto"></audio>
+
+<script>
+    lucide.createIcons();
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyAv9fvbotQfi21Nu7LNZYBuzNUJOD5Vj0E",
+        databaseURL: "https://pcc-stats-default-rtdb.asia-southeast1.firebasedatabase.app/",
+        projectId: "pcc-stats"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    const todayKey = new Date().toLocaleDateString('en-CA');
+    const lastDateStored = localStorage.getItem('last_active_date');
+
+    if (lastDateStored !== todayKey) {
+        localStorage.removeItem('roomUsage');
+        localStorage.removeItem('alertCounters');
+        localStorage.removeItem('trendHistory');
+        localStorage.setItem('last_active_date', todayKey);
+    }
+
+    // Also clear trendHistory if it's stale (older than 5 minutes)
+    const lastTrendTime = localStorage.getItem('last_trend_update');
+    if (!lastTrendTime || (Date.now() - parseInt(lastTrendTime)) > 300000) {
+        localStorage.removeItem('trendHistory');
+    }
+
+    let trendHistory = JSON.parse(localStorage.getItem('trendHistory')) || { timeline: [], temp: {}, hum: {} };
+    let roomUsage = JSON.parse(localStorage.getItem('roomUsage')) || {};
+    let alertCounters = JSON.parse(localStorage.getItem('alertCounters')) || {};
+    let dailyAnalytics = JSON.parse(localStorage.getItem('dailyAnalytics')) || { data: {} }; 
+    
+    let labKeys = [];
+    let labsData = {};
+    let activeAlarms = {};
+    const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777", "#0891b2", "#e11d48"];
+    let tempChart, humChart, alertChart;
+    
+    // Historical view state
+    let isHistoricalView = false;
+    let liveListener = null;
+
+    const COST_PER_HOUR = 12.50;
+    let airconConfig = {};
+    let ratePerKwh = 12.50;
+
+    function checkGlobalReset() {
+        db.ref("system_metadata/last_reset").on("value", (snapshot) => {
+            const firebaseResetTime = snapshot.val();
+            const localResetTime = localStorage.getItem('lastSystemReset');
+            if (firebaseResetTime && firebaseResetTime !== localResetTime) {
+                performLocalReset(firebaseResetTime);
+            }
+        });
+    }
+
+    function performLocalReset(newTimestamp) {
+        roomUsage = {};
+        alertCounters = {};
+        trendHistory = { timeline: [], temp: {}, hum: {} };
+        localStorage.setItem('roomUsage', JSON.stringify(roomUsage));
+        localStorage.setItem('alertCounters', JSON.stringify(alertCounters));
+        localStorage.setItem('trendHistory', JSON.stringify(trendHistory));
+        localStorage.setItem('lastSystemReset', newTimestamp);
+        location.reload();
+    }
+
+    function resetPersistentData() {
+        if(confirm("This will clear Live data for ALL users. Proceed?")) {
+            db.ref("system_metadata/last_reset").set(Date.now().toString());
+        }
+    }
+
+    function loadAirconConfig() {
+        db.ref("config/rooms").on("value", (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                airconConfig = data;
+                if (labKeys.length > 0) {
+                    const last7Days = [];
+                    for (let i = 6; i >= 0; i--) {
+                        const d = new Date();
+                        d.setDate(d.getDate() - i);
+                        last7Days.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+                    }
+                }
+            }
+        });
+        
+        db.ref("config/rate_per_kwh").on("value", (snapshot) => {
+            const rate = snapshot.val();
+            if (rate) {
+                ratePerKwh = rate;
+                if (labKeys.length > 0) {
+                    const last7Days = [];
+                    for (let i = 6; i >= 0; i--) {
+                        const d = new Date();
+                        d.setDate(d.getDate() - i);
+                        last7Days.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+                    }
+                }
+            }
+        });
+    }
+
+    db.ref(".info/connected").on("value", (snap) => {
+        const indicator = document.getElementById('sync-indicator');
+        const text = document.getElementById('sync-text');
+        if (snap.val() === true) {
+            indicator.className = "flex h-3 w-3 rounded-full bg-green-500 shadow-lg shadow-green-200 animate-pulse";
+            text.innerText = "Firebase Connection: Secured";
+            checkGlobalReset();
+            loadAirconConfig();
+        } else {
+            indicator.className = "flex h-3 w-3 rounded-full bg-red-500 animate-bounce";
+            text.innerText = "Attempting Connection...";
+        }
+    });
+
+    function initCharts() {
+        const commonCfg = { 
+            responsive: true, maintainAspectRatio: false, 
+            plugins: { 
+                legend: { 
+                    position: 'bottom', 
+                    labels: { font: { size: 11, family: 'Inter', weight: 'bold' }, usePointStyle: true, padding: 20 } 
+                },
+                tooltip: { 
+                    backgroundColor: '#1e293b', 
+                    titleFont: { size: 12, weight: 'bold' }, 
+                    bodyFont: { size: 11 }, 
+                    padding: 12, 
+                    cornerRadius: 10,
+                    displayColors: true,
+                    callbacks: {
+                        title: function(context) {
+                            // For historical view, show full date + time
+                            if (isHistoricalView) {
+                                const label = context[0].label;
+                                const dateKey = document.getElementById('date-picker-temp').value;
+                                if (dateKey) {
+                                    // Convert the 12-hour format back to 24-hour for the tooltip
+                                    const hourMatch = label.match(/(\d+):00 (AM|PM)/);
+                                    if (hourMatch) {
+                                        let hour = parseInt(hourMatch[1]);
+                                        const period = hourMatch[2];
+                                        if (period === 'PM' && hour !== 12) hour += 12;
+                                        if (period === 'AM' && hour === 12) hour = 0;
+                                        const hourKey = `${String(hour).padStart(2, '0')}:00`;
+                                        return formatDateTimeForTooltip(dateKey, hourKey);
+                                    }
+                                }
+                            }
+                            return context[0].label;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: { grid: { color: '#f1f5f9', borderDash: [5, 5] }, border: { display: false }, ticks: { font: { weight: 'bold', size: 10 }, color: '#64748b' } },
+                x: { grid: { display: false }, border: { display: false }, ticks: { font: { weight: 'bold', size: 10 }, color: '#64748b' } }
+            }
+        };
+
+        tempChart = new Chart(document.getElementById("tempChart"), { 
+            type: 'line', 
+            data: { labels: trendHistory.timeline || [], datasets: [] }, 
+            options: { 
+                ...commonCfg, 
+                animation: { duration: 0 },
+                scales: {
+                    y: { 
+                        ...commonCfg.scales.y,
+                        min: 15,
+                        max: 40,
+                        title: { display: true, text: 'Temperature (°C)', font: { weight: 'bold', size: 11 } }
+                    },
+                    x: commonCfg.scales.x
+                }
+            }
+        });
+        humChart = new Chart(document.getElementById("humChart"), { 
+            type: 'line', 
+            data: { labels: trendHistory.timeline || [], datasets: [] }, 
+            options: { 
+                ...commonCfg, 
+                animation: { duration: 0 },
+                scales: {
+                    y: { 
+                        ...commonCfg.scales.y,
+                        min: 0,
+                        max: 100,
+                        title: { display: true, text: 'Humidity (%)', font: { weight: 'bold', size: 11 } }
+                    },
+                    x: commonCfg.scales.x
+                }
+            }
+        });
+        
+        alertChart = new Chart(document.getElementById("alertChart"), {
+            type: 'bar', data: { labels: [], datasets: [{ label: 'Alert Events', data: [], backgroundColor: palette, borderRadius: 8 }] },
+            options: { ...commonCfg, scales: { y: { beginAtZero: true, ticks: { stepSize: 1, font: { weight: 'bold' } } }, x: { ticks: { font: { weight: 'bold' } } } } }
+        });
+    }
+
+   // Setup live listener (replaced with function to support historical view)
+   setupLiveListener();
+
+    function updateBarCharts() {
+        const labels = labKeys.map(k => labsData[k].customRoomName || k.replace('_', ' '));
+        alertChart.data.labels = labels;
+        alertChart.data.datasets[0].data = labKeys.map(k => alertCounters[k] || 0);
+        alertChart.update();
+    }
+
+    function getUsageHoursForDate(room, dateStr) {
+        // Try to get from dailyAnalytics first
+        if (dailyAnalytics.data[room] && dailyAnalytics.data[room][dateStr]) {
+            return parseFloat(dailyAnalytics.data[room][dateStr]);
+        }
+        return 0;
+    }
+
+    // Reconstruct usage hours from history data for dates where AC state is available
+    async function reconstructUsageFromHistory(room, dateKey) {
+        console.log(`[ReconstructUsage] Attempting to reconstruct usage for ${room} on ${dateKey}`);
+        
+        try {
+            const snapshot = await db.ref(`history/${room}/${dateKey}`).once('value');
+            const hourData = snapshot.val();
+            
+            if (!hourData) {
+                console.log(`[ReconstructUsage] No history data found for ${room} on ${dateKey}`);
+                return 0;
+            }
+            
+            const hours = Object.keys(hourData);
+            console.log(`[ReconstructUsage] Found ${hours.length} hour entries for ${room} on ${dateKey}`);
+            
+            let acOnCount = 0;
+            let entriesWithAcState = 0;
+            
+            hours.forEach(hour => {
+                const entry = hourData[hour];
+                if (entry) {
+                    // Check if AC state field exists in this entry
+                    if (entry.ac !== undefined || entry.ac_command !== undefined) {
+                        entriesWithAcState++;
+                        // Count as AC on if ac is true or ac_command is ON
+                        const acOn = (entry.ac === true || entry.ac === "ON" || entry.ac_command === "ON");
+                        if (acOn) {
+                            acOnCount++;
+                        }
+                    }
+                }
+            });
+            
+            console.log(`[ReconstructUsage] ${room} on ${dateKey}: ${entriesWithAcState} entries with AC state, ${acOnCount} hours with AC on`);
+            
+            if (entriesWithAcState === 0) {
+                console.log(`[ReconstructUsage] No entries with AC state found for ${room} on ${dateKey} - cannot reconstruct`);
+                return 0;
+            }
+            
+            return acOnCount; // Each hour entry represents 1 hour
+        } catch (error) {
+            console.error(`[ReconstructUsage] Error reconstructing usage for ${room} on ${dateKey}:`, error);
+            return 0;
+        }
+    }
+
+    // Convert 24-hour time key (e.g., "07:00", "23:00") to 12-hour format with AM/PM
+    function formatHourKeyTo12Hour(hourKey) {
+        const [hourStr] = hourKey.split(':');
+        const hour = parseInt(hourStr, 10);
+        const period = hour >= 12 ? 'PM' : 'AM';
+        const displayHour = hour % 12 || 12; // Convert 0 to 12, 13-23 to 1-11
+        return `${displayHour}:00 ${period}`;
+    }
+
+    // Format full date + time for tooltips (e.g., "Aug 7, 2026, 7:00 AM")
+    function formatDateTimeForTooltip(dateStr, hourKey) {
+        const date = new Date(dateStr + 'T00:00:00');
+        const formattedDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const formattedTime = formatHourKeyTo12Hour(hourKey);
+        return `${formattedDate}, ${formattedTime}`;
+    }
+
+    function minuteUpdate() {
+        if (labKeys.length === 0) return;
+        const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        
+        // Only add new time point if it's different from the last one (prevents duplicates)
+        if (trendHistory.timeline.length === 0 || trendHistory.timeline[trendHistory.timeline.length - 1] !== nowTime) {
+            if (trendHistory.timeline.length >= 15) {
+                trendHistory.timeline.shift();
+                labKeys.forEach(room => { 
+                    if(trendHistory.temp[room]) trendHistory.temp[room].shift(); 
+                    if(trendHistory.hum[room]) trendHistory.hum[room].shift(); 
+                });
+            }
+            
+            trendHistory.timeline.push(nowTime);
+            labKeys.forEach(room => {
+                const d = labsData[room] || { temperature: 0, humidity: 0 };
+                if (!trendHistory.temp[room]) trendHistory.temp[room] = [];
+                if (!trendHistory.hum[room]) trendHistory.hum[room] = [];
+                
+                trendHistory.temp[room].push(parseFloat(d.temperature) || 0);
+                trendHistory.hum[room].push(parseFloat(d.humidity) || 0);
+            });
+            
+            tempChart.data.labels = trendHistory.timeline;
+            humChart.data.labels = trendHistory.timeline;
+            tempChart.update(); 
+            humChart.update();
+            localStorage.setItem('trendHistory', JSON.stringify(trendHistory));
+            localStorage.setItem('last_trend_update', Date.now().toString());
+        }
+
+        const todayStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        labKeys.forEach(room => {
+            if (!dailyAnalytics.data[room]) dailyAnalytics.data[room] = {};
+            let liveMs = roomUsage[room]?.totalMs || 0;
+            if (roomUsage[room]?.isActive) liveMs += (Date.now() - roomUsage[room].lastStart);
+            dailyAnalytics.data[room][todayStr] = parseFloat((liveMs / 3600000).toFixed(2));
+        });
+        localStorage.setItem('dailyAnalytics', JSON.stringify(dailyAnalytics));
+    }
+
+    function minuteUpdate() {
+        if (labKeys.length === 0) return;
+        const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        
+        // Only add new time point if it's different from the last one (prevents duplicates)
+        if (trendHistory.timeline.length === 0 || trendHistory.timeline[trendHistory.timeline.length - 1] !== nowTime) {
+            if (trendHistory.timeline.length >= 15) {
+                trendHistory.timeline.shift();
+                labKeys.forEach(room => { 
+                    if(trendHistory.temp[room]) trendHistory.temp[room].shift(); 
+                    if(trendHistory.hum[room]) trendHistory.hum[room].shift(); 
+                });
+            }
+            
+            trendHistory.timeline.push(nowTime);
+            labKeys.forEach(room => {
+                const d = labsData[room] || { temperature: 0, humidity: 0 };
+                if (!trendHistory.temp[room]) trendHistory.temp[room] = [];
+                if (!trendHistory.hum[room]) trendHistory.hum[room] = [];
+                
+                trendHistory.temp[room].push(parseFloat(d.temperature) || 0);
+                trendHistory.hum[room].push(parseFloat(d.humidity) || 0);
+            });
+            
+            tempChart.data.labels = trendHistory.timeline;
+            humChart.data.labels = trendHistory.timeline;
+            tempChart.update(); 
+            humChart.update();
+            localStorage.setItem('trendHistory', JSON.stringify(trendHistory));
+            localStorage.setItem('last_trend_update', Date.now().toString());
+        }
+
+        const todayStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        labKeys.forEach(room => {
+            if (!dailyAnalytics.data[room]) dailyAnalytics.data[room] = {};
+            let liveMs = roomUsage[room]?.totalMs || 0;
+            if (roomUsage[room]?.isActive) liveMs += (Date.now() - roomUsage[room].lastStart);
+            dailyAnalytics.data[room][todayStr] = parseFloat((liveMs / 3600000).toFixed(2));
+        });
+        localStorage.setItem('dailyAnalytics', JSON.stringify(dailyAnalytics));
+
+        // Update analytics chart if on Day view
+        if (currentPeriod === 'day') {
+            loadAnalyticsData();
+        }
+    }
+
+    function secondUpdate() {
+        if (labKeys.length === 0) return;
+        // Update last update time display
+        document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+    }
+
+    async function exportAnalytics() {
+        try {
+            // Get date range from picker
+            const fromDateInput = document.getElementById('export-date-from').value;
+            const toDateInput = document.getElementById('export-date-to').value;
+            const toTodayCheckbox = document.getElementById('export-to-today').checked;
+            
+            if (!fromDateInput) {
+                alert('Please select a "From" date for the export range.');
+                return;
+            }
+            
+            const fromDate = new Date(fromDateInput);
+            let toDate = toTodayCheckbox ? new Date() : (toDateInput ? new Date(toDateInput) : new Date());
+            
+            // Validate date range
+            if (toDate < fromDate) {
+                alert('"To" date must be on or after "From" date.');
+                return;
+            }
+            
+            const exportDate = `'${new Date().toLocaleDateString('en-CA')}`;
+            const exportTime = new Date().toLocaleTimeString();
+            const fromDateStr = `'${fromDate.toLocaleDateString('en-CA')}`;
+            const toDateStr = `'${toDate.toLocaleDateString('en-CA')}`;
+            
+            // Generate date array for Firebase queries (without prefix)
+            const dateArray = [];
+            // Generate date array for CSV display (prefixed with ' to prevent Excel auto-parsing)
+            const dateArrayDisplay = [];
+            const currentDate = new Date(fromDate);
+            while (currentDate <= toDate) {
+                const dateStr = currentDate.toLocaleDateString('en-CA');
+                dateArray.push(dateStr);
+                dateArrayDisplay.push(`'${dateStr}`);
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+            
+            console.log('[Export] Date range:', fromDateStr, 'to', toDateStr);
+            console.log('[Export] Dates to fetch:', dateArray);
+            
+            // Start CSV with report header
+            let csv = 'PCC S.T.A.T.S. ANALYTICS REPORT\n';
+            csv += '====================================\n';
+            csv += `Report Generated: ${exportDate} ${exportTime}\n`;
+            csv += `Date Range: ${fromDateStr} to ${toDateStr}\n`;
+            csv += `Total Days: ${dateArray.length}\n`;
+            csv += `Electricity Rate: ${ratePerKwh.toFixed(2)} PHP/kWh\n`;
+            csv += `Total Rooms Monitored: ${labKeys ? labKeys.length : 0}\n\n`;
+            
+            // Fetch historical data for all rooms and dates
+            console.log('[Export] Fetching historical data...');
+            const historicalData = {};
+            
+            for (const room of labKeys || []) {
+                historicalData[room] = {};
+                for (const dateStr of dateArray) {
+                    const path = `history/${room}/${dateStr}`;
+                    try {
+                        const snapshot = await db.ref(path).once('value');
+                        historicalData[room][dateStr] = snapshot.val();
+                    } catch (e) {
+                        console.error(`[Export] Error fetching ${path}:`, e);
+                        historicalData[room][dateStr] = null;
+                    }
+                }
+            }
+            
+            console.log('[Export] Historical data fetched:', historicalData);
+            
+            // PER-ROOM SUMMARY STATISTICS
+            csv += '====================================\n';
+            csv += 'PER-ROOM SUMMARY STATISTICS\n';
+            csv += '====================================\n';
+            csv += 'Room,Min Temp (°C),Max Temp (°C),Min Humidity (%),Max Humidity (%),Total AC Hours,Total Cost (PHP)\n';
+            
+            for (const room of labKeys || []) {
+                const displayName = (labsData && labsData[room] && labsData[room].customRoomName) ? labsData[room].customRoomName : room.replace('_', ' ');
+                const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
+                
+                let temps = [], hums = [], totalHours = 0;
+                
+                for (const dateStr of dateArray) {
+                    const dayData = historicalData[room][dateStr];
+                    if (dayData) {
+                        Object.keys(dayData).forEach(hour => {
+                            const entry = dayData[hour];
+                            if (entry) {
+                                temps.push(parseFloat(entry.temperature) || 0);
+                                hums.push(parseFloat(entry.humidity) || 0);
+                            }
+                        });
+                    }
+                    // Add AC usage hours from dailyAnalytics
+                    const hours = getUsageHoursForDate(room, dateStr);
+                    totalHours += hours;
+                }
+                
+                const minTemp = temps.length > 0 ? Math.min(...temps) : 'N/A';
+                const maxTemp = temps.length > 0 ? Math.max(...temps) : 'N/A';
+                const minHum = hums.length > 0 ? Math.min(...hums) : 'N/A';
+                const maxHum = hums.length > 0 ? Math.max(...hums) : 'N/A';
+                const cost = AirconCostCalculator.computeAirconCost(roomConfig, totalHours, ratePerKwh);
+                
+                const minTempStr = typeof minTemp === 'number' ? minTemp.toFixed(1) : minTemp;
+                const maxTempStr = typeof maxTemp === 'number' ? maxTemp.toFixed(1) : maxTemp;
+                const minHumStr = typeof minHum === 'number' ? Math.round(minHum) : minHum;
+                const maxHumStr = typeof maxHum === 'number' ? Math.round(maxHum) : maxHum;
+                
+                csv += `${displayName},${minTempStr},${maxTempStr},${minHumStr},${maxHumStr},${totalHours.toFixed(2)},${cost.toFixed(2)}\n`;
+            }
+            
+            // DAILY BREAKDOWN TABLE
+            csv += '\n====================================\n';
+            csv += 'DAILY BREAKDOWN\n';
+            csv += '====================================\n';
+            csv += 'Date,Room,AC Hours,Cost (PHP)\n';
+            
+            for (let i = 0; i < dateArray.length; i++) {
+                const dateStr = dateArray[i];
+                const dateDisplay = dateArrayDisplay[i];
+                for (const room of labKeys || []) {
+                    const displayName = (labsData && labsData[room] && labsData[room].customRoomName) ? labsData[room].customRoomName : room.replace('_', ' ');
+                    const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
+                    
+                    const dayData = historicalData[room][dateStr];
+                    let temps = [], hums = [];
+                    
+                    if (dayData) {
+                        Object.keys(dayData).forEach(hour => {
+                            const entry = dayData[hour];
+                            if (entry) {
+                                temps.push(parseFloat(entry.temperature) || 0);
+                                hums.push(parseFloat(entry.humidity) || 0);
+                            }
+                        });
+                    }
+                    
+                    const hours = getUsageHoursForDate(room, dateStr);
+                    const cost = AirconCostCalculator.computeAirconCost(roomConfig, hours, ratePerKwh);
+                    
+                    csv += `${dateDisplay},${displayName},${hours.toFixed(2)},${cost.toFixed(2)}\n`;
+                }
+            }
+            
+            // HISTORICAL TEMPERATURE & HUMIDITY DATA
+            csv += '\n====================================\n';
+            csv += 'HISTORICAL TEMPERATURE & HUMIDITY DATA\n';
+            csv += '====================================\n';
+            csv += 'Note: Hourly snapshots. Times shown in Philippine Time (PHT, UTC+8).\n';
+            csv += 'Data only available from implementation date onward.\n';
+            csv += 'Dates with no data are noted as "NO DATA".\n\n';
+            
+            for (let i = 0; i < dateArray.length; i++) {
+                const dateStr = dateArray[i];
+                const dateDisplay = dateArrayDisplay[i];
+                csv += `--- ${dateDisplay} ---\n`;
+                csv += 'Room,Time,Temperature (°C),Humidity (%),Status\n';
+                
+                let hasData = false;
+                for (const room of labKeys || []) {
+                    const dayData = historicalData[room][dateStr];
+                    if (dayData) {
+                        const hours = Object.keys(dayData).sort();
+                        hours.forEach(hour => {
+                            const entry = dayData[hour];
+                            if (entry) {
+                                const displayName = (labsData && labsData[room] && labsData[room].customRoomName) ? labsData[room].customRoomName : room.replace('_', ' ');
+                                const temp = parseFloat(entry.temperature) || 0;
+                                const hum = parseFloat(entry.humidity) || 0;
+                                const status = entry.status || 'NORMAL';
+                                // Format time as full date + 12-hour time with AM/PM
+                                const formattedTime = formatDateTimeForTooltip(dateStr, hour);
+                                csv += `${displayName},${formattedTime},${temp.toFixed(1)},${hum.toFixed(1)},${status}\n`;
+                                hasData = true;
+                            }
+                        });
+                    }
+                }
+                
+                if (!hasData) {
+                    csv += 'NO DATA FOR THIS DATE\n';
+                }
+                csv += '\n';
+            }
+            
+            // ALERT FREQUENCY
+            csv += '====================================\n';
+            csv += 'ALERT FREQUENCY\n';
+            csv += '====================================\n';
+            csv += 'Room,Alert Count\n';
+            
+            for (const room of labKeys || []) {
+                const displayName = (labsData && labsData[room] && labsData[room].customRoomName) ? labsData[room].customRoomName : room.replace('_', ' ');
+                const alertCountRoom = (alertCounters && alertCounters[room]) ? alertCounters[room] : 0;
+                csv += `${displayName},${alertCountRoom}\n`;
+            }
+            
+            // Download the CSV
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', `PCC_STATS_Export_${fromDateStr}_to_${toDateStr}.csv`);
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            
+            // Cleanup
+            setTimeout(() => {
+                try {
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                } catch (e) {
+                    // Cleanup failed, but download should still work
+                }
+            }, 100);
+            
+            console.log('CSV export successful');
+        } catch (error) {
+            console.error('CSV export failed:', error);
+            alert('Failed to export CSV: ' + error.message + '\n\nPlease check the browser console for details.');
+        }
+    }
+
+    initCharts();
+    
+    // Export date range picker logic
+    document.getElementById('export-to-today').addEventListener('change', function() {
+        const toDatePicker = document.getElementById('export-date-to');
+        if (this.checked) {
+            toDatePicker.disabled = true;
+            toDatePicker.value = '';
+        } else {
+            toDatePicker.disabled = false;
+        }
+    });
+    
+    // Historical Data Loading Functions
+    function loadHistoricalData(selectedDate) {
+        if (!selectedDate) {
+            goToLive();
+            return;
+        }
+        
+        console.log('[loadHistoricalData] Selected date from picker:', selectedDate);
+        console.log('[loadHistoricalData] Date type:', typeof selectedDate);
+        
+        // Sync both date pickers
+        document.getElementById('date-picker-temp').value = selectedDate;
+        document.getElementById('date-picker-hum').value = selectedDate;
+        
+        // Update labels
+        const formattedDate = new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        document.getElementById('date-label-temp').innerText = formattedDate;
+        document.getElementById('date-label-hum').innerText = formattedDate;
+        
+        // Show back to live buttons and timezone labels
+        document.getElementById('back-to-live-temp').classList.remove('hidden');
+        document.getElementById('back-to-live-hum').classList.remove('hidden');
+        document.getElementById('timezone-label-temp').classList.remove('hidden');
+        document.getElementById('timezone-label-hum').classList.remove('hidden');
+        
+        // Pause live listener
+        if (liveListener) {
+            db.ref().off('value', liveListener);
+            liveListener = null;
+        }
+        
+        isHistoricalView = true;
+
+        // Run diagnostic for the specific date mentioned in the bug report
+        if (selectedDate === '2026-08-07') {
+            diagnoseHistoryGaps(selectedDate);
+        }
+        
+        // Fetch historical data from Firebase for each room that exists
+        // Data structure: /history/Room_1/YYYY-MM-DD/HH:00
+        const historicalPromises = labKeys.map(room => {
+            const path = `history/${room}/${selectedDate}`;
+            console.log(`[loadHistoricalData] Querying path: ${path}`);
+            return db.ref(path).once('value').then(snapshot => {
+                const data = snapshot.val();
+                console.log(`[loadHistoricalData] Data for ${path}:`, data);
+                return { room, data };
+            });
+        });
+        
+        Promise.all(historicalPromises).then(results => {
+            // Combine all room data into a single structure
+            const combinedData = {};
+            results.forEach(({ room, data }) => {
+                if (data) {
+                    Object.keys(data).forEach(hour => {
+                        if (!combinedData[hour]) combinedData[hour] = {};
+                        combinedData[hour][room] = data[hour];
+                    });
+                }
+            });
+            
+            console.log('[loadHistoricalData] Combined historical data:', combinedData);
+            
+            if (Object.keys(combinedData).length === 0) {
+                showNoDataMessage();
+                return;
+            }
+            
+            renderHistoricalCharts(combinedData, selectedDate);
+        }).catch(error => {
+            console.error('[loadHistoricalData] Error fetching historical data:', error);
+            showNoDataMessage();
+        });
+    }
+    
+    function renderHistoricalCharts(historicalData, dateKey) {
+        // Extract all hours for the selected date
+        const hours = Object.keys(historicalData).sort();
+        
+        if (hours.length === 0) {
+            showNoDataMessage();
+            return;
+        }
+        
+        // Build timeline labels (hours) - convert to 12-hour format with AM/PM
+        const timeline = hours.map(h => formatHourKeyTo12Hour(h));
+        
+        // Build datasets for each room
+        const tempDatasets = [];
+        const humDatasets = [];
+        
+        labKeys.forEach((room, index) => {
+            const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
+            const color = palette[index % palette.length];
+            
+            const tempData = hours.map(hour => {
+                const roomData = historicalData[hour]?.[room];
+                return roomData ? parseFloat(roomData.temperature) || 0 : null;
+            });
+            
+            const humData = hours.map(hour => {
+                const roomData = historicalData[hour]?.[room];
+                return roomData ? parseFloat(roomData.humidity) || 0 : null;
+            });
+            
+            tempDatasets.push({
+                label: displayName,
+                data: tempData,
+                borderColor: color,
+                backgroundColor: color + '08',
+                borderWidth: 2.5,
+                tension: 0.45,
+                pointRadius: 3,
+                pointHoverRadius: 6,
+                pointHoverBackgroundColor: color,
+                pointHoverBorderColor: '#fff',
+                pointHoverBorderWidth: 2,
+                fill: true,
+                spanGaps: true
+            });
+            
+            humDatasets.push({
+                label: displayName,
+                data: humData,
+                borderColor: color,
+                backgroundColor: color + '08',
+                borderWidth: 2.5,
+                tension: 0.45,
+                pointRadius: 3,
+                pointHoverRadius: 6,
+                pointHoverBackgroundColor: color,
+                pointHoverBorderColor: '#fff',
+                pointHoverBorderWidth: 2,
+                fill: true,
+                spanGaps: true
+            });
+        });
+        
+        // Update charts with historical data
+        tempChart.data.labels = timeline;
+        tempChart.data.datasets = tempDatasets;
+        tempChart.update();
+        
+        humChart.data.labels = timeline;
+        humChart.data.datasets = humDatasets;
+        humChart.update();
+        
+        document.getElementById('last-update').innerText = `HISTORICAL: ${dateKey} (Times in PHT)`;
+    }
+    
+    function showNoDataMessage() {
+        const noDataMessage = 'No data recorded for this date';
+        
+        tempChart.data.labels = ['No Data'];
+        tempChart.data.datasets = [{
+            label: 'No Data',
+            data: [null],
+            borderColor: '#ccc',
+            backgroundColor: 'transparent',
+            borderWidth: 0
+        }];
+        tempChart.update();
+        
+        humChart.data.labels = ['No Data'];
+        humChart.data.datasets = [{
+            label: 'No Data',
+            data: [null],
+            borderColor: '#ccc',
+            backgroundColor: 'transparent',
+            borderWidth: 0
+        }];
+        humChart.update();
+        
+        document.getElementById('last-update').innerText = noDataMessage;
+    }
+
+    // Diagnostic function to check for missing hours in history data
+    async function diagnoseHistoryGaps(dateStr) {
+        console.log(`[Diagnosis] Checking history gaps for ${dateStr}`);
+        
+        for (const room of labKeys) {
+            const path = `history/${room}/${dateStr}`;
+            const snapshot = await db.ref(path).once('value');
+            const data = snapshot.val();
+            
+            if (data) {
+                const hours = Object.keys(data).sort();
+                console.log(`[Diagnosis] ${room} has ${hours.length} hours:`, hours);
+                
+                // Check for gaps
+                const expectedHours = [];
+                for (let i = 0; i < 24; i++) {
+                    expectedHours.push(`${String(i).padStart(2, '0')}:00`);
+                }
+                
+                const missingHours = expectedHours.filter(h => !hours.includes(h));
+                if (missingHours.length > 0) {
+                    console.warn(`[Diagnosis] ${room} missing hours on ${dateStr}:`, missingHours);
+                } else {
+                    console.log(`[Diagnosis] ${room} has complete data for ${dateStr}`);
+                }
+            } else {
+                console.warn(`[Diagnosis] No data found for ${room} on ${dateStr}`);
+            }
+        }
+    }
+
+    function goToLive() {
+        // Clear date pickers
+        document.getElementById('date-picker-temp').value = '';
+        document.getElementById('date-picker-hum').value = '';
+        
+        // Reset labels
+        document.getElementById('date-label-temp').innerText = 'Live';
+        document.getElementById('date-label-hum').innerText = 'Live';
+        
+        // Hide back to live buttons and timezone labels
+        document.getElementById('back-to-live-temp').classList.add('hidden');
+        document.getElementById('back-to-live-hum').classList.add('hidden');
+        document.getElementById('timezone-label-temp').classList.add('hidden');
+        document.getElementById('timezone-label-hum').classList.add('hidden');
+        
+        isHistoricalView = false;
+        
+        // Re-subscribe to live data
+        setupLiveListener();
+        
+        // Reset charts to live mode
+        tempChart.data.labels = trendHistory.timeline || [];
+        humChart.data.labels = trendHistory.timeline || [];
+        
+        // Rebuild datasets from live data
+        tempChart.data.datasets = [];
+        humChart.data.datasets = [];
+        
+        labKeys.forEach((room, index) => {
+            const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
+            const color = palette[index % palette.length];
+            
+            const lineStyle = { 
+                borderColor: color, 
+                backgroundColor: color + '08', 
+                borderWidth: 2.5, 
+                tension: 0.45, 
+                pointRadius: 0, 
+                pointHoverRadius: 6,
+                pointHoverBackgroundColor: color,
+                pointHoverBorderColor: '#fff',
+                pointHoverBorderWidth: 2,
+                fill: true 
+            };
+            
+            tempChart.data.datasets.push({ 
+                label: displayName, 
+                data: trendHistory.temp[room] || [], 
+                ...lineStyle 
+            });
+            humChart.data.datasets.push({ 
+                label: displayName, 
+                data: trendHistory.hum[room] || [], 
+                ...lineStyle 
+            });
+        });
+        
+        tempChart.update();
+        humChart.update();
+        
+        document.getElementById('last-update').innerText = "LIVE SYNC: " + new Date().toLocaleTimeString();
+    }
+    
+    function setupLiveListener() {
+        if (liveListener) {
+            db.ref().off('value', liveListener);
+        }
+        
+        liveListener = db.ref().on("value", (snap) => {
+            if (isHistoricalView) return; // Don't process if in historical view
+            
+            const data = snap.val();
+            if(!data) {
+                console.log('[Analytics Firebase Listener] No data received from Firebase');
+                return;
+            }
+            labsData = data;
+            // Filter to only include rooms that have actual data (either in dailyAnalytics or have live data)
+            const allRoomKeys = Object.keys(data).filter(key => key.startsWith("Room_")).sort();
+            labKeys = allRoomKeys.filter(room => {
+                const roomData = data[room];
+                // Check if room has data in dailyAnalytics
+                if (dailyAnalytics.data[room] && Object.keys(dailyAnalytics.data[room]).length > 0) {
+                    return true;
+                }
+                // Check if room has live data (temperature or humidity)
+                if (roomData && (roomData.temperature !== undefined || roomData.humidity !== undefined)) {
+                    return true;
+                }
+                // Check if room has usage tracking data
+                if (roomUsage[room] && (roomUsage[room].totalMs > 0 || roomUsage[room].isActive)) {
+                    return true;
+                }
+                return false;
+            });
+            
+            console.log('[Analytics Firebase Listener] Raw data keys:', Object.keys(data));
+            console.log('[Analytics Firebase Listener] All room keys:', allRoomKeys);
+            console.log('[Analytics Firebase Listener] Filtered labKeys (with data):', labKeys);
+            console.log('[Analytics Firebase Listener] labsData keys:', Object.keys(labsData));
+            console.log('[Analytics Firebase Listener] Number of rooms found:', labKeys.length);
+            
+            if (labKeys.length === 0) {
+                console.warn('[Analytics Firebase Listener] No Room_ keys found in data!');
+            }
+            let sumT = 0, currentAl = 0;
+            const now = Date.now();
+
+            labKeys.forEach((room, index) => {
+                const d = data[room];
+                const tVal = parseFloat(d.temperature) || 0;
+                const hVal = parseFloat(d.humidity) || 0;
+                const maxT = parseFloat(d.maxT) || 30;
+                sumT += tVal;
+                const displayName = d.customRoomName || room.replace('_', ' ');
+
+                if (!trendHistory.temp[room]) trendHistory.temp[room] = [];
+                if (!trendHistory.hum[room]) trendHistory.hum[room] = [];
+
+                if (!tempChart.data.datasets.find(ds => ds.label === displayName)) {
+                    const color = palette[index % palette.length];
+                    const lineStyle = { 
+                        borderColor: color, 
+                        backgroundColor: color + '08', 
+                        borderWidth: 2.5, 
+                        tension: 0.45, 
+                        pointRadius: 0, 
+                        pointHoverRadius: 6,
+                        pointHoverBackgroundColor: color,
+                        pointHoverBorderColor: '#fff',
+                        pointHoverBorderWidth: 2,
+                        fill: true 
+                    };
+                    tempChart.data.datasets.push({ label: displayName, data: trendHistory.temp[room], ...lineStyle });
+                    humChart.data.datasets.push({ label: displayName, data: trendHistory.hum[room], ...lineStyle });
+                }
+
+                const tDs = tempChart.data.datasets.find(ds => ds.label === displayName);
+                const hDs = humChart.data.datasets.find(ds => ds.label === displayName);
+                
+                if (tDs && trendHistory.timeline.length > 0) {
+                    while (tDs.data.length < trendHistory.timeline.length) {
+                        tDs.data.push(tVal);
+                        hDs.data.push(hVal);
+                    }
+                    tDs.data[tDs.data.length - 1] = tVal;
+                    hDs.data[hDs.data.length - 1] = hVal;
+                }
+
+                if (!roomUsage[room]) roomUsage[room] = { totalMs: 0, lastStart: null, isActive: false };
+                if (alertCounters[room] === undefined) alertCounters[room] = 0;
+
+                const isCritical = (d.status === "ALARM" || tVal > maxT);
+                if (isCritical) {
+                    currentAl++;
+                    if (!activeAlarms[room]) {
+                        alertCounters[room]++;
+                        document.getElementById('alert-sound').play().catch(()=>{});
+                        activeAlarms[room] = true;
+                    }
+                } else { activeAlarms[room] = false; }
+
+                // Check AC state - handle both single-unit and dual-unit rooms
+                let acOn = false;
+                if (d.ac === true || d.ac === "ON" || d.ac === 1) {
+                    acOn = true;
+                } else if (d.units) {
+                    // Check dual-unit rooms (like Room_1)
+                    const unit1On = (d.units?.unit_1?.ac === true || d.units?.unit_1?.ac === "ON" || d.units?.unit_1?.ac === 1);
+                    const unit2On = (d.units?.unit_2?.ac === true || d.units?.unit_2?.ac === "ON" || d.units?.unit_2?.ac === 1);
+                    acOn = unit1On || unit2On; // AC is ON if at least one unit is ON
+                }
+                
+                if (acOn && !roomUsage[room].isActive) { 
+                    roomUsage[room].lastStart = now; 
+                    roomUsage[room].isActive = true; 
+                }
+                else if (!acOn && roomUsage[room].isActive) { 
+                    roomUsage[room].totalMs += (now - roomUsage[room].lastStart); 
+                    roomUsage[room].isActive = false; 
+                }
+            });
+
+            // Use shared utility for summary cards
+            const stats = calculateStats(labsData, labKeys);
+            updateSummaryCards(stats, {
+                total: 'total-labs',
+                normal: 'normal-count',
+                critical: 'alert-count',
+                avgTemp: 'avg-temp'
+            });
+            
+            updateBarCharts();
+            tempChart.update('none');
+            humChart.update('none');
+            
+            if (trendHistory.timeline.length > 0) {
+                tempChart.data.labels = trendHistory.timeline;
+                humChart.data.labels = trendHistory.timeline;
+            }
+
+            localStorage.setItem('roomUsage', JSON.stringify(roomUsage));
+            localStorage.setItem('alertCounters', JSON.stringify(alertCounters));
+            document.getElementById('last-update').innerText = "LIVE SYNC: " + new Date().toLocaleTimeString();
+        });
+    }
+    
+    // Initialize default aircon config if not exists, and migrate existing configs to include duty_cycle and fix kW to watts
+    db.ref("config/rooms").once("value", (snapshot) => {
+        const existingConfig = snapshot.val();
+        if (!existingConfig) {
+            const defaultConfig = {};
+            labKeys.forEach(room => {
+                defaultConfig[room] = AirconCostCalculator.getDefaultRoomConfig();
+            });
+            db.ref("config/rooms").set(defaultConfig);
+        } else {
+            // Migration: Add duty_cycle to existing room configs if missing
+            // Migration: Fix rated_watts stored as kW (should be watts)
+            let needsUpdate = false;
+            const updatedConfig = JSON.parse(JSON.stringify(existingConfig));
+            
+            Object.keys(updatedConfig).forEach(room => {
+                if (updatedConfig[room].duty_cycle === undefined || updatedConfig[room].duty_cycle === null) {
+                    const acType = updatedConfig[room].aircon_type || 'inverter';
+                    updatedConfig[room].duty_cycle = acType === 'non_inverter' ? 0.65 : 0.5;
+                    needsUpdate = true;
+                    console.log(`[Migration] Adding duty_cycle=${updatedConfig[room].duty_cycle} to ${room}`);
+                }
+                
+                // Fix rated_watts - if stored as kW (small number like 4.02), convert to watts (multiply by 1000)
+                if (updatedConfig[room].rated_watts && updatedConfig[room].rated_watts < 100) {
+                    const oldWatts = updatedConfig[room].rated_watts;
+                    updatedConfig[room].rated_watts = Math.round(updatedConfig[room].rated_watts * 1000);
+                    needsUpdate = true;
+                    console.log(`[Migration] Converting rated_watts from ${oldWatts} kW to ${updatedConfig[room].rated_watts} W for ${room}`);
+                }
+            });
+            
+            if (needsUpdate) {
+                db.ref("config/rooms").set(updatedConfig);
+                console.log('[Migration] Updated config/rooms with duty_cycle and rated_watts fixes');
+                airconConfig = updatedConfig;
+            } else {
+                console.log('[Migration] All rooms already have correct configuration');
+            }
+        }
+    });
+
+    // Initialize default rate if not exists
+    db.ref("config/rate_per_kwh").once("value", (snapshot) => {
+        if (!snapshot.val()) {
+            db.ref("config/rate_per_kwh").set(12.50);
+        }
+    });
+    
+    minuteUpdate(); // Initialize immediately with current time on page load
+    setInterval(minuteUpdate, 60000);
+    setInterval(secondUpdate, 1000);
+
+    function logout() { window.location.href = "login.html"; }
+    function confirmLogout() { document.getElementById('logoutModal').style.display = 'flex'; }
+    function closeLogoutModal(e) { if (e.target.id === 'logoutModal') document.getElementById('logoutModal').style.display = 'none'; }
+
+    // ============================================
+    // NEW ANALYTICS UI LOGIC
+    // ============================================
+
+    // State
+    let currentPeriod = 'day';
+    let currentMetric = 'cost';
+    let currentDate = new Date();
+    let analyticsChart = null;
+
+    // Format usage time - show days if > 24h, hours/minutes if < 24h
+    function formatUsageTime(hours) {
+        if (hours < 1) {
+            const minutes = Math.round(hours * 60);
+            return `${minutes}m`;
+        }
+        if (hours >= 24) {
+            const days = Math.floor(hours / 24);
+            const remainingHours = Math.floor(hours % 24);
+            if (remainingHours === 0) {
+                return `${days}d`;
+            }
+            return `${days}d ${remainingHours}h`;
+        }
+        const wholeHours = Math.floor(hours);
+        const minutes = Math.round((hours - wholeHours) * 60);
+        if (minutes === 0) {
+            return `${wholeHours}h`;
+        }
+        return `${wholeHours}h ${minutes}m`;
+    }
+
+    // Initialize new analytics chart
+    function initAnalyticsChart() {
+        const ctx = document.getElementById('analyticsChart').getContext('2d');
+        analyticsChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: []
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        titleFont: { family: 'Inter', size: 12, weight: 'bold' },
+                        bodyFont: { family: 'Inter', size: 11 },
+                        padding: 12,
+                        cornerRadius: 8,
+                        displayColors: true
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: {
+                            font: { family: 'Inter', size: 10, weight: '600' },
+                            color: '#6b7280'
+                        }
+                    },
+                    y: {
+                        grid: { color: '#f3f4f6' },
+                        ticks: {
+                            font: { family: 'Inter', size: 10, weight: '600' },
+                            color: '#6b7280'
+                        },
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    }
+
+    // Set period tab
+    function setPeriodTab(period) {
+        currentPeriod = period;
+        document.querySelectorAll('.period-tab').forEach(tab => tab.classList.remove('active'));
+        document.getElementById(`period-${period}`).classList.add('active');
+        updateDateDisplay();
+        loadAnalyticsData();
+    }
+
+    // Set metric tab
+    function setMetricTab(metric) {
+        currentMetric = metric;
+        document.querySelectorAll('.metric-tab').forEach(tab => tab.classList.remove('active'));
+        document.getElementById(`metric-${metric}`).classList.add('active');
+        loadAnalyticsData();
+    }
+
+    // Navigate date
+    function navigateDate(direction) {
+        if (currentPeriod === 'day') {
+            currentDate.setDate(currentDate.getDate() + direction);
+        } else if (currentPeriod === 'week') {
+            currentDate.setDate(currentDate.getDate() + (direction * 7));
+        } else if (currentPeriod === 'month') {
+            currentDate.setMonth(currentDate.getMonth() + direction);
+        } else if (currentPeriod === 'year') {
+            currentDate.setFullYear(currentDate.getFullYear() + direction);
+        }
+        updateDateDisplay();
+        loadAnalyticsData();
+    }
+
+    // Update date display
+    function updateDateDisplay() {
+        const display = document.getElementById('date-display');
+        const options = { day: 'numeric', month: 'short', year: 'numeric' };
+        
+        if (currentPeriod === 'day') {
+            display.textContent = currentDate.toLocaleDateString('en-US', options);
+        } else if (currentPeriod === 'week') {
+            const startOfWeek = new Date(currentDate);
+            startOfWeek.setDate(currentDate.getDate() - currentDate.getDay());
+            const endOfWeek = new Date(startOfWeek);
+            endOfWeek.setDate(startOfWeek.getDate() + 6);
+            display.textContent = `${startOfWeek.toLocaleDateString('en-US', options)} - ${endOfWeek.toLocaleDateString('en-US', options)}`;
+        } else if (currentPeriod === 'month') {
+            display.textContent = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        } else if (currentPeriod === 'year') {
+            display.textContent = currentDate.getFullYear().toString();
+        } else if (currentPeriod === 'total') {
+            display.textContent = 'All Time';
+        }
+    }
+
+    // Date picker state
+    let pickerDate = new Date();
+    let selectedDate = null;
+
+    // Open date picker modal
+    function openDatePicker() {
+        const modal = document.getElementById('date-picker-modal');
+        const calendarNav = document.getElementById('calendar-nav');
+        const calendarGrid = document.getElementById('calendar-grid');
+        const monthYearPicker = document.getElementById('month-year-picker');
+        const pickerTitle = document.getElementById('picker-title');
+
+        // Reset picker date to current date
+        pickerDate = new Date(currentDate);
+        selectedDate = null;
+
+        // Show appropriate picker based on current period
+        if (currentPeriod === 'day') {
+            calendarNav.classList.remove('hidden');
+            calendarGrid.classList.remove('hidden');
+            monthYearPicker.classList.add('hidden');
+            pickerTitle.textContent = 'Select Date';
+            renderCalendarGrid();
+        } else if (currentPeriod === 'month') {
+            calendarNav.classList.add('hidden');
+            calendarGrid.classList.add('hidden');
+            monthYearPicker.classList.remove('hidden');
+            pickerTitle.textContent = 'Select Month';
+            renderMonthYearPicker();
+        } else if (currentPeriod === 'year') {
+            calendarNav.classList.add('hidden');
+            calendarGrid.classList.add('hidden');
+            monthYearPicker.classList.remove('hidden');
+            pickerTitle.textContent = 'Select Year';
+            renderMonthYearPicker();
+        } else {
+            // Week and Total don't need date picker
+            return;
+        }
+
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        lucide.createIcons();
+    }
+
+    // Close date picker modal
+    function closeDatePicker() {
+        const modal = document.getElementById('date-picker-modal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+
+    // Navigate calendar month
+    function navigateCalendarMonth(delta) {
+        pickerDate.setMonth(pickerDate.getMonth() + delta);
+        renderCalendarGrid();
+    }
+
+    // Open year selector
+    function openYearSelector() {
+        const yearSelector = document.getElementById('year-selector');
+        const calendarGrid = document.getElementById('calendar-grid');
+        
+        yearSelector.classList.remove('hidden');
+        calendarGrid.classList.add('hidden');
+        
+        renderYearSelector();
+    }
+
+    // Close year selector
+    function closeYearSelector() {
+        const yearSelector = document.getElementById('year-selector');
+        const calendarGrid = document.getElementById('calendar-grid');
+        
+        yearSelector.classList.add('hidden');
+        calendarGrid.classList.remove('hidden');
+    }
+
+    // Render year selector grid
+    function renderYearSelector() {
+        const yearSelector = document.getElementById('year-selector');
+        const grid = yearSelector.querySelector('.grid');
+        grid.innerHTML = '';
+        
+        const currentYear = new Date().getFullYear();
+        const startYear = currentYear - 10;
+        const endYear = currentYear + 10;
+        
+        for (let year = startYear; year <= endYear; year++) {
+            const yearButton = document.createElement('button');
+            yearButton.className = 'p-3 rounded-lg font-black text-sm transition-all hover:bg-gray-100';
+            yearButton.textContent = year;
+            
+            if (year === pickerDate.getFullYear()) {
+                yearButton.className += ' bg-[#800000] text-white';
+            } else {
+                yearButton.className += ' text-gray-800';
+            }
+            
+            yearButton.onclick = () => {
+                pickerDate.setFullYear(year);
+                closeYearSelector();
+                renderCalendarGrid();
+            };
+            
+            grid.appendChild(yearButton);
+        }
+    }
+
+    // Render calendar grid
+    function renderCalendarGrid() {
+        const grid = document.getElementById('calendar-grid');
+        const monthYearLabel = document.getElementById('calendar-month-year');
+        
+        // Update month/year label
+        monthYearLabel.textContent = pickerDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+        // Clear existing day cells (keep headers)
+        const headers = grid.querySelectorAll('.text-center.text-\\[10px\\].font-black.text-gray-400.uppercase');
+        grid.innerHTML = '';
+        headers.forEach(header => grid.appendChild(header));
+
+        // Get first day of month and total days
+        const firstDay = new Date(pickerDate.getFullYear(), pickerDate.getMonth(), 1);
+        const lastDay = new Date(pickerDate.getFullYear(), pickerDate.getMonth() + 1, 0);
+        const startDay = firstDay.getDay();
+        const totalDays = lastDay.getDate();
+
+        // Add empty cells for days before first day
+        for (let i = 0; i < startDay; i++) {
+            const emptyCell = document.createElement('div');
+            emptyCell.className = 'h-10';
+            grid.appendChild(emptyCell);
+        }
+
+        // Add day cells
+        for (let day = 1; day <= totalDays; day++) {
+            const dayCell = document.createElement('button');
+            dayCell.className = 'h-10 rounded-lg text-sm font-black transition-all hover:bg-gray- calendar-day';
+            dayCell.textContent = day;
+
+            const cellDate = new Date(pickerDate.getFullYear(), pickerDate.getMonth(), day);
+            const isToday = cellDate.toDateString() === new Date().toDateString();
+            const isSelected = selectedDate && cellDate.toDateString() === selectedDate.toDateString();
+
+            if (isToday) {
+                dayCell.className += ' bg-[#800000] text-white';
+            } else if (isSelected) {
+                dayCell.className += ' bg-gray-200 text-gray-800';
+            } else {
+                dayCell.className += '100 text-gray-800';
+            }
+
+            dayCell.onclick = () => {
+                selectedDate = new Date(pickerDate.getFullYear(), pickerDate.getMonth(), day);
+                renderCalendarGrid();
+            };
+
+            grid.appendChild(dayCell);
+        }
+    }
+
+    // Render month/year picker
+    function renderMonthYearPicker() {
+        const monthSelect = document.getElementById('month-select');
+        const yearSelect = document.getElementById('year-select');
+
+        // Set current values
+        monthSelect.value = pickerDate.getMonth();
+
+        // Populate year select (current year ± 5)
+        const currentYear = new Date().getFullYear();
+        yearSelect.innerHTML = '';
+        for (let y = currentYear - 5; y <= currentYear + 5; y++) {
+            const option = document.createElement('option');
+            option.value = y;
+            option.textContent = y;
+            if (y === pickerDate.getFullYear()) {
+                option.selected = true;
+            }
+            yearSelect.appendChild(option);
+        }
+    }
+
+    // Confirm date selection
+    function confirmDateSelection() {
+        if (currentPeriod === 'day') {
+            if (selectedDate) {
+                currentDate = selectedDate;
+            }
+        } else if (currentPeriod === 'month') {
+            const monthSelect = document.getElementById('month-select');
+            const yearSelect = document.getElementById('year-select');
+            currentDate = new Date(parseInt(yearSelect.value), parseInt(monthSelect.value), 1);
+        } else if (currentPeriod === 'year') {
+            const yearSelect = document.getElementById('year-select');
+            currentDate = new Date(parseInt(yearSelect.value), 0, 1);
+        }
+
+        closeDatePicker();
+        updateDateDisplay();
+        loadAnalyticsData();
+    }
+
+    // Toggle full screen
+    function toggleFullScreen() {
+        const chartContainer = document.getElementById('analyticsChart').parentElement;
+        if (!document.fullscreenElement) {
+            chartContainer.requestFullscreen();
+        } else {
+            document.exitFullscreen();
+        }
+    }
+
+    // Load analytics data based on current period and metric
+    async function loadAnalyticsData() {
+        if (!labKeys || labKeys.length === 0) {
+            console.log('[Analytics] No rooms loaded yet');
+            return;
+        }
+
+        // Update summary line
+        const summaryEl = document.getElementById('period-summary');
+        const statEl = document.getElementById('period-stat');
+        
+        if (currentPeriod === 'day') {
+            const dateStr = currentDate.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
+            const dayName = currentDate.toLocaleDateString('en-US', { weekday: 'long' });
+            summaryEl.textContent = `${dateStr} ${dayName}`;
+        }
+
+        // Load data based on period
+        if (currentPeriod === 'day') {
+            await loadDayView();
+        } else if (currentPeriod === 'week') {
+            await loadWeekView();
+        } else if (currentPeriod === 'month') {
+            await loadMonthView();
+        } else if (currentPeriod === 'year') {
+            await loadYearView();
+        } else if (currentPeriod === 'total') {
+            await loadTotalView();
+        }
+    }
+
+    // Load Day view - breakdown by room
+    async function loadDayView() {
+        const dateStr = currentDate.toISOString().split('T')[0];
+        const dateLabel = currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const labels = [];
+        const data = [];
+        const backgroundColors = [];
+        let totalValue = 0;
+
+        // Get previous day data for shadow chart
+        const prevDate = new Date(currentDate);
+        prevDate.setDate(prevDate.getDate() - 1);
+        const prevDateLabel = prevDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const shadowData = [];
+        const shadowColors = [];
+
+        for (let i = 0; i < labKeys.length; i++) {
+            const room = labKeys[i];
+            const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
+            labels.push(displayName);
+            
+            const color = palette[i % palette.length];
+            backgroundColors.push(color);
+
+            let value = 0;
+            let hours = 0;
+
+            // Use the same data source as Daily Usage Report
+            if (dateLabel === new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })) {
+                // Today: use live roomUsage data
+                let liveMs = roomUsage[room]?.totalMs || 0;
+                if (roomUsage[room]?.isActive) liveMs += (Date.now() - roomUsage[room].lastStart);
+                hours = parseFloat((liveMs / 3600000).toFixed(2));
+                
+                // If live data has 0 hours, fall back to history reconstruction
+                if (hours === 0) {
+                    console.log(`[loadDayView] ${room} (today): live data has 0 hours, attempting reconstruction from history`);
+                    const dateKey = currentDate.toISOString().split('T')[0];
+                    hours = await reconstructUsageFromHistory(room, dateKey);
+                    console.log(`[loadDayView] ${room} (today): reconstructed ${hours} hours from history`);
+                } else {
+                    console.log(`[loadDayView] ${room} (today): ${hours} hours from live data`);
+                }
+            } else {
+                // Historical: use dailyAnalytics.data first
+                hours = dailyAnalytics.data[room]?.[dateLabel] || 0;
+                
+                // If dailyAnalytics has no value or 0, try to reconstruct from history
+                if (hours === 0) {
+                    console.log(`[loadDayView] ${room} on ${dateLabel}: dailyAnalytics has 0, attempting reconstruction from history`);
+                    // Convert dateLabel ("Aug 13") to dateKey ("2026-08-13") for history path
+                    const dateKey = currentDate.toISOString().split('T')[0];
+                    hours = await reconstructUsageFromHistory(room, dateKey);
+                    console.log(`[loadDayView] ${room} on ${dateLabel}: reconstructed ${hours} hours from history`);
+                } else {
+                    console.log(`[loadDayView] ${room} on ${dateLabel}: ${hours} hours from dailyAnalytics`);
+                }
+            }
+
+            if (currentMetric === 'cost') {
+                value = AirconCostCalculator.computeAirconCost(
+                    airconConfig[room],
+                    hours,
+                    ratePerKwh
+                );
+            } else if (currentMetric === 'usage') {
+                value = hours;
+            } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
+                // For temp/humidity, still need to fetch from /history
+                const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
+                const hourData = snapshot.val();
+                
+                if (hourData) {
+                    if (currentMetric === 'temperature') {
+                        const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
+                        if (temps.length > 0) {
+                            value = temps.reduce((a, b) => a + b, 0) / temps.length;
+                        }
+                    } else if (currentMetric === 'humidity') {
+                        const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                        if (hums.length > 0) {
+                            value = hums.reduce((a, b) => a + b, 0) / hums.length;
+                        }
+                    }
+                }
+            }
+            
+            data.push(value);
+            totalValue += value;
+
+            // Get shadow data for previous day (for all metrics)
+            let prevValue = 0;
+            if (currentMetric === 'cost') {
+                const prevHours = dailyAnalytics.data[room]?.[prevDateLabel] || 0;
+                prevValue = AirconCostCalculator.computeAirconCost(airconConfig[room], prevHours, ratePerKwh);
+            } else if (currentMetric === 'usage') {
+                prevValue = dailyAnalytics.data[room]?.[prevDateLabel] || 0;
+            } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
+                const dateStr = prevDate.toISOString().split('T')[0];
+                const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
+                const hourData = snapshot.val();
+                if (hourData) {
+                    if (currentMetric === 'temperature') {
+                        const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
+                        if (temps.length > 0) {
+                            prevValue = temps.reduce((a, b) => a + b, 0) / temps.length;
+                        }
+                    } else if (currentMetric === 'humidity') {
+                        const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                        if (hums.length > 0) {
+                            prevValue = hums.reduce((a, b) => a + b, 0) / hums.length;
+                        }
+                    }
+                }
+            }
+            shadowData.push(prevValue);
+            shadowColors.push(color + '40'); // Add transparency (25% opacity)
+        }
+
+        // Update chart with shadow dataset
+        const datasets = [{
+            data: data,
+            backgroundColor: backgroundColors,
+            borderRadius: 8,
+            borderSkipped: false
+        }];
+
+        // Add shadow dataset for all metrics
+        datasets.unshift({
+            data: shadowData,
+            backgroundColor: shadowColors,
+            borderRadius: 8,
+            borderSkipped: false,
+            label: 'Previous Day'
+        });
+
+        analyticsChart.data.labels = labels;
+        analyticsChart.data.datasets = datasets;
+        analyticsChart.update();
+
+        // Update stat display
+        const statEl = document.getElementById('period-stat');
+        if (currentMetric === 'cost') {
+            statEl.textContent = `₱${totalValue.toFixed(2)}`;
+        } else if (currentMetric === 'usage') {
+            statEl.textContent = formatUsageTime(totalValue);
+        } else if (currentMetric === 'temperature') {
+            statEl.textContent = `${totalValue > 0 ? totalValue.toFixed(1) : '--'}°C`;
+        } else if (currentMetric === 'humidity') {
+            statEl.textContent = `${totalValue > 0 ? totalValue.toFixed(1) : '--'}%`;
+        }
+
+        // Update summary section
+        updateSummarySection(totalValue);
+        
+        // Update comparison badge
+        updateComparisonBadge(totalValue);
+    }
+
+    // Calculate and update comparison with previous period
+    async function updateComparisonBadge(currentValue) {
+        const badge = document.getElementById('comparison-badge');
+        
+        // Show comparison for all metrics
+        
+        let previousValue = 0;
+        let previousLabel = '';
+        
+        if (currentPeriod === 'day') {
+            // Compare with previous day
+            const prevDate = new Date(currentDate);
+            prevDate.setDate(prevDate.getDate() - 1);
+            const prevDateLabel = prevDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            previousLabel = prevDateLabel;
+            
+            for (const room of labKeys) {
+                if (currentMetric === 'cost') {
+                    const hours = dailyAnalytics.data[room]?.[prevDateLabel] || 0;
+                    previousValue += AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh);
+                } else if (currentMetric === 'usage') {
+                    previousValue += dailyAnalytics.data[room]?.[prevDateLabel] || 0;
+                } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
+                    const dateStr = prevDate.toISOString().split('T')[0];
+                    const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
+                    const hourData = snapshot.val();
+                    if (hourData) {
+                        if (currentMetric === 'temperature') {
+                            const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
+                            if (temps.length > 0) {
+                                previousValue += temps.reduce((a, b) => a + b, 0) / temps.length;
+                            }
+                        } else if (currentMetric === 'humidity') {
+                            const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                            if (hums.length > 0) {
+                                previousValue += hums.reduce((a, b) => a + b, 0) / hums.length;
+                            }
+                        }
+                    }
+                }
+            }
+        } else if (currentPeriod === 'week') {
+            // Compare with previous week
+            const weekStart = new Date(currentDate);
+            weekStart.setDate(weekStart.getDate() - weekStart.getDay() - 7);
+            const prevWeekStartLabel = weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            previousLabel = `Week of ${prevWeekStartLabel}`;
+            
+            for (let i = 0; i < 7; i++) {
+                const d = new Date(weekStart);
+                d.setDate(d.getDate() + i);
+                const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                
+                for (const room of labKeys) {
+                    if (currentMetric === 'cost') {
+                        const hours = dailyAnalytics.data[room]?.[dateLabel] || 0;
+                        previousValue += AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh);
+                    } else if (currentMetric === 'usage') {
+                        previousValue += dailyAnalytics.data[room]?.[dateLabel] || 0;
+                    } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
+                        const dateStr = d.toISOString().split('T')[0];
+                        const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
+                        const hourData = snapshot.val();
+                        if (hourData) {
+                            if (currentMetric === 'temperature') {
+                                const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
+                                if (temps.length > 0) {
+                                    previousValue += temps.reduce((a, b) => a + b, 0) / temps.length;
+                                }
+                            } else if (currentMetric === 'humidity') {
+                                const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                                if (hums.length > 0) {
+                                    previousValue += hums.reduce((a, b) => a + b, 0) / hums.length;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else if (currentPeriod === 'month') {
+            // Compare with previous month
+            const prevMonth = new Date(currentDate);
+            prevMonth.setMonth(prevMonth.getMonth() - 1);
+            const daysInPrevMonth = new Date(prevMonth.getFullYear(), prevMonth.getMonth() + 1, 0).getDate();
+            previousLabel = prevMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            
+            for (let day = 1; day <= daysInPrevMonth; day++) {
+                const d = new Date(prevMonth.getFullYear(), prevMonth.getMonth(), day);
+                const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                
+                for (const room of labKeys) {
+                    if (currentMetric === 'cost') {
+                        const hours = dailyAnalytics.data[room]?.[dateLabel] || 0;
+                        previousValue += AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh);
+                    } else if (currentMetric === 'usage') {
+                        previousValue += dailyAnalytics.data[room]?.[dateLabel] || 0;
+                    } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
+                        const dateStr = d.toISOString().split('T')[0];
+                        const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
+                        const hourData = snapshot.val();
+                        if (hourData) {
+                            if (currentMetric === 'temperature') {
+                                const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
+                                if (temps.length > 0) {
+                                    previousValue += temps.reduce((a, b) => a + b, 0) / temps.length;
+                                }
+                            } else if (currentMetric === 'humidity') {
+                                const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                                if (hums.length > 0) {
+                                    previousValue += hums.reduce((a, b) => a + b, 0) / hums.length;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else if (currentPeriod === 'year') {
+            // Compare with previous year
+            const prevYear = currentDate.getFullYear() - 1;
+            previousLabel = `${prevYear}`;
+            
+            for (let month = 0; month < 12; month++) {
+                const daysInMonth = new Date(prevYear, month + 1, 0).getDate();
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const d = new Date(prevYear, month, day);
+                    const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                    
+                    for (const room of labKeys) {
+                        if (currentMetric === 'cost') {
+                            const hours = dailyAnalytics.data[room]?.[dateLabel] || 0;
+                            previousValue += AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh);
+                        } else if (currentMetric === 'usage') {
+                            previousValue += dailyAnalytics.data[room]?.[dateLabel] || 0;
+                        } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
+                            const dateStr = d.toISOString().split('T')[0];
+                            const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
+                            const hourData = snapshot.val();
+                            if (hourData) {
+                                if (currentMetric === 'temperature') {
+                                    const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
+                                    if (temps.length > 0) {
+                                        previousValue += temps.reduce((a, b) => a + b, 0) / temps.length;
+                                    }
+                                } else if (currentMetric === 'humidity') {
+                                    const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                                    if (hums.length > 0) {
+                                        previousValue += hums.reduce((a, b) => a + b, 0) / hums.length;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else if (currentPeriod === 'total') {
+            // No comparison for total view
+            badge.innerHTML = '';
+            return;
+        }
+        
+        // Calculate percentage change
+        if (previousValue === 0) {
+            badge.innerHTML = `<span class="text-gray-400">No previous data</span>`;
+            return;
+        }
+        
+        const percentChange = ((currentValue - previousValue) / previousValue) * 100;
+        const isIncrease = percentChange > 0;
+        const bgColor = isIncrease ? 'bg-red-50' : 'bg-green-50';
+        const textColor = isIncrease ? 'text-red-600' : 'text-green-600';
+        const icon = isIncrease ? 'trending-up' : 'trending-down';
+        
+        badge.className = `inline-flex items-center gap-1.5 mt-2 px-3 py-1 rounded-full text-xs font-black ${bgColor} ${textColor}`;
+        badge.innerHTML = `
+            <i data-lucide="${icon}" class="w-3 h-3"></i>
+            <span>vs ${previousLabel}: ${Math.abs(percentChange).toFixed(1)}%</span>
+        `;
+        lucide.createIcons();
+    }
+
+    // Update summary section with room breakdown
+    function updateSummarySection(totalValue) {
+        const summaryTitle = document.getElementById('summary-title');
+        const summaryTotal = document.getElementById('summary-total');
+        const breakdownBar = document.getElementById('room-breakdown-bar');
+        const legend = document.getElementById('room-legend');
+
+        // Set title based on period and metric
+        const periodNames = {
+            'day': 'Daily',
+            'week': 'Weekly',
+            'month': 'Monthly',
+            'year': 'Yearly',
+            'total': 'All-Time'
+        };
+        const metricNames = {
+            'cost': 'Total Cost',
+            'usage': 'Total Usage',
+            'temperature': 'Temperature',
+            'humidity': 'Humidity'
+        };
+        summaryTitle.textContent = `${periodNames[currentPeriod]} ${metricNames[currentMetric]}`;
+
+        // Set total value
+        if (currentMetric === 'cost') {
+            summaryTotal.textContent = `₱${totalValue.toFixed(2)}`;
+        } else if (currentMetric === 'usage') {
+            summaryTotal.textContent = formatUsageTime(totalValue);
+        } else if (currentMetric === 'temperature') {
+            summaryTotal.textContent = `${totalValue > 0 ? totalValue.toFixed(1) : '--'}°C`;
+        } else if (currentMetric === 'humidity') {
+            summaryTotal.textContent = `${totalValue > 0 ? totalValue.toFixed(1) : '--'}%`;
+        }
+
+        // Build breakdown bar and legend
+        breakdownBar.innerHTML = '';
+        legend.innerHTML = '';
+
+        const chartData = analyticsChart.data.datasets[0].data;
+        const labels = analyticsChart.data.labels;
+        const colors = analyticsChart.data.datasets[0].backgroundColor;
+
+        for (let i = 0; i < chartData.length; i++) {
+            const value = chartData[i];
+            const percentage = totalValue > 0 ? (value / totalValue) * 100 : 0;
+            
+            // Add segment to bar
+            const segment = document.createElement('div');
+            segment.style.width = `${percentage}%`;
+            segment.style.backgroundColor = colors[i];
+            segment.className = 'h-full transition-all duration-300';
+            breakdownBar.appendChild(segment);
+
+            // Add legend item
+            const legendItem = document.createElement('div');
+            legendItem.className = 'flex items-center gap-2 text-xs';
+            legendItem.innerHTML = `
+                <div class="w-3 h-3 rounded-full" style="background-color: ${colors[i]}"></div>
+                <span class="font-bold text-gray-600">${labels[i]}</span>
+                <span class="font-black text-gray-800">${percentage.toFixed(1)}%</span>
+            `;
+            legend.appendChild(legendItem);
+        }
+    }
+
+    // Load Week view - aggregate by day for 7 days
+    async function loadWeekView() {
+        const startOfWeek = new Date(currentDate);
+        startOfWeek.setDate(currentDate.getDate() - currentDate.getDay());
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(startOfWeek.getDate() + 6);
+
+        // Get previous week for shadow chart
+        const prevWeekStart = new Date(startOfWeek);
+        prevWeekStart.setDate(prevWeekStart.getDate() - 7);
+        const prevWeekEnd = new Date(prevWeekStart);
+        prevWeekEnd.setDate(prevWeekStart.getDate() + 6);
+
+        const summaryEl = document.getElementById('period-summary');
+        summaryEl.textContent = `${startOfWeek.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })} - ${endOfWeek.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+
+        const labels = [];
+        const datasets = [];
+        let totalValue = 0;
+
+        // Create dataset for each room
+        for (let i = 0; i < labKeys.length; i++) {
+            const room = labKeys[i];
+            const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
+            const color = palette[i % palette.length];
+            
+            const roomData = [];
+            let roomTotal = 0;
+
+            // Get data for each day in the week
+            for (let d = new Date(startOfWeek); d <= endOfWeek; d.setDate(d.getDate() + 1)) {
+                const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                labels.push(d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' }));
+
+                let hours = 0;
+                
+                // Use dailyAnalytics.data for cost/usage
+                if (currentMetric === 'cost' || currentMetric === 'usage') {
+                    hours = dailyAnalytics.data[room]?.[dateLabel] || 0;
+                }
+
+                let value = 0;
+                if (currentMetric === 'cost') {
+                    value = AirconCostCalculator.computeAirconCost(
+                        airconConfig[room],
+                        hours,
+                        ratePerKwh
+                    );
+                } else if (currentMetric === 'usage') {
+                    value = hours;
+                } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
+                    // For temp/humidity, fetch from /history
+                    const dateStr = d.toISOString().split('T')[0];
+                    const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
+                    const hourData = snapshot.val();
+                    
+                    if (hourData) {
+                        if (currentMetric === 'temperature') {
+                            const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
+                            if (temps.length > 0) {
+                                value = temps.reduce((a, b) => a + b, 0) / temps.length;
+                            }
+                        } else if (currentMetric === 'humidity') {
+                            const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                            if (hums.length > 0) {
+                                value = hums.reduce((a, b) => a + b, 0) / hums.length;
+                            }
+                        }
+                    }
+                }
+                
+                roomData.push(value);
+                roomTotal += value;
+            }
+
+            totalValue += roomTotal;
+
+            datasets.push({
+                label: displayName,
+                data: roomData,
+                backgroundColor: color,
+                borderRadius: 4
+            });
+        }
+
+        // Add shadow datasets for previous week (for all metrics)
+        const shadowDatasets = [];
+        for (let i = 0; i < labKeys.length; i++) {
+            const room = labKeys[i];
+            const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
+            const color = palette[i % palette.length];
+            
+            const shadowRoomData = [];
+            for (let d = new Date(prevWeekStart); d <= prevWeekEnd; d.setDate(d.getDate() + 1)) {
+                const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                let value = 0;
+                if (currentMetric === 'cost') {
+                    const hours = dailyAnalytics.data[room]?.[dateLabel] || 0;
+                    value = AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh);
+                } else if (currentMetric === 'usage') {
+                    value = dailyAnalytics.data[room]?.[dateLabel] || 0;
+                } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
+                    const dateStr = d.toISOString().split('T')[0];
+                    const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
+                    const hourData = snapshot.val();
+                    if (hourData) {
+                        if (currentMetric === 'temperature') {
+                            const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
+                            if (temps.length > 0) {
+                                value = temps.reduce((a, b) => a + b, 0) / temps.length;
+                            }
+                        } else if (currentMetric === 'humidity') {
+                            const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                            if (hums.length > 0) {
+                                value = hums.reduce((a, b) => a + b, 0) / hums.length;
+                            }
+                        }
+                    }
+                }
+                shadowRoomData.push(value);
+            }
+            
+            shadowDatasets.push({
+                label: displayName + ' (Prev Week)',
+                data: shadowRoomData,
+                backgroundColor: color + '40',
+                borderRadius: 4
+            });
+        }
+        // Prepend shadow datasets
+        datasets.unshift(...shadowDatasets);
+
+        // Update chart with stacked bars
+        analyticsChart.data.labels = [...new Set(labels)]; // Remove duplicates
+        analyticsChart.data.datasets = datasets;
+        analyticsChart.options.scales.x.stacked = true;
+        analyticsChart.options.scales.y.stacked = true;
+        analyticsChart.update();
+
+        // Update stat display
+        const statEl = document.getElementById('period-stat');
+        if (currentMetric === 'cost') {
+            statEl.textContent = `₱${totalValue.toFixed(2)}`;
+        } else if (currentMetric === 'usage') {
+            statEl.textContent = formatUsageTime(totalValue);
+        } else if (currentMetric === 'temperature') {
+            statEl.textContent = `${totalValue > 0 ? totalValue.toFixed(1) : '--'}°C`;
+        } else if (currentMetric === 'humidity') {
+            statEl.textContent = `${totalValue > 0 ? totalValue.toFixed(1) : '--'}%`;
+        }
+
+        updateSummarySection(totalValue);
+        
+        // Update comparison badge
+        updateComparisonBadge(totalValue);
+    }
+
+    // Load Month view - aggregate by day for the month
+    async function loadMonthView() {
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+        // Get previous month for shadow chart
+        const prevMonth = new Date(year, month - 1);
+        const daysInPrevMonth = new Date(prevMonth.getFullYear(), prevMonth.getMonth() + 1, 0).getDate();
+
+        const summaryEl = document.getElementById('period-summary');
+        summaryEl.textContent = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+        const labels = [];
+        const datasets = [];
+        let totalValue = 0;
+
+        // Create dataset for each room
+        for (let i = 0; i < labKeys.length; i++) {
+            const room = labKeys[i];
+            const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
+            const color = palette[i % palette.length];
+            
+            const roomData = [];
+            let roomTotal = 0;
+
+            // Get data for each day in the month
+            for (let day = 1; day <= daysInMonth; day++) {
+                const d = new Date(year, month, day);
+                const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                labels.push(day.toString());
+
+                let hours = 0;
+                
+                // Use dailyAnalytics.data for cost/usage
+                if (currentMetric === 'cost' || currentMetric === 'usage') {
+                    hours = dailyAnalytics.data[room]?.[dateLabel] || 0;
+                }
+
+                let value = 0;
+                if (currentMetric === 'cost') {
+                    value = AirconCostCalculator.computeAirconCost(
+                        airconConfig[room],
+                        hours,
+                        ratePerKwh
+                    );
+                } else if (currentMetric === 'usage') {
+                    value = hours;
+                } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
+                    // For temp/humidity, fetch from /history
+                    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                    const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
+                    const hourData = snapshot.val();
+                    
+                    if (hourData) {
+                        if (currentMetric === 'temperature') {
+                            const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
+                            if (temps.length > 0) {
+                                value = temps.reduce((a, b) => a + b, 0) / temps.length;
+                            }
+                        } else if (currentMetric === 'humidity') {
+                            const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                            if (hums.length > 0) {
+                                value = hums.reduce((a, b) => a + b, 0) / hums.length;
+                            }
+                        }
+                    }
+                }
+                
+                roomData.push(value);
+                roomTotal += value;
+            }
+
+            totalValue += roomTotal;
+
+            datasets.push({
+                label: displayName,
+                data: roomData,
+                backgroundColor: color,
+                borderRadius: 2
+            });
+        }
+
+        // Add shadow datasets for previous month (for all metrics)
+        const shadowDatasets = [];
+        for (let i = 0; i < labKeys.length; i++) {
+            const room = labKeys[i];
+            const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
+            const color = palette[i % palette.length];
+            
+            const shadowRoomData = [];
+            for (let day = 1; day <= daysInPrevMonth; day++) {
+                const d = new Date(prevMonth.getFullYear(), prevMonth.getMonth(), day);
+                const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                let value = 0;
+                if (currentMetric === 'cost') {
+                    const hours = dailyAnalytics.data[room]?.[dateLabel] || 0;
+                    value = AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh);
+                } else if (currentMetric === 'usage') {
+                    value = dailyAnalytics.data[room]?.[dateLabel] || 0;
+                } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
+                    const dateStr = d.toISOString().split('T')[0];
+                    const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
+                    const hourData = snapshot.val();
+                    if (hourData) {
+                        if (currentMetric === 'temperature') {
+                            const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
+                            if (temps.length > 0) {
+                                value = temps.reduce((a, b) => a + b, 0) / temps.length;
+                            }
+                        } else if (currentMetric === 'humidity') {
+                            const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                            if (hums.length > 0) {
+                                value = hums.reduce((a, b) => a + b, 0) / hums.length;
+                            }
+                        }
+                    }
+                }
+                shadowRoomData.push(value);
+            }
+            
+            shadowDatasets.push({
+                label: displayName + ' (Prev Month)',
+                data: shadowRoomData,
+                backgroundColor: color + '40',
+                borderRadius: 2
+            });
+        }
+        // Prepend shadow datasets
+        datasets.unshift(...shadowDatasets);
+
+        // Update chart with stacked bars
+        analyticsChart.data.labels = labels;
+        analyticsChart.data.datasets = datasets;
+        analyticsChart.options.scales.x.stacked = true;
+        analyticsChart.options.scales.y.stacked = true;
+        analyticsChart.update();
+
+        // Update stat display
+        const statEl = document.getElementById('period-stat');
+        if (currentMetric === 'cost') {
+            statEl.textContent = `₱${totalValue.toFixed(2)}`;
+        } else if (currentMetric === 'usage') {
+            statEl.textContent = formatUsageTime(totalValue);
+        } else if (currentMetric === 'temperature') {
+            statEl.textContent = `${totalValue > 0 ? totalValue.toFixed(1) : '--'}°C`;
+        } else if (currentMetric === 'humidity') {
+            statEl.textContent = `${totalValue > 0 ? totalValue.toFixed(1) : '--'}%`;
+        }
+
+        updateSummarySection(totalValue);
+        
+        // Update comparison badge
+        updateComparisonBadge(totalValue);
+    }
+
+    // Load Year view - aggregate by month for the year
+    async function loadYearView() {
+        const year = currentDate.getFullYear();
+        const prevYear = year - 1;
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+        const summaryEl = document.getElementById('period-summary');
+        summaryEl.textContent = year.toString();
+
+        const labels = [];
+        const datasets = [];
+        let totalValue = 0;
+
+        // Create dataset for each room
+        for (let i = 0; i < labKeys.length; i++) {
+            const room = labKeys[i];
+            const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
+            const color = palette[i % palette.length];
+            
+            const roomData = [];
+            let roomTotal = 0;
+
+            // Get data for each month in the year
+            for (let month = 0; month < 12; month++) {
+                labels.push(months[month]);
+                let monthTotal = 0;
+                const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+                // Aggregate all days in the month
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const d = new Date(year, month, day);
+                    const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                    
+                    let hours = 0;
+                    
+                    // Use dailyAnalytics.data for cost/usage
+                    if (currentMetric === 'cost' || currentMetric === 'usage') {
+                        hours = dailyAnalytics.data[room]?.[dateLabel] || 0;
+                    }
+
+                    if (currentMetric === 'cost') {
+                        monthTotal += AirconCostCalculator.computeAirconCost(
+                            airconConfig[room],
+                            hours,
+                            ratePerKwh
+                        );
+                    } else if (currentMetric === 'usage') {
+                        monthTotal += hours;
+                    } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
+                        // For temp/humidity, fetch from /history
+                        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                        const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
+                        const hourData = snapshot.val();
+                        
+                        if (hourData) {
+                            if (currentMetric === 'temperature') {
+                                const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
+                                if (temps.length > 0) {
+                                    monthTotal += temps.reduce((a, b) => a + b, 0) / temps.length;
+                                }
+                            } else if (currentMetric === 'humidity') {
+                                const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                                if (hums.length > 0) {
+                                    monthTotal += hums.reduce((a, b) => a + b, 0) / hums.length;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                roomData.push(monthTotal);
+                roomTotal += monthTotal;
+            }
+
+            totalValue += roomTotal;
+
+            datasets.push({
+                label: displayName,
+                data: roomData,
+                backgroundColor: color,
+                borderRadius: 2
+            });
+        }
+
+        // Add shadow datasets for previous year (for all metrics)
+        const shadowDatasets = [];
+        for (let i = 0; i < labKeys.length; i++) {
+            const room = labKeys[i];
+            const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
+            const color = palette[i % palette.length];
+            
+            const shadowRoomData = [];
+            for (let month = 0; month < 12; month++) {
+                let monthTotal = 0;
+                const daysInMonth = new Date(prevYear, month + 1, 0).getDate();
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const d = new Date(prevYear, month, day);
+                    const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                    let value = 0;
+                    if (currentMetric === 'cost') {
+                        const hours = dailyAnalytics.data[room]?.[dateLabel] || 0;
+                        value = AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh);
+                    } else if (currentMetric === 'usage') {
+                        value = dailyAnalytics.data[room]?.[dateLabel] || 0;
+                    } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
+                        const dateStr = d.toISOString().split('T')[0];
+                        const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
+                        const hourData = snapshot.val();
+                        if (hourData) {
+                            if (currentMetric === 'temperature') {
+                                const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
+                                if (temps.length > 0) {
+                                    value = temps.reduce((a, b) => a + b, 0) / temps.length;
+                                }
+                            } else if (currentMetric === 'humidity') {
+                                const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                                if (hums.length > 0) {
+                                    value = hums.reduce((a, b) => a + b, 0) / hums.length;
+                                }
+                            }
+                        }
+                    }
+                    monthTotal += value;
+                }
+                shadowRoomData.push(monthTotal);
+            }
+            
+            shadowDatasets.push({
+                label: displayName + ' (Prev Year)',
+                data: shadowRoomData,
+                backgroundColor: color + '40',
+                borderRadius: 2
+            });
+        }
+        // Prepend shadow datasets
+        datasets.unshift(...shadowDatasets);
+
+        // Update chart with stacked bars
+        analyticsChart.data.labels = labels;
+        analyticsChart.data.datasets = datasets;
+        analyticsChart.options.scales.x.stacked = true;
+        analyticsChart.options.scales.y.stacked = true;
+        analyticsChart.update();
+
+        // Update stat display
+        const statEl = document.getElementById('period-stat');
+        if (currentMetric === 'cost') {
+            statEl.textContent = `₱${totalValue.toFixed(2)}`;
+        } else if (currentMetric === 'usage') {
+            statEl.textContent = formatUsageTime(totalValue);
+        } else if (currentMetric === 'temperature') {
+            statEl.textContent = `${totalValue > 0 ? totalValue.toFixed(1) : '--'}°C`;
+        } else if (currentMetric === 'humidity') {
+            statEl.textContent = `${totalValue > 0 ? totalValue.toFixed(1) : '--'}%`;
+        }
+
+        updateSummarySection(totalValue);
+        
+        // Update comparison badge
+        updateComparisonBadge(totalValue);
+    }
+
+    // Load Total view - aggregate all historical data
+    async function loadTotalView() {
+        const summaryEl = document.getElementById('period-summary');
+        summaryEl.textContent = 'All Time';
+
+        const roomTotals = {};
+        let totalValue = 0;
+        let startDate = 'No data';
+
+        // Aggregate data for each room from dailyAnalytics.data
+        for (let i = 0; i < labKeys.length; i++) {
+            const room = labKeys[i];
+            let roomTotal = 0;
+
+            if (currentMetric === 'cost' || currentMetric === 'usage') {
+                // Use dailyAnalytics.data for cost/usage
+                const roomDailyData = dailyAnalytics.data[room];
+                if (roomDailyData) {
+                    const dates = Object.keys(roomDailyData);
+                    if (dates.length > 0 && (startDate === 'No data' || dates[0] < startDate)) {
+                        startDate = dates[0];
+                    }
+                    
+                    for (const dateLabel of dates) {
+                        const hours = roomDailyData[dateLabel] || 0;
+                        
+                        if (currentMetric === 'cost') {
+                            roomTotal += AirconCostCalculator.computeAirconCost(
+                                airconConfig[room],
+                                hours,
+                                ratePerKwh
+                            );
+                        } else if (currentMetric === 'usage') {
+                            roomTotal += hours;
+                        }
+                    }
+                }
+            } else {
+                // For temp/humidity, fetch from /history
+                const snapshot = await db.ref(`history/${room}`).once('value');
+                const roomHistory = snapshot.val();
+                if (roomHistory) {
+                    const dates = Object.keys(roomHistory).sort();
+                    if (dates.length > 0 && (startDate === 'No data' || dates[0] < startDate)) {
+                        startDate = dates[0];
+                    }
+
+                    for (const date of dates) {
+                        const hourData = roomHistory[date];
+                        if (hourData) {
+                            if (currentMetric === 'temperature') {
+                                const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
+                                if (temps.length > 0) {
+                                    roomTotal += temps.reduce((a, b) => a + b, 0) / temps.length;
+                                }
+                            } else if (currentMetric === 'humidity') {
+                                const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                                if (hums.length > 0) {
+                                    roomTotal += hums.reduce((a, b) => a + b, 0) / hums.length;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            roomTotals[room] = roomTotal;
+            totalValue += roomTotal;
+        }
+
+        // Create simple bar chart for total view (one bar per room)
+        const labels = [];
+        const data = [];
+        const backgroundColors = [];
+
+        for (let i = 0; i < labKeys.length; i++) {
+            const room = labKeys[i];
+            const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
+            labels.push(displayName);
+            data.push(roomTotals[room]);
+            backgroundColors.push(palette[i % palette.length]);
+        }
+
+        analyticsChart.data.labels = labels;
+        analyticsChart.data.datasets = [{
+            data: data,
+            backgroundColor: backgroundColors,
+            borderRadius: 8,
+            borderSkipped: false
+        }];
+        analyticsChart.options.scales.x.stacked = false;
+        analyticsChart.options.scales.y.stacked = false;
+        analyticsChart.update();
+
+        // Update stat display
+        const statEl = document.getElementById('period-stat');
+        if (currentMetric === 'cost') {
+            statEl.textContent = `₱${totalValue.toFixed(2)}`;
+        } else if (currentMetric === 'usage') {
+            statEl.textContent = formatUsageTime(totalValue);
+        } else if (currentMetric === 'temperature') {
+            statEl.textContent = `${totalValue > 0 ? totalValue.toFixed(1) : '--'}°C`;
+        } else if (currentMetric === 'humidity') {
+            statEl.textContent = `${totalValue > 0 ? totalValue.toFixed(1) : '--'}%`;
+        }
+
+        // Update summary section with start date note
+        const summaryTitle = document.getElementById('summary-title');
+        summaryTitle.textContent = `All-Time ${currentMetric === 'cost' ? 'Total Cost' : currentMetric === 'usage' ? 'Total Usage' : currentMetric === 'temperature' ? 'Temperature' : 'Humidity'} (Since ${startDate})`;
+
+        updateSummarySection(totalValue);
+    }
+
+    // Initialize new analytics UI when page loads
+    document.addEventListener('DOMContentLoaded', () => {
+        initAnalyticsChart();
+        updateDateDisplay();
+        
+        // Load analytics data after rooms are loaded
+        const checkRooms = setInterval(() => {
+            if (labKeys && labKeys.length > 0) {
+                clearInterval(checkRooms);
+                loadAnalyticsData();
+            }
+        }, 500);
+    });
+</script>
+</body>
+</html>
