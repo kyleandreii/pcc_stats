@@ -332,16 +332,18 @@ void runAutomation(float temp, float humidity) {
   Serial.print("Automation Check - Humidity: "); Serial.print(humidity, 1); Serial.print("%, Min Temp: "); Serial.print(minTemp, 1); Serial.print("°C, Max Temp: "); Serial.print(maxTemp, 1); Serial.println("°C");
 
   // Determine target temperature based on humidity using Firebase thresholds
+  // High humidity = occupied, raise temp to max threshold
+  // Low humidity = not occupied, lower temp to min threshold
   float targetTemp;
   
   if (humidity > MAX_HUMIDITY) {
-    targetTemp = minTemp;
-    Serial.println("⚠️ THRESHOLD EXCEEDED: Humidity is above maximum!");
-    Serial.print("Humidity: "); Serial.print(humidity, 1); Serial.print("% > "); Serial.print(MAX_HUMIDITY); Serial.print("%, lowering temp to min threshold: "); Serial.println(targetTemp, 1);
-  } else if (humidity < MIN_HUMIDITY) {
     targetTemp = maxTemp;
-    Serial.println("⚠️ THRESHOLD EXCEEDED: Humidity is below minimum!");
-    Serial.print("Humidity: "); Serial.print(humidity, 1); Serial.print("% < "); Serial.print(MIN_HUMIDITY); Serial.print("%, raising temp to max threshold: "); Serial.println(targetTemp, 1);
+    Serial.println("⚠️ OCCUPIED: Humidity is above maximum!");
+    Serial.print("Humidity: "); Serial.print(humidity, 1); Serial.print("% > "); Serial.print(MAX_HUMIDITY); Serial.print("%, raising temp to max threshold: "); Serial.println(targetTemp, 1);
+  } else if (humidity < MIN_HUMIDITY) {
+    targetTemp = minTemp;
+    Serial.println("⚠️ NOT OCCUPIED: Humidity is below minimum!");
+    Serial.print("Humidity: "); Serial.print(humidity, 1); Serial.print("% < "); Serial.print(MIN_HUMIDITY); Serial.print("%, lowering temp to min threshold: "); Serial.println(targetTemp, 1);
   } else {
     Serial.println("Humidity within normal range, no action needed");
     return;
