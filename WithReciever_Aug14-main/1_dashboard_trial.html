@@ -389,7 +389,7 @@
         }, 4000); // Check every 4 seconds to catch connection changes quickly
 
         function loadRoomsFromFirebase() {
-            console.log('[loadRoomsFromFirebase] Starting Firebase connection...');
+            console.log('[loadRoomsFromFirebase] FUNCTION CALLED - Starting Firebase connection...');
             
             // Load roomUsage from Firebase for analytics
             db.ref('analytics/roomUsage').on('value', (snapshot) => {
