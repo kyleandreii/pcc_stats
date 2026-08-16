@@ -477,7 +477,11 @@
             if(data) {
                 // Only update if room data actually changed
                 const newLabsData = {};
-                const newLabKeys = Object.keys(data).filter(key => key.startsWith("Room_"));
+                const systemKeys = ['alerts', 'analytics', 'config', 'history', 'irReceiver', 'irRemoteLibrary', 'usage_daily', 'info', '.info'];
+                const newLabKeys = Object.keys(data).filter(key => 
+                    (key.startsWith("Room_") || key.startsWith("Room ")) && 
+                    !systemKeys.includes(key)
+                );
                 
                 let dataChanged = false;
                 newLabKeys.forEach(key => {

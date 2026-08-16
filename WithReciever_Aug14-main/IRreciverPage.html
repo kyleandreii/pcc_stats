@@ -464,7 +464,11 @@
         }
 
         function dashboardLabListFromFirebase(data) {
-            const roomEntries = Object.keys(data || {}).filter((key) => key.startsWith('Room_'));
+            const systemKeys = ['alerts', 'analytics', 'config', 'history', 'irReceiver', 'irRemoteLibrary', 'usage_daily', 'info', '.info'];
+            const roomEntries = Object.keys(data || {}).filter((key) => 
+                (key.startsWith('Room_') || key.startsWith('Room ')) && 
+                !systemKeys.includes(key)
+            );
             const list = roomEntries.map((key) => {
                 const roomData = data[key] || {};
                 const roomName = roomData.roomName || roomData.customRoomName || key.replace(/_/g, ' ');
@@ -667,13 +671,10 @@
                 updatedAt: new Date().toISOString()
             };
 
-            // Save to IR Remote Library
+            // Save to IR Remote Library only (avoid creating duplicate room entries)
             db.ref(`irRemoteLibrary/${lab}/${command}`).set(payload).then(() => {
-                // Also save to room's IR codes path
-                db.ref(`${lab}/irCodes/${command}`).set(payload).then(() => {
-                    document.getElementById('libraryForm').classList.remove('show');
-                    asyncAlert('IR signal saved successfully!');
-                }).catch(() => asyncAlert('Unable to save to room IR codes.', 'Retry'));
+                document.getElementById('libraryForm').classList.remove('show');
+                asyncAlert('IR signal saved successfully!');
             }).catch(() => asyncAlert('Unable to save to the IR library.', 'Retry'));
         }
 

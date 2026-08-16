@@ -432,8 +432,11 @@
                 }
                 
                 Object.keys(data).forEach((key) => {
-                    // Check if the key starts with "Room_" to avoid processing meta keys like "info"
-                    if (key.startsWith("Room_") && typeof data[key] === 'object' && data[key] !== null) {
+                    // Check if the key is a room (starts with Room_ or Room with space) and not a system key
+                    const isRoomKey = (key.startsWith("Room_") || key.startsWith("Room ")) && typeof data[key] === 'object' && data[key] !== null;
+                    // Exclude system keys
+                    const systemKeys = ['alerts', 'analytics', 'config', 'history', 'irReceiver', 'irRemoteLibrary', 'usage_daily', 'info', '.info'];
+                    if (isRoomKey && !systemKeys.includes(key)) {
                         console.log(`[loadRoomsFromFirebase] Processing room: ${key}`);
                         
                         // Check if room already exists in our tracking
@@ -627,7 +630,11 @@
             // Check for duplicates in existing rooms
             db.ref().once('value', (snapshot) => {
                 const data = snapshot.val() || {};
-                const existingRooms = Object.keys(data).filter(key => key.startsWith('Room_'));
+                const systemKeys = ['alerts', 'analytics', 'config', 'history', 'irReceiver', 'irRemoteLibrary', 'usage_daily', 'info', '.info'];
+                const existingRooms = Object.keys(data).filter(key => 
+                    (key.startsWith('Room_') || key.startsWith('Room ')) && 
+                    !systemKeys.includes(key)
+                );
                 
                 // Check for duplicate Room ID
                 if (data[id]) {

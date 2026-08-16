@@ -1519,7 +1519,11 @@
             }
             labsData = data;
             // Filter to only include rooms that have actual data (either in dailyAnalytics or have live data)
-            const allRoomKeys = Object.keys(data).filter(key => key.startsWith("Room_")).sort();
+            const systemKeys = ['alerts', 'analytics', 'config', 'history', 'irReceiver', 'irRemoteLibrary', 'usage_daily', 'info', '.info'];
+            const allRoomKeys = Object.keys(data).filter(key => 
+                (key.startsWith("Room_") || key.startsWith("Room ")) && 
+                !systemKeys.includes(key)
+            ).sort();
             labKeys = allRoomKeys.filter(room => {
                 const roomData = data[room];
                 // Check if room has data in dailyAnalytics

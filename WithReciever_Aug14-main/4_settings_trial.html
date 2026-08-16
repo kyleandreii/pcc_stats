@@ -581,9 +581,15 @@
                 if (!data) return;
                 labsData = data;
                 
+                const systemKeys = ['alerts', 'analytics', 'config', 'history', 'irReceiver', 'irRemoteLibrary', 'usage_daily', 'info', '.info'];
                 labKeys = Object.keys(data)
-                    .filter(key => key.startsWith("Room_"))
-                    .sort((a, b) => parseInt(a.split('_')[1]) - parseInt(b.split('_')[1]));
+                    .filter(key => (key.startsWith("Room_") || key.startsWith("Room ")) && !systemKeys.includes(key))
+                    .sort((a, b) => {
+                        // Try to extract number for sorting, fallback to string comparison
+                        const numA = parseInt(a.replace(/\D/g, '')) || 0;
+                        const numB = parseInt(b.replace(/\D/g, '')) || 0;
+                        return numA - numB;
+                    });
                 
                 if (!selectedRoom && labKeys.length > 0) selectedRoom = labKeys[0];
                 updateGlobalUI();
