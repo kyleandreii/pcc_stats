@@ -713,17 +713,40 @@
             // Set optimistic UI state to prevent immediate re-render conflicts
             pendingUpdates[roomPath] = isChecked;
             
-            // Update database - Arduino expects "ON" or "OFF"
-            db.ref(roomPath).update({ ac: isChecked, ac_command: cmd, ac_timestamp: timestamp })
-                .then(() => {
-                    console.log(`[Dashboard] Update succeeded for ${roomPath}`);
-                    // Clear pending flag once update completes
-                    delete pendingUpdates[roomPath];
-                })
-                .catch((error) => {
-                    console.error(`[Dashboard] Failed to update AC for ${roomPath}:`, error);
-                    delete pendingUpdates[roomPath];
-                });
+            // Check if this is a dual-unit room (Room_1)
+            const isDualUnit = roomPath === "Room_1";
+            
+            if (isDualUnit) {
+                // For dual-unit rooms, update both units
+                const updates = {
+                    [`units/unit_1/ac`]: isChecked,
+                    [`units/unit_1/ac_command`]: cmd,
+                    [`units/unit_1/ac_timestamp`]: timestamp,
+                    [`units/unit_2/ac`]: isChecked,
+                    [`units/unit_2/ac_command`]: cmd,
+                    [`units/unit_2/ac_timestamp`]: timestamp
+                };
+                db.ref(roomPath).update(updates)
+                    .then(() => {
+                        console.log(`[Dashboard] Dual-unit update succeeded for ${roomPath}`);
+                        delete pendingUpdates[roomPath];
+                    })
+                    .catch((error) => {
+                        console.error(`[Dashboard] Failed to update dual-unit AC for ${roomPath}:`, error);
+                        delete pendingUpdates[roomPath];
+                    });
+            } else {
+                // For single-unit rooms, update top-level ac field
+                db.ref(roomPath).update({ ac: isChecked, ac_command: cmd, ac_timestamp: timestamp })
+                    .then(() => {
+                        console.log(`[Dashboard] Update succeeded for ${roomPath}`);
+                        delete pendingUpdates[roomPath];
+                    })
+                    .catch((error) => {
+                        console.error(`[Dashboard] Failed to update AC for ${roomPath}:`, error);
+                        delete pendingUpdates[roomPath];
+                    });
+            }
             
             // Force immediate re-render to show the change
             renderDashboard();
