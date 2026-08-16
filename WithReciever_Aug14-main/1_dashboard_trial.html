@@ -938,11 +938,13 @@
                 // Firebase is authoritative for AC state - use it directly for cross-device sync
                 const isDualUnitRoom = roomPath === "Room_1" && d.units;
                 let isPoweredOn;
+                let unit1State = false;
+                let unit2State = false;
                 
                 if (isDualUnitRoom) {
                     // For dual-unit rooms, check if either unit is on
-                    const unit1State = d.units?.unit_1?.ac === true || d.units?.unit_1?.ac === "ON" || d.units?.unit_1?.ac === 1;
-                    const unit2State = d.units?.unit_2?.ac === true || d.units?.unit_2?.ac === "ON" || d.units?.unit_2?.ac === 1;
+                    unit1State = d.units?.unit_1?.ac === true || d.units?.unit_1?.ac === "ON" || d.units?.unit_1?.ac === 1;
+                    unit2State = d.units?.unit_2?.ac === true || d.units?.unit_2?.ac === "ON" || d.units?.unit_2?.ac === 1;
                     isPoweredOn = unit1State || unit2State;
                     console.log(`[Dashboard] ${roomPath} - Dual unit: unit1=${unit1State}, unit2=${unit2State}, isPoweredOn=${isPoweredOn}`);
                 } else {
@@ -1140,7 +1142,7 @@
                     }
                     
                     const timeDiff = Date.now() - lastSeen;
-                    const isOffline = timeDiff > OFFLINE_THRESHOLD_MS;
+                    const isOffline = timeDiff > HEARTBEAT_TIMEOUT;
                     console.log(`[Offline Detection] Periodic check - ${roomId} Time diff: ${Math.floor(timeDiff / 1000)}s, Offline: ${isOffline}`);
                     
                     if (isOffline && !deviceOfflineFlags[roomId]) {
