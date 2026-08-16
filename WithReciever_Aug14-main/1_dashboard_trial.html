@@ -456,7 +456,12 @@
                         
                         // Firebase is authoritative for AC state - use it directly for cross-device sync
                         const roomData = data[key];
-                        console.log(`[loadRoomsFromFirebase] Using Firebase AC state for ${key}: ${roomData.ac}`);
+                        // For dual-unit rooms, log unit states instead of top-level ac field
+                        if (key === "Room_1" && roomData.units) {
+                            console.log(`[loadRoomsFromFirebase] Using Firebase AC state for ${key}: unit_1=${roomData.units.unit_1?.ac}, unit_2=${roomData.units.unit_2?.ac}`);
+                        } else {
+                            console.log(`[loadRoomsFromFirebase] Using Firebase AC state for ${key}: ${roomData.ac}`);
+                        }
                         
                         // Initialize Firebase timestamp if it doesn't exist
                         if (!data[key].ac_timestamp) {
