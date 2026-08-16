@@ -904,12 +904,13 @@
             console.log('[renderDashboard] labKeys:', labKeys);
             console.log('[renderDashboard] labsData:', labsData);
 
-            latestData.forEach((d, i) => {
+            // Use labKeys and labsData to render all rooms, including those without sensor data
+            labKeys.forEach((roomPath, i) => {
+                const d = labsData[roomPath];
                 if (!d) return;
                 activeRooms++;
                 
                 const label = roomLabels[i];
-                const roomPath = labs[i];    
                 const temp = d.temperature || 0;
                 const hum = d.humidity || 0;
                 const minT = d.thresholds?.minTemp || 20;
