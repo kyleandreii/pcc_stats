@@ -878,30 +878,40 @@
 
         function initializeRoom1DualUnits() {
             const roomPath = "Room_1";
-            console.log("[Init] Initializing dual-unit structure for Room_1");
+            console.log("[Init] Checking if dual-unit structure needs initialization for Room_1");
             
-            const unit1Data = {
-                ac: false,
-                ac_command: "IDLE",
-                targetTemp: 24,
-                status: "NORMAL"
-            };
-            
-            const unit2Data = {
-                ac: false,
-                ac_command: "IDLE",
-                targetTemp: 24,
-                status: "NORMAL"
-            };
-            
-            // Initialize unit structure
-            db.ref(`${roomPath}/units/unit_1`).set(unit1Data)
-                .then(() => console.log("[Init] Unit 1 initialized"))
-                .catch(err => console.error("[Init] Unit 1 failed:", err));
-                
-            db.ref(`${roomPath}/units/unit_2`).set(unit2Data)
-                .then(() => console.log("[Init] Unit 2 initialized"))
-                .catch(err => console.error("[Init] Unit 2 failed:", err));
+            // Only initialize if units don't already exist to avoid overwriting Firebase state
+            db.ref(`${roomPath}/units`).once('value', (snapshot) => {
+                const unitsData = snapshot.val();
+                if (!unitsData) {
+                    console.log("[Init] Units don't exist, initializing dual-unit structure for Room_1");
+                    
+                    const unit1Data = {
+                        ac: false,
+                        ac_command: "IDLE",
+                        targetTemp: 24,
+                        status: "NORMAL"
+                    };
+                    
+                    const unit2Data = {
+                        ac: false,
+                        ac_command: "IDLE",
+                        targetTemp: 24,
+                        status: "NORMAL"
+                    };
+                    
+                    // Initialize unit structure
+                    db.ref(`${roomPath}/units/unit_1`).set(unit1Data)
+                        .then(() => console.log("[Init] Unit 1 initialized"))
+                        .catch(err => console.error("[Init] Unit 1 failed:", err));
+                        
+                    db.ref(`${roomPath}/units/unit_2`).set(unit2Data)
+                        .then(() => console.log("[Init] Unit 2 initialized"))
+                        .catch(err => console.error("[Init] Unit 2 failed:", err));
+                } else {
+                    console.log("[Init] Units already exist, skipping initialization to preserve Firebase state");
+                }
+            });
         }
 
         function showInfo(roomIndex) {
