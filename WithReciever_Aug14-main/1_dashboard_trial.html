@@ -959,7 +959,7 @@
                 console.log(`[Dashboard] ${roomPath} - last_seen: ${lastSeen} (${lastSeen ? new Date(lastSeen).toISOString() : 'null'}), timeSinceLastSeen: ${Math.floor(timeSinceLastSeen/1000)}s, isOnline: ${isDeviceOnline}`);
                 
                 // Firebase is authoritative for AC state - use it directly for cross-device sync
-                const isDualUnitRoom = roomPath === "Room_1" && d.units;
+                const isDualUnitRoom = roomPath === "Room_1" && !!d.units;
                 console.log(`[Dashboard] ${roomPath} - isDualUnitRoom: ${isDualUnitRoom}, has units: ${!!d.units}`);
                 let isPoweredOn;
                 let unit1State = false;
