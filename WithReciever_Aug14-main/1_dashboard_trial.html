@@ -972,6 +972,7 @@
                 
                 if (isDualUnitRoom) {
                     // For dual-unit rooms, check if either unit is on
+                    console.log(`[Dashboard] ${roomPath} - Raw units data:`, JSON.stringify(d.units));
                     unit1State = d.units?.unit_1?.ac === true || d.units?.unit_1?.ac === "ON" || d.units?.unit_1?.ac === 1;
                     unit2State = d.units?.unit_2?.ac === true || d.units?.unit_2?.ac === "ON" || d.units?.unit_2?.ac === 1;
                     isPoweredOn = unit1State || unit2State;
