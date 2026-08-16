@@ -619,7 +619,6 @@
     const lastDateStored = localStorage.getItem('last_active_date');
 
     if (lastDateStored !== todayKey) {
-        localStorage.removeItem('roomUsage');
         localStorage.removeItem('alertCounters');
         localStorage.removeItem('trendHistory');
         localStorage.setItem('last_active_date', todayKey);
@@ -632,7 +631,7 @@
     }
 
     let trendHistory = JSON.parse(localStorage.getItem('trendHistory')) || { timeline: [], temp: {}, hum: {} };
-    let roomUsage = JSON.parse(localStorage.getItem('roomUsage')) || {};
+    let roomUsage = {}; // Will be loaded from Firebase
     let alertCounters = JSON.parse(localStorage.getItem('alertCounters')) || {};
     let dailyAnalytics = JSON.parse(localStorage.getItem('dailyAnalytics')) || { data: {} }; 
     
@@ -664,7 +663,8 @@
         roomUsage = {};
         alertCounters = {};
         trendHistory = { timeline: [], temp: {}, hum: {} };
-        localStorage.setItem('roomUsage', JSON.stringify(roomUsage));
+        // Clear roomUsage from Firebase
+        db.ref('analytics/roomUsage').set({});
         localStorage.setItem('alertCounters', JSON.stringify(alertCounters));
         localStorage.setItem('trendHistory', JSON.stringify(trendHistory));
         localStorage.setItem('lastSystemReset', newTimestamp);
@@ -717,6 +717,14 @@
             text.innerText = "Firebase Connection: Secured";
             checkGlobalReset();
             loadAirconConfig();
+            // Load roomUsage from Firebase
+            db.ref('analytics/roomUsage').on('value', (snapshot) => {
+                const usageData = snapshot.val();
+                if (usageData) {
+                    roomUsage = usageData;
+                    console.log('[Analytics] Loaded roomUsage from Firebase:', roomUsage);
+                }
+            });
         } else {
             indicator.className = "flex h-3 w-3 rounded-full bg-red-500 animate-bounce";
             text.innerText = "Attempting Connection...";
@@ -1616,6 +1624,9 @@
                 }
             });
 
+            // Save roomUsage to Firebase for cross-device sync
+            db.ref('analytics/roomUsage').set(roomUsage);
+
             // Use shared utility for summary cards
             const stats = calculateStats(labsData, labKeys);
             updateSummaryCards(stats, {
@@ -1634,7 +1645,6 @@
                 humChart.data.labels = trendHistory.timeline;
             }
 
-            localStorage.setItem('roomUsage', JSON.stringify(roomUsage));
             localStorage.setItem('alertCounters', JSON.stringify(alertCounters));
             document.getElementById('last-update').innerText = "LIVE SYNC: " + new Date().toLocaleTimeString();
         });

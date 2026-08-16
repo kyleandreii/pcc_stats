@@ -351,8 +351,8 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // Analytics tracking variables
-        let roomUsage = JSON.parse(localStorage.getItem('roomUsage')) || {};
+        // Analytics tracking variables - Firebase is authoritative
+        let roomUsage = {}; // Will be loaded from Firebase
 
         db.ref(".info/connected").on("value", (snap) => {
             const indicator = document.getElementById('conn-indicator');
@@ -390,6 +390,15 @@
 
         function loadRoomsFromFirebase() {
             console.log('[loadRoomsFromFirebase] Starting Firebase connection...');
+            
+            // Load roomUsage from Firebase for analytics
+            db.ref('analytics/roomUsage').on('value', (snapshot) => {
+                const usageData = snapshot.val();
+                if (usageData) {
+                    roomUsage = usageData;
+                    console.log('[loadRoomsFromFirebase] Loaded roomUsage from Firebase:', roomUsage);
+                }
+            });
             
             // Test Firebase connection
             db.ref('.info/connected').on('value', (snapshot) => {
@@ -442,23 +451,9 @@
                             console.log(`[loadRoomsFromFirebase] Added new room: ${key} as ${displayLabel}`);
                         }
                         
-                        // localStorage is authoritative for AC state - never override with Firebase
-                        const localACState = localStorage.getItem(`ac_state_${key}`);
-                        
-                        // Create room data but EXCLUDE 'ac' field from Firebase to prevent any override
-                        const { ac: firebaseAC, ...roomDataWithoutAC } = data[key];
-                        const roomData = roomDataWithoutAC;
-                        
-                        if (localACState !== null) {
-                            // Always use localStorage state - it's the authoritative source
-                            roomData.ac = localACState === 'true';
-                            console.log(`[loadRoomsFromFirebase] Using localStorage AC state for ${key}: ${roomData.ac} (Firebase AC excluded)`);
-                        } else {
-                            // Initialize localStorage from Firebase if not set
-                            localStorage.setItem(`ac_state_${key}`, firebaseAC ? 'true' : 'false');
-                            roomData.ac = firebaseAC;
-                            console.log(`[loadRoomsFromFirebase] Initializing localStorage from Firebase for ${key}: ${firebaseAC}`);
-                        }
+                        // Firebase is authoritative for AC state - use it directly for cross-device sync
+                        const roomData = data[key];
+                        console.log(`[loadRoomsFromFirebase] Using Firebase AC state for ${key}: ${roomData.ac}`);
                         
                         // Initialize Firebase timestamp if it doesn't exist
                         if (!data[key].ac_timestamp) {
@@ -477,7 +472,7 @@
                             }
                         }
 
-                        // Track AC usage for analytics
+                        // Track AC usage for analytics - Firebase is authoritative
                         const now = Date.now();
                         if (!roomUsage[key]) roomUsage[key] = { totalMs: 0, lastStart: null, isActive: false };
                         
@@ -499,7 +494,8 @@
                             roomUsage[key].isActive = false;
                         }
                         
-                        localStorage.setItem('roomUsage', JSON.stringify(roomUsage));
+                        // Save to Firebase for cross-device sync
+                        db.ref(`analytics/roomUsage/${key}`).set(roomUsage[key]);
                         labsData[key] = roomData;
                         
                         console.log(`[loadRoomsFromFirebase] Found room: ${key} with AC state: ${roomData.ac}, last_seen: ${roomData.last_seen}`);
@@ -527,25 +523,9 @@
                                 // Update the room data with new last_seen regardless of value
                                 const index = labKeys.indexOf(roomId);
                                 if (index !== -1 && labsData[roomId]) {
-                                    // Preserve localStorage AC state (CRITICAL)
-                                    const localACState = localStorage.getItem(`ac_state_${roomId}`);
-                                    const localUnit1State = localStorage.getItem(`ac_state_${roomId}_unit_1`);
-                                    const localUnit2State = localStorage.getItem(`ac_state_${roomId}_unit_2`);
-                                    
+                                    // Firebase is authoritative - use Firebase AC state directly
                                     labsData[roomId].last_seen = lastSeen || 0;
                                     latestData[index].last_seen = lastSeen || 0;
-                                    if (localACState !== null) {
-                                        labsData[roomId].ac = localACState === 'true';
-                                        latestData[index].ac = localACState === 'true';
-                                    }
-                                    if (localUnit1State !== null && labsData[roomId].units) {
-                                        labsData[roomId].units.unit_1.ac = localUnit1State === 'true';
-                                        latestData[index].units.unit_1.ac = localUnit1State === 'true';
-                                    }
-                                    if (localUnit2State !== null && labsData[roomId].units) {
-                                        labsData[roomId].units.unit_2.ac = localUnit2State === 'true';
-                                        latestData[index].units.unit_2.ac = localUnit2State === 'true';
-                                    }
                                     console.log(`[Heartbeat] Updating ${roomId} in UI - re-rendering, last_seen: ${lastSeen}`);
                                     // Re-render to update heartbeat animation
                                     renderDashboard();
@@ -719,21 +699,15 @@
         function toggleAC(roomPath, isChecked) {
             console.log(`[Dashboard] Toggle ${roomPath} to ${isChecked ? 'ON' : 'OFF'}`);
             
-            // Persist to localStorage for persistence across refreshes (authoritative source)
-            localStorage.setItem(`ac_state_${roomPath}`, isChecked.toString());
-            console.log(`[Dashboard] Saved to localStorage: ac_state_${roomPath} = ${isChecked.toString()}`);
-            
-            // Track timestamp for duration calculation in Firebase
+            // Firebase is authoritative - update it directly for cross-device sync
             const timestamp = Date.now();
-            db.ref(`${roomPath}/ac_timestamp`).set(timestamp);
-            console.log(`[Dashboard] Saved timestamp to Firebase: ${roomPath}/ac_timestamp = ${timestamp}`);
+            const cmd = isChecked ? "ON" : "OFF";
             
             // Set optimistic UI state to prevent immediate re-render conflicts
             pendingUpdates[roomPath] = isChecked;
             
             // Update database - Arduino expects "ON" or "OFF"
-            const cmd = isChecked ? "ON" : "OFF";
-            db.ref(roomPath).update({ ac: isChecked, ac_command: cmd })
+            db.ref(roomPath).update({ ac: isChecked, ac_command: cmd, ac_timestamp: timestamp })
                 .then(() => {
                     console.log(`[Dashboard] Update succeeded for ${roomPath}`);
                     // Clear pending flag once update completes
@@ -753,17 +727,11 @@
             const cmd = isChecked ? "ON" : "OFF";
             console.log(`[Dashboard] Toggle ${unitPath} to ${isChecked ? 'ON' : 'OFF'}`);
             
-            // Persist to localStorage for persistence across refreshes
-            localStorage.setItem(`ac_state_${roomPath}_${unit}`, isChecked.toString());
-            console.log(`[Dashboard] Saved to localStorage: ac_state_${roomPath}_${unit} = ${isChecked.toString()}`);
-            
-            // Track timestamp for duration calculation in Firebase
+            // Firebase is authoritative - update it directly for cross-device sync
             const timestamp = Date.now();
-            db.ref(`${unitPath}/ac_timestamp`).set(timestamp);
-            console.log(`[Dashboard] Saved timestamp to Firebase: ${unitPath}/ac_timestamp = ${timestamp}`);
             
             // Update unit-specific Firebase path
-            db.ref(unitPath).update({ ac: isChecked, ac_command: cmd })
+            db.ref(unitPath).update({ ac: isChecked, ac_command: cmd, ac_timestamp: timestamp })
                 .then(() => {
                     console.log(`[Dashboard] Unit ${unit} update succeeded for ${roomPath}`);
                 })
@@ -797,17 +765,22 @@
         }
         
         function getDurationDisplay(roomPath, unit = null) {
-            const stateKey = unit ? `ac_state_${roomPath}_${unit}` : `ac_state_${roomPath}`;
-            const state = localStorage.getItem(stateKey);
-            
-            // Get timestamp from Firebase data
+            // Firebase is authoritative - get state from Firebase data
             const firebasePath = unit ? `${roomPath}/units/${unit}/ac_timestamp` : `${roomPath}/ac_timestamp`;
             const timestamp = labsData[roomPath]?.units?.[unit]?.ac_timestamp || labsData[roomPath]?.ac_timestamp;
             
-            console.log(`[Duration] ${roomPath} ${unit || ''}: timestamp=${timestamp}, state=${state}`);
+            // Get AC state from Firebase
+            let isOn = false;
+            if (unit) {
+                isOn = labsData[roomPath]?.units?.[unit]?.ac === true || labsData[roomPath]?.units?.[unit]?.ac === "ON" || labsData[roomPath]?.units?.[unit]?.ac === 1;
+            } else {
+                isOn = labsData[roomPath]?.ac === true || labsData[roomPath]?.ac === "ON" || labsData[roomPath]?.ac === 1;
+            }
             
-            if (!timestamp || !state) {
-                console.log(`[Duration] ${roomPath} ${unit || ''}: Missing data, returning Unknown`);
+            console.log(`[Duration] ${roomPath} ${unit || ''}: timestamp=${timestamp}, isOn=${isOn}`);
+            
+            if (!timestamp) {
+                console.log(`[Duration] ${roomPath} ${unit || ''}: Missing timestamp, returning Unknown`);
                 return 'Unknown';
             }
             
@@ -821,12 +794,10 @@
                 const newTimestamp = now;
                 const updatePath = unit ? `${roomPath}/units/${unit}` : roomPath;
                 db.ref(`${updatePath}/ac_timestamp`).set(newTimestamp);
-                return 'Just now ' + (state === 'true' ? 'online' : 'offline');
+                return 'Just now ' + (isOn ? 'online' : 'offline');
             }
             
             const duration = formatDuration(timestamp);
-            const isOn = state === 'true';
-            
             const result = `${duration} ${isOn ? 'online' : 'offline'}`;
             console.log(`[Duration] ${roomPath} ${unit || ''}: Returning ${result}`);
             return result;
@@ -956,63 +927,19 @@
                 
                 console.log(`[Dashboard] ${roomPath} - last_seen: ${lastSeen} (${lastSeen ? new Date(lastSeen).toISOString() : 'null'}), timeSinceLastSeen: ${Math.floor(timeSinceLastSeen/1000)}s, isOnline: ${isDeviceOnline}`);
                 
-                // Check if this is a dual-unit room (Room_1)
+                // Firebase is authoritative for AC state - use it directly for cross-device sync
                 const isDualUnitRoom = roomPath === "Room_1" && d.units;
-                
-                // Get unit states for dual-unit rooms (with localStorage backup)
-                let unit1State = false, unit2State = false;
-                if (isDualUnitRoom) {
-                    const unit1Local = localStorage.getItem(`ac_state_${roomPath}_unit_1`);
-                    const unit2Local = localStorage.getItem(`ac_state_${roomPath}_unit_2`);
-                    const firebaseUnit1 = d.units?.unit_1?.ac;
-                    const firebaseUnit2 = d.units?.unit_2?.ac;
-                    
-                    console.log(`[Dashboard] ${roomPath} - Firebase units: unit1=${firebaseUnit1}, unit2=${firebaseUnit2}`);
-                    console.log(`[Dashboard] ${roomPath} - localStorage units: unit1=${unit1Local}, unit2=${unit2Local}`);
-                    
-                    unit1State = unit1Local !== null ? (unit1Local === 'true') : (firebaseUnit1 || false);
-                    unit2State = unit2Local !== null ? (unit2Local === 'true') : (firebaseUnit2 || false);
-                    
-                    console.log(`[Dashboard] ${roomPath} - Final unit states: unit1=${unit1State}, unit2=${unit2State}`);
-                    
-                    // Initialize localStorage if not set
-                    if (unit1Local === null && firebaseUnit1 !== undefined) {
-                        localStorage.setItem(`ac_state_${roomPath}_unit_1`, firebaseUnit1.toString());
-                        console.log(`[Dashboard] ${roomPath} - Initialized localStorage unit1 from Firebase: ${firebaseUnit1}`);
-                    }
-                    if (unit2Local === null && firebaseUnit2 !== undefined) {
-                        localStorage.setItem(`ac_state_${roomPath}_unit_2`, firebaseUnit2.toString());
-                        console.log(`[Dashboard] ${roomPath} - Initialized localStorage unit2 from Firebase: ${firebaseUnit2}`);
-                    }
-                    
-                    // Initialize Firebase timestamps for units if they don't exist
-                    if (!d.units?.unit_1?.ac_timestamp) {
-                        db.ref(`${roomPath}/units/unit_1/ac_timestamp`).set(Date.now());
-                        console.log(`[Dashboard] ${roomPath} - Initialized Firebase timestamp for unit_1`);
-                    }
-                    if (!d.units?.unit_2?.ac_timestamp) {
-                        db.ref(`${roomPath}/units/unit_2/ac_timestamp`).set(Date.now());
-                        console.log(`[Dashboard] ${roomPath} - Initialized Firebase timestamp for unit_2`);
-                    }
-                }
-                
-                // Use localStorage as authoritative source for AC state - completely ignore Firebase if localStorage exists
-                const localACState = localStorage.getItem(`ac_state_${roomPath}`);
                 let isPoweredOn;
+                
                 if (isDualUnitRoom) {
-                    isPoweredOn = unit1State || unit2State;  // At least one unit is on
+                    // For dual-unit rooms, check if either unit is on
+                    const unit1State = d.units?.unit_1?.ac === true || d.units?.unit_1?.ac === "ON" || d.units?.unit_1?.ac === 1;
+                    const unit2State = d.units?.unit_2?.ac === true || d.units?.unit_2?.ac === "ON" || d.units?.unit_2?.ac === 1;
+                    isPoweredOn = unit1State || unit2State;
                     console.log(`[Dashboard] ${roomPath} - Dual unit: unit1=${unit1State}, unit2=${unit2State}, isPoweredOn=${isPoweredOn}`);
-                } else if (localACState !== null) {
-                    // localStorage exists - use it as the truth
-                    isPoweredOn = localACState === 'true';
-                    console.log(`[Dashboard] ${roomPath} - Using localStorage: ${localACState}, isPoweredOn=${isPoweredOn}`);
-                } else if (pendingUpdates[roomPath] !== undefined) {
-                    // Use pending state if available
-                    isPoweredOn = pendingUpdates[roomPath];
-                    console.log(`[Dashboard] ${roomPath} - Using pending state: ${pendingUpdates[roomPath]}, isPoweredOn=${isPoweredOn}`);
                 } else {
-                    // Fall back to Firebase only if localStorage doesn't exist
-                    isPoweredOn = d.ac === true;
+                    // Single unit rooms - use Firebase AC state directly
+                    isPoweredOn = d.ac === true || d.ac === "ON" || d.ac === 1;
                     console.log(`[Dashboard] ${roomPath} - Using Firebase: ${d.ac}, isPoweredOn=${isPoweredOn}`);
                 }
                 
