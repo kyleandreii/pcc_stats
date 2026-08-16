@@ -1117,8 +1117,8 @@
                 }
                 
                 const timeDiff = Date.now() - lastSeen;
-                const isOffline = timeDiff > OFFLINE_THRESHOLD_MS;
-                console.log(`[Offline Detection] ${roomId} - Time diff: ${Math.floor(timeDiff / 1000)}s, Threshold: ${OFFLINE_THRESHOLD_MS / 1000}s, Offline: ${isOffline}`);
+                const isOffline = timeDiff > HEARTBEAT_TIMEOUT;
+                console.log(`[Offline Detection] ${roomId} - Time diff: ${Math.floor(timeDiff / 1000)}s, Threshold: ${HEARTBEAT_TIMEOUT / 1000}s, Offline: ${isOffline}`);
                 
                 // Update room data and re-render dashboard to show heartbeat animation
                 const roomIndex = labKeys.indexOf(roomId);
