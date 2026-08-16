@@ -960,6 +960,7 @@
                 
                 // Firebase is authoritative for AC state - use it directly for cross-device sync
                 const isDualUnitRoom = roomPath === "Room_1" && d.units;
+                console.log(`[Dashboard] ${roomPath} - isDualUnitRoom: ${isDualUnitRoom}, has units: ${!!d.units}`);
                 let isPoweredOn;
                 let unit1State = false;
                 let unit2State = false;
@@ -1046,6 +1047,7 @@
                             </div>
                             ${isDualUnitRoom ? `
                             <div class="grid grid-cols-2 gap-4 mb-5">
+                                <!-- Individual unit controls for dual-unit room -->
                                 <div class="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-4 border border-gray-200 shadow-sm">
                                     <div class="flex justify-between items-center mb-2">
                                         <p class="text-[9px] font-bold text-gray-600 uppercase">Unit 1</p>
