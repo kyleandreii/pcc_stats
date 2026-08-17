@@ -212,6 +212,23 @@ void loop() {
     FirebaseJson json;
     json.set(".sv", "timestamp");
     Firebase.RTDB.setJSON(&fbdo, "/Room_1/last_seen", &json);
+
+    // Store historical data for analytics
+    if (!isnan(t) && !isnan(h)) {
+      // Get current date and hour
+      time_t now = time(nullptr);
+      struct tm* timeinfo = localtime(&now);
+      char dateStr[11]; // YYYY-MM-DD
+      char hourStr[3];  // HH
+      strftime(dateStr, sizeof(dateStr), "%Y-%m-%d", timeinfo);
+      strftime(hourStr, sizeof(hourStr), "%H", timeinfo);
+      
+      String historyPath = "/history/Room_1/" + String(dateStr) + "/" + String(hourStr);
+      FirebaseJson historyData;
+      historyData.add("temperature", t);
+      historyData.add("humidity", h);
+      Firebase.RTDB.setJSON(&fbdo, historyPath.c_str(), &historyData);
+    }
   }
 }
 
