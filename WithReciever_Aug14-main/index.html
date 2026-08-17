@@ -100,7 +100,7 @@
  
                 <div class="flex items-center justify-between px-1">
                     <label class="flex items-center cursor-pointer group">
-                        <input type="checkbox" class="h-4 w-4 text-maroon focus:ring-maroon border-gray-300 rounded transition-all">
+                        <input type="checkbox" id="stay-logged-in" class="h-4 w-4 text-maroon focus:ring-maroon border-gray-300 rounded transition-all">
                         <span class="ml-2 text-xs font-semibold text-gray-500 group-hover:text-gray-700">Stay logged in</span>
                     </label>
                     <a href="#" id="forgot-password" class="text-xs font-bold text-maroon hover:underline decoration-2 underline-offset-4">Forgot Key?</a>
@@ -168,18 +168,24 @@
            
             const email = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value;
- 
+            const stayLoggedIn = document.getElementById('stay-logged-in').checked;
+
             if (!email.endsWith('@pccnet.edu.ph')) {
                 errorMsg.innerText = "Access Denied: Please use your @pccnet.edu.ph email.";
                 errorMsg.classList.remove('hidden');
                 return;
             }
- 
+
             btnText.innerHTML = '<i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i> Verifying...';
             submitBtn.disabled = true;
             lucide.createIcons();
- 
-            auth.signInWithEmailAndPassword(email, password)
+
+            // Set auth persistence based on checkbox
+            const persistenceType = stayLoggedIn ? firebase.auth.Auth.Persistence.LOCAL : firebase.auth.Auth.Session;
+            auth.setPersistence(persistenceType)
+                .then(() => {
+                    return auth.signInWithEmailAndPassword(email, password);
+                })
                 .then(() => {
                     window.location.href = "1_dashboard_trial.html";
                 })
@@ -191,6 +197,14 @@
                     submitBtn.disabled = false;
                     lucide.createIcons();
                 });
+        });
+
+        // --- 2.5. CHECK AUTH STATE ON PAGE LOAD ---
+        auth.onAuthStateChanged((user) => {
+            if (user) {
+                // User is already logged in, redirect to dashboard
+                window.location.href = "1_dashboard_trial.html";
+            }
         });
  
         // --- 3. CREATE ACCOUNT (REGISTER) LOGIC ---
