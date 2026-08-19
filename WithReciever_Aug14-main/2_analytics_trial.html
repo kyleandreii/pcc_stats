@@ -912,6 +912,9 @@
             }
         });
         
+        // Initialize trend charts with existing data
+        initializeTrendCharts();
+        
         alertChart = new Chart(document.getElementById("alertChart"), {
             type: 'bar', 
             data: { labels: [], datasets: [{ label: 'Alert Events', data: [], backgroundColor: palette, borderRadius: 8 }] },
@@ -967,6 +970,86 @@
         alertChart.data.labels = labels;
         alertChart.data.datasets[0].data = labKeys.map(k => alertCounters[k] || 0);
         alertChart.update();
+    }
+
+    function updateTrendCharts() {
+        if (!tempChart || !humChart) return;
+        
+        // If trendHistory is empty, use current live data as a single data point
+        if (trendHistory.timeline.length === 0 && labKeys.length > 0) {
+            const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            trendHistory.timeline.push(nowTime);
+            
+            labKeys.forEach(room => {
+                const d = labsData[room] || { temperature: 0, humidity: 0 };
+                if (!trendHistory.temp[room]) trendHistory.temp[room] = [];
+                if (!trendHistory.hum[room]) trendHistory.hum[room] = [];
+                
+                trendHistory.temp[room].push(parseFloat(d.temperature) || 0);
+                trendHistory.hum[room].push(parseFloat(d.humidity) || 0);
+            });
+            
+            localStorage.setItem('trendHistory', JSON.stringify(trendHistory));
+            localStorage.setItem('last_trend_update', Date.now().toString());
+        }
+        
+        // Create datasets from trendHistory
+        const tempDatasets = labKeys.map((room, index) => {
+            const color = palette[index % palette.length];
+            const data = trendHistory.temp[room] || [];
+            return {
+                label: labsData[room]?.customRoomName || room.replace('_', ' '),
+                data: data,
+                borderColor: color,
+                backgroundColor: (context) => {
+                    const ctx = context.chart.ctx;
+                    const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+                    gradient.addColorStop(0, color + '40');
+                    gradient.addColorStop(1, color + '00');
+                    return gradient;
+                },
+                borderWidth: 2,
+                tension: 0.4,
+                fill: true,
+                pointRadius: 3,
+                pointHoverRadius: 5
+            };
+        });
+
+        const humDatasets = labKeys.map((room, index) => {
+            const color = palette[index % palette.length];
+            const data = trendHistory.hum[room] || [];
+            return {
+                label: labsData[room]?.customRoomName || room.replace('_', ' '),
+                data: data,
+                borderColor: color,
+                backgroundColor: (context) => {
+                    const ctx = context.chart.ctx;
+                    const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+                    gradient.addColorStop(0, color + '40');
+                    gradient.addColorStop(1, color + '00');
+                    return gradient;
+                },
+                borderWidth: 2,
+                tension: 0.4,
+                fill: true,
+                pointRadius: 3,
+                pointHoverRadius: 5
+            };
+        });
+
+        tempChart.data.labels = trendHistory.timeline;
+        tempChart.data.datasets = tempDatasets;
+        tempChart.update();
+
+        humChart.data.labels = trendHistory.timeline;
+        humChart.data.datasets = humDatasets;
+        humChart.update();
+    }
+
+    // Initialize trend charts with existing data
+    function initializeTrendCharts() {
+        updateTrendCharts();
     }
 
     function getUsageHoursForDate(room, dateStr) {
@@ -1839,6 +1922,12 @@
             if (labKeys.length === 0) {
                 console.warn('[Analytics Firebase Listener] No Room_ keys found in data!');
             }
+            
+            // Update trend charts when labKeys are populated
+            if (labKeys.length > 0) {
+                updateTrendCharts();
+            }
+            
             let sumT = 0, currentAl = 0;
             const now = Date.now();
 
@@ -1946,8 +2035,7 @@
             });
             
             updateBarCharts();
-            tempChart.update('none');
-            humChart.update('none');
+            updateTrendCharts();
             
             if (trendHistory.timeline.length > 0) {
                 tempChart.data.labels = trendHistory.timeline;
