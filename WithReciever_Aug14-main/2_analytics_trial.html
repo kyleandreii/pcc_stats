@@ -894,33 +894,36 @@
     function minuteUpdate() {
         if (labKeys.length === 0) return;
         const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const currentMinute = new Date().getMinutes();
         
-        // Only add new time point if it's different from the last one (prevents duplicates)
-        if (trendHistory.timeline.length === 0 || trendHistory.timeline[trendHistory.timeline.length - 1] !== nowTime) {
-            if (trendHistory.timeline.length >= 15) {
-                trendHistory.timeline.shift();
-                labKeys.forEach(room => { 
-                    if(trendHistory.temp[room]) trendHistory.temp[room].shift(); 
-                    if(trendHistory.hum[room]) trendHistory.hum[room].shift(); 
-                });
-            }
-            
-            trendHistory.timeline.push(nowTime);
-            labKeys.forEach(room => {
-                const d = labsData[room] || { temperature: 0, humidity: 0 };
-                if (!trendHistory.temp[room]) trendHistory.temp[room] = [];
-                if (!trendHistory.hum[room]) trendHistory.hum[room] = [];
+        // Only add new time point every 30 minutes (at :00 and :30)
+        if (currentMinute % 30 === 0) {
+            if (trendHistory.timeline.length === 0 || trendHistory.timeline[trendHistory.timeline.length - 1] !== nowTime) {
+                if (trendHistory.timeline.length >= 24) {
+                    trendHistory.timeline.shift();
+                    labKeys.forEach(room => { 
+                        if(trendHistory.temp[room]) trendHistory.temp[room].shift(); 
+                        if(trendHistory.hum[room]) trendHistory.hum[room].shift(); 
+                    });
+                }
                 
-                trendHistory.temp[room].push(parseFloat(d.temperature) || 0);
-                trendHistory.hum[room].push(parseFloat(d.humidity) || 0);
-            });
-            
-            tempChart.data.labels = trendHistory.timeline;
-            humChart.data.labels = trendHistory.timeline;
-            tempChart.update(); 
-            humChart.update();
-            localStorage.setItem('trendHistory', JSON.stringify(trendHistory));
-            localStorage.setItem('last_trend_update', Date.now().toString());
+                trendHistory.timeline.push(nowTime);
+                labKeys.forEach(room => {
+                    const d = labsData[room] || { temperature: 0, humidity: 0 };
+                    if (!trendHistory.temp[room]) trendHistory.temp[room] = [];
+                    if (!trendHistory.hum[room]) trendHistory.hum[room] = [];
+                    
+                    trendHistory.temp[room].push(parseFloat(d.temperature) || 0);
+                    trendHistory.hum[room].push(parseFloat(d.humidity) || 0);
+                });
+                
+                tempChart.data.labels = trendHistory.timeline;
+                humChart.data.labels = trendHistory.timeline;
+                tempChart.update(); 
+                humChart.update();
+                localStorage.setItem('trendHistory', JSON.stringify(trendHistory));
+                localStorage.setItem('last_trend_update', Date.now().toString());
+            }
         }
 
         const todayStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -928,7 +931,51 @@
             if (!dailyAnalytics.data[room]) dailyAnalytics.data[room] = {};
             let liveMs = roomUsage[room]?.totalMs || 0;
             if (roomUsage[room]?.isActive) liveMs += (Date.now() - roomUsage[room].lastStart);
-            dailyAnalytics.data[room][todayStr] = parseFloat((liveMs / 3600000).toFixed(2));
+            let hours = parseFloat((liveMs / 3600000).toFixed(2));
+            
+            // Handle rollover if usage exceeds 24 hours
+            if (hours > 24) {
+                const excessHours = hours - 24;
+                dailyAnalytics.data[room][todayStr] = 24; // Cap current day at 24h
+                
+                // Calculate next day's date label
+                let currentDate = new Date();
+                let currentExcess = excessHours;
+                let dayOffset = 1;
+                
+                // Cascading rollover - keep rolling over until excess is less than 24h
+                while (currentExcess > 0) {
+                    const nextDate = new Date();
+                    nextDate.setDate(nextDate.getDate() + dayOffset);
+                    const nextDateStr = nextDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                    
+                    if (!dailyAnalytics.data[room][nextDateStr]) {
+                        dailyAnalytics.data[room][nextDateStr] = 0;
+                    }
+                    
+                    // Add current excess to the next day
+                    dailyAnalytics.data[room][nextDateStr] += currentExcess;
+                    
+                    // Check if this next day now exceeds 24h
+                    if (dailyAnalytics.data[room][nextDateStr] > 24) {
+                        const newExcess = dailyAnalytics.data[room][nextDateStr] - 24;
+                        dailyAnalytics.data[room][nextDateStr] = 24; // Cap this day at 24h
+                        currentExcess = newExcess; // Continue rolling over
+                        dayOffset++;
+                    } else {
+                        currentExcess = 0; // Stop cascading
+                    }
+                }
+                
+                // Reset roomUsage to only track today's usage (subtract the rolled over amount)
+                const rolledOverMs = excessHours * 3600000;
+                roomUsage[room].totalMs = liveMs - rolledOverMs;
+                if (roomUsage[room].isActive) {
+                    roomUsage[room].lastStart = Date.now(); // Reset start time for current session
+                }
+            } else {
+                dailyAnalytics.data[room][todayStr] = hours;
+            }
         });
         localStorage.setItem('dailyAnalytics', JSON.stringify(dailyAnalytics));
     }
@@ -936,33 +983,36 @@
     function minuteUpdate() {
         if (labKeys.length === 0) return;
         const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const currentMinute = new Date().getMinutes();
         
-        // Only add new time point if it's different from the last one (prevents duplicates)
-        if (trendHistory.timeline.length === 0 || trendHistory.timeline[trendHistory.timeline.length - 1] !== nowTime) {
-            if (trendHistory.timeline.length >= 15) {
-                trendHistory.timeline.shift();
-                labKeys.forEach(room => { 
-                    if(trendHistory.temp[room]) trendHistory.temp[room].shift(); 
-                    if(trendHistory.hum[room]) trendHistory.hum[room].shift(); 
-                });
-            }
-            
-            trendHistory.timeline.push(nowTime);
-            labKeys.forEach(room => {
-                const d = labsData[room] || { temperature: 0, humidity: 0 };
-                if (!trendHistory.temp[room]) trendHistory.temp[room] = [];
-                if (!trendHistory.hum[room]) trendHistory.hum[room] = [];
+        // Only add new time point every 30 minutes (at :00 and :30)
+        if (currentMinute % 30 === 0) {
+            if (trendHistory.timeline.length === 0 || trendHistory.timeline[trendHistory.timeline.length - 1] !== nowTime) {
+                if (trendHistory.timeline.length >= 24) {
+                    trendHistory.timeline.shift();
+                    labKeys.forEach(room => { 
+                        if(trendHistory.temp[room]) trendHistory.temp[room].shift(); 
+                        if(trendHistory.hum[room]) trendHistory.hum[room].shift(); 
+                    });
+                }
                 
-                trendHistory.temp[room].push(parseFloat(d.temperature) || 0);
-                trendHistory.hum[room].push(parseFloat(d.humidity) || 0);
-            });
-            
-            tempChart.data.labels = trendHistory.timeline;
-            humChart.data.labels = trendHistory.timeline;
-            tempChart.update(); 
-            humChart.update();
-            localStorage.setItem('trendHistory', JSON.stringify(trendHistory));
-            localStorage.setItem('last_trend_update', Date.now().toString());
+                trendHistory.timeline.push(nowTime);
+                labKeys.forEach(room => {
+                    const d = labsData[room] || { temperature: 0, humidity: 0 };
+                    if (!trendHistory.temp[room]) trendHistory.temp[room] = [];
+                    if (!trendHistory.hum[room]) trendHistory.hum[room] = [];
+                    
+                    trendHistory.temp[room].push(parseFloat(d.temperature) || 0);
+                    trendHistory.hum[room].push(parseFloat(d.humidity) || 0);
+                });
+                
+                tempChart.data.labels = trendHistory.timeline;
+                humChart.data.labels = trendHistory.timeline;
+                tempChart.update(); 
+                humChart.update();
+                localStorage.setItem('trendHistory', JSON.stringify(trendHistory));
+                localStorage.setItem('last_trend_update', Date.now().toString());
+            }
         }
 
         const todayStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -970,7 +1020,51 @@
             if (!dailyAnalytics.data[room]) dailyAnalytics.data[room] = {};
             let liveMs = roomUsage[room]?.totalMs || 0;
             if (roomUsage[room]?.isActive) liveMs += (Date.now() - roomUsage[room].lastStart);
-            dailyAnalytics.data[room][todayStr] = parseFloat((liveMs / 3600000).toFixed(2));
+            let hours = parseFloat((liveMs / 3600000).toFixed(2));
+            
+            // Handle rollover if usage exceeds 24 hours
+            if (hours > 24) {
+                const excessHours = hours - 24;
+                dailyAnalytics.data[room][todayStr] = 24; // Cap current day at 24h
+                
+                // Calculate next day's date label
+                let currentDate = new Date();
+                let currentExcess = excessHours;
+                let dayOffset = 1;
+                
+                // Cascading rollover - keep rolling over until excess is less than 24h
+                while (currentExcess > 0) {
+                    const nextDate = new Date();
+                    nextDate.setDate(nextDate.getDate() + dayOffset);
+                    const nextDateStr = nextDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                    
+                    if (!dailyAnalytics.data[room][nextDateStr]) {
+                        dailyAnalytics.data[room][nextDateStr] = 0;
+                    }
+                    
+                    // Add current excess to the next day
+                    dailyAnalytics.data[room][nextDateStr] += currentExcess;
+                    
+                    // Check if this next day now exceeds 24h
+                    if (dailyAnalytics.data[room][nextDateStr] > 24) {
+                        const newExcess = dailyAnalytics.data[room][nextDateStr] - 24;
+                        dailyAnalytics.data[room][nextDateStr] = 24; // Cap this day at 24h
+                        currentExcess = newExcess; // Continue rolling over
+                        dayOffset++;
+                    } else {
+                        currentExcess = 0; // Stop cascading
+                    }
+                }
+                
+                // Reset roomUsage to only track today's usage (subtract the rolled over amount)
+                const rolledOverMs = excessHours * 3600000;
+                roomUsage[room].totalMs = liveMs - rolledOverMs;
+                if (roomUsage[room].isActive) {
+                    roomUsage[room].lastStart = Date.now(); // Reset start time for current session
+                }
+            } else {
+                dailyAnalytics.data[room][todayStr] = hours;
+            }
         });
         localStorage.setItem('dailyAnalytics', JSON.stringify(dailyAnalytics));
 
@@ -1715,17 +1809,13 @@
     let currentDate = new Date();
     let analyticsChart = null;
 
-    // Format usage time - show hours/minutes, cap at 24h for daily usage to avoid confusion
-    function formatUsageTime(hours, isDaily = false) {
-        if (isDaily && hours > 24) {
-            // For daily usage, cap at 24h to avoid showing "2d" which is misleading
-            hours = 24;
-        }
+    // Format usage time - show days if > 24h, hours/minutes if < 24h
+    function formatUsageTime(hours) {
         if (hours < 1) {
             const minutes = Math.round(hours * 60);
             return `${minutes}m`;
         }
-        if (hours >= 24 && !isDaily) {
+        if (hours >= 24) {
             const days = Math.floor(hours / 24);
             const remainingHours = Math.floor(hours % 24);
             if (remainingHours === 0) {
@@ -2255,7 +2345,7 @@
         if (currentMetric === 'cost') {
             statEl.textContent = `₱${totalValue.toFixed(2)}`;
         } else if (currentMetric === 'usage') {
-            statEl.textContent = formatUsageTime(totalValue, currentPeriod === 'day');
+            statEl.textContent = formatUsageTime(totalValue);
         } else if (currentMetric === 'temperature') {
             statEl.textContent = `${totalValue > 0 ? totalValue.toFixed(1) : '--'}°C`;
         } else if (currentMetric === 'humidity') {
@@ -2476,7 +2566,7 @@
         if (currentMetric === 'cost') {
             summaryTotal.textContent = `₱${totalValue.toFixed(2)}`;
         } else if (currentMetric === 'usage') {
-            summaryTotal.textContent = formatUsageTime(totalValue, currentPeriod === 'day');
+            summaryTotal.textContent = formatUsageTime(totalValue);
         } else if (currentMetric === 'temperature') {
             summaryTotal.textContent = `${totalValue > 0 ? totalValue.toFixed(1) : '--'}°C`;
         } else if (currentMetric === 'humidity') {
@@ -2687,7 +2777,7 @@
         if (currentMetric === 'cost') {
             statEl.textContent = `₱${totalValue.toFixed(2)}`;
         } else if (currentMetric === 'usage') {
-            statEl.textContent = formatUsageTime(totalValue, currentPeriod === 'day');
+            statEl.textContent = formatUsageTime(totalValue);
         } else if (currentMetric === 'temperature') {
             statEl.textContent = `${totalValue > 0 ? totalValue.toFixed(1) : '--'}°C`;
         } else if (currentMetric === 'humidity') {
@@ -2872,7 +2962,7 @@
         if (currentMetric === 'cost') {
             statEl.textContent = `₱${totalValue.toFixed(2)}`;
         } else if (currentMetric === 'usage') {
-            statEl.textContent = formatUsageTime(totalValue, currentPeriod === 'day');
+            statEl.textContent = formatUsageTime(totalValue);
         } else if (currentMetric === 'temperature') {
             statEl.textContent = `${totalValue > 0 ? totalValue.toFixed(1) : '--'}°C`;
         } else if (currentMetric === 'humidity') {
@@ -3034,7 +3124,7 @@
         if (currentMetric === 'cost') {
             statEl.textContent = `₱${totalValue.toFixed(2)}`;
         } else if (currentMetric === 'usage') {
-            statEl.textContent = formatUsageTime(totalValue, currentPeriod === 'day');
+            statEl.textContent = formatUsageTime(totalValue);
         } else if (currentMetric === 'temperature') {
             statEl.textContent = `${totalValue > 0 ? totalValue.toFixed(1) : '--'}°C`;
         } else if (currentMetric === 'humidity') {
@@ -3147,7 +3237,7 @@
         if (currentMetric === 'cost') {
             statEl.textContent = `₱${totalValue.toFixed(2)}`;
         } else if (currentMetric === 'usage') {
-            statEl.textContent = formatUsageTime(totalValue, currentPeriod === 'day');
+            statEl.textContent = formatUsageTime(totalValue);
         } else if (currentMetric === 'temperature') {
             statEl.textContent = `${totalValue > 0 ? totalValue.toFixed(1) : '--'}°C`;
         } else if (currentMetric === 'humidity') {
