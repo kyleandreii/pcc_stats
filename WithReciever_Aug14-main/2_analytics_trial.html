@@ -557,6 +557,7 @@
                         </div>
                     </div>
                     <div class="h-72"><canvas id="tempChart"></canvas></div>
+                    <div id="current-values-temp" class="flex flex-wrap gap-2 mt-3"></div>
                     <div id="timezone-label-temp" class="hidden text-[9px] text-gray-400 font-black uppercase tracking-wider mt-2 text-center">Times shown in Philippine Time (PHT, UTC+8)</div>
                 </div>
                 <div class="card bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
@@ -573,6 +574,7 @@
                         </div>
                     </div>
                     <div class="h-72"><canvas id="humChart"></canvas></div>
+                    <div id="current-values-hum" class="flex flex-wrap gap-2 mt-3"></div>
                     <div id="timezone-label-hum" class="hidden text-[9px] text-gray-400 font-black uppercase tracking-wider mt-2 text-center">Times shown in Philippine Time (PHT, UTC+8)</div>
                 </div>
             </div>
@@ -772,15 +774,69 @@
             data: { labels: trendHistory.timeline || [], datasets: [] }, 
             options: { 
                 ...commonCfg, 
-                animation: { duration: 0 },
+                animation: { duration: 750, easing: 'easeInOutQuart' },
                 scales: {
                     y: { 
                         ...commonCfg.scales.y,
-                        min: 15,
-                        max: 40,
-                        title: { display: true, text: 'Temperature (°C)', font: { weight: 'bold', size: 11 } }
+                        suggestedMin: 15,
+                        suggestedMax: 35,
+                        title: { display: true, text: 'Temperature (°C)', font: { weight: 'bold', size: 11 } },
+                        grid: { color: 'rgba(0,0,0,0.05)', borderDash: [5, 5] }
                     },
-                    x: commonCfg.scales.x
+                    x: { 
+                        ...commonCfg.scales.x,
+                        grid: { display: false }
+                    }
+                },
+                plugins: {
+                    ...commonCfg.plugins,
+                    legend: {
+                        ...commonCfg.plugins.legend,
+                        position: 'top',
+                        labels: { 
+                            font: { size: 11, family: 'Inter', weight: 'bold' }, 
+                            usePointStyle: true, 
+                            padding: 15,
+                            boxWidth: 8,
+                            boxHeight: 8
+                        } 
+                    },
+                    tooltip: {
+                        ...commonCfg.plugins.tooltip,
+                        backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                        titleColor: '#fff',
+                        bodyColor: '#fff',
+                        borderColor: 'rgba(255,255,255,0.1)',
+                        borderWidth: 1,
+                        padding: 12,
+                        cornerRadius: 8,
+                        displayColors: true,
+                        callbacks: {
+                            title: function(context) {
+                                if (isHistoricalView) {
+                                    const label = context[0].label;
+                                    const dateKey = document.getElementById('date-picker-temp').value;
+                                    if (dateKey) {
+                                        const hourMatch = label.match(/(\d+):00 (AM|PM)/);
+                                        if (hourMatch) {
+                                            let hour = parseInt(hourMatch[1]);
+                                            const period = hourMatch[2];
+                                            if (period === 'PM' && hour !== 12) hour += 12;
+                                            if (period === 'AM' && hour === 12) hour = 0;
+                                            const hourKey = `${String(hour).padStart(2, '0')}:00`;
+                                            return formatDateTimeForTooltip(dateKey, hourKey);
+                                        }
+                                    }
+                                }
+                                return context[0].label;
+                            },
+                            label: function(context) {
+                                const value = context.parsed.y;
+                                const label = context.dataset.label;
+                                return `${label}: ${value.toFixed(1)}°C`;
+                            }
+                        }
+                    }
                 }
             }
         });
@@ -789,15 +845,69 @@
             data: { labels: trendHistory.timeline || [], datasets: [] }, 
             options: { 
                 ...commonCfg, 
-                animation: { duration: 0 },
+                animation: { duration: 750, easing: 'easeInOutQuart' },
                 scales: {
                     y: { 
                         ...commonCfg.scales.y,
-                        min: 0,
-                        max: 100,
-                        title: { display: true, text: 'Humidity (%)', font: { weight: 'bold', size: 11 } }
+                        suggestedMin: 30,
+                        suggestedMax: 90,
+                        title: { display: true, text: 'Humidity (%)', font: { weight: 'bold', size: 11 } },
+                        grid: { color: 'rgba(0,0,0,0.05)', borderDash: [5, 5] }
                     },
-                    x: commonCfg.scales.x
+                    x: { 
+                        ...commonCfg.scales.x,
+                        grid: { display: false }
+                    }
+                },
+                plugins: {
+                    ...commonCfg.plugins,
+                    legend: {
+                        ...commonCfg.plugins.legend,
+                        position: 'top',
+                        labels: { 
+                            font: { size: 11, family: 'Inter', weight: 'bold' }, 
+                            usePointStyle: true, 
+                            padding: 15,
+                            boxWidth: 8,
+                            boxHeight: 8
+                        } 
+                    },
+                    tooltip: {
+                        ...commonCfg.plugins.tooltip,
+                        backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                        titleColor: '#fff',
+                        bodyColor: '#fff',
+                        borderColor: 'rgba(255,255,255,0.1)',
+                        borderWidth: 1,
+                        padding: 12,
+                        cornerRadius: 8,
+                        displayColors: true,
+                        callbacks: {
+                            title: function(context) {
+                                if (isHistoricalView) {
+                                    const label = context[0].label;
+                                    const dateKey = document.getElementById('date-picker-hum').value;
+                                    if (dateKey) {
+                                        const hourMatch = label.match(/(\d+):00 (AM|PM)/);
+                                        if (hourMatch) {
+                                            let hour = parseInt(hourMatch[1]);
+                                            const period = hourMatch[2];
+                                            if (period === 'PM' && hour !== 12) hour += 12;
+                                            if (period === 'AM' && hour === 12) hour = 0;
+                                            const hourKey = `${String(hour).padStart(2, '0')}:00`;
+                                            return formatDateTimeForTooltip(dateKey, hourKey);
+                                        }
+                                    }
+                                }
+                                return context[0].label;
+                            },
+                            label: function(context) {
+                                const value = context.parsed.y;
+                                const label = context.dataset.label;
+                                return `${label}: ${value.toFixed(1)}%`;
+                            }
+                        }
+                    }
                 }
             }
         });
@@ -1495,6 +1605,44 @@
         document.getElementById('last-update').innerText = noDataMessage;
     }
 
+    // Update current value indicators below charts
+    function updateCurrentValueIndicators() {
+        const tempContainer = document.getElementById('current-values-temp');
+        const humContainer = document.getElementById('current-values-hum');
+        
+        if (!tempContainer || !humContainer) return;
+        
+        tempContainer.innerHTML = '';
+        humContainer.innerHTML = '';
+        
+        labKeys.forEach((room, index) => {
+            const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
+            const color = palette[index % palette.length];
+            const temp = parseFloat(labsData[room]?.temperature) || 0;
+            const hum = parseFloat(labsData[room]?.humidity) || 0;
+            
+            // Temperature indicator
+            const tempBadge = document.createElement('div');
+            tempBadge.className = 'flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5';
+            tempBadge.innerHTML = `
+                <div class="w-2.5 h-2.5 rounded-full" style="background-color: ${color}"></div>
+                <span class="text-[10px] font-bold text-gray-600">${displayName}</span>
+                <span class="text-[10px] font-black text-gray-800">${temp.toFixed(1)}°C</span>
+            `;
+            tempContainer.appendChild(tempBadge);
+            
+            // Humidity indicator
+            const humBadge = document.createElement('div');
+            humBadge.className = 'flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5';
+            humBadge.innerHTML = `
+                <div class="w-2.5 h-2.5 rounded-full" style="background-color: ${color}"></div>
+                <span class="text-[10px] font-bold text-gray-600">${displayName}</span>
+                <span class="text-[10px] font-black text-gray-800">${hum.toFixed(1)}%</span>
+            `;
+            humContainer.appendChild(humBadge);
+        });
+    }
+
     // Diagnostic function to check for missing hours in history data
     async function diagnoseHistoryGaps(dateStr) {
         console.log(`[Diagnosis] Checking history gaps for ${dateStr}`);
@@ -1558,17 +1706,34 @@
             const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
             const color = palette[index % palette.length];
             
+            // Create gradient for temperature chart
+            const tempCtx = document.getElementById('tempChart').getContext('2d');
+            const tempGradient = tempCtx.createLinearGradient(0, 0, 0, 300);
+            tempGradient.addColorStop(0, color + '40');
+            tempGradient.addColorStop(1, color + '00');
+            
+            // Create gradient for humidity chart
+            const humCtx = document.getElementById('humChart').getContext('2d');
+            const humGradient = humCtx.createLinearGradient(0, 0, 0, 300);
+            humGradient.addColorStop(0, color + '40');
+            humGradient.addColorStop(1, color + '00');
+            
             const lineStyle = { 
                 borderColor: color, 
-                backgroundColor: color + '08', 
-                borderWidth: 2.5, 
-                tension: 0.45, 
+                backgroundColor: tempGradient, 
+                borderWidth: 3, 
+                tension: 0.4, 
                 pointRadius: 0, 
-                pointHoverRadius: 6,
+                pointHoverRadius: 8,
                 pointHoverBackgroundColor: color,
                 pointHoverBorderColor: '#fff',
-                pointHoverBorderWidth: 2,
+                pointHoverBorderWidth: 3,
                 fill: true 
+            };
+            
+            const humLineStyle = {
+                ...lineStyle,
+                backgroundColor: humGradient
             };
             
             tempChart.data.datasets.push({ 
@@ -1579,12 +1744,14 @@
             humChart.data.datasets.push({ 
                 label: displayName, 
                 data: trendHistory.hum[room] || [], 
-                ...lineStyle 
+                ...humLineStyle 
             });
         });
         
         tempChart.update();
         humChart.update();
+        
+        updateCurrentValueIndicators();
         
         document.getElementById('last-update').innerText = "LIVE SYNC: " + new Date().toLocaleTimeString();
     }
@@ -1647,20 +1814,39 @@
 
                 if (!tempChart.data.datasets.find(ds => ds.label === displayName)) {
                     const color = palette[index % palette.length];
+                    
+                    // Create gradient for temperature chart
+                    const tempCtx = document.getElementById('tempChart').getContext('2d');
+                    const tempGradient = tempCtx.createLinearGradient(0, 0, 0, 300);
+                    tempGradient.addColorStop(0, color + '40');
+                    tempGradient.addColorStop(1, color + '00');
+                    
+                    // Create gradient for humidity chart
+                    const humCtx = document.getElementById('humChart').getContext('2d');
+                    const humGradient = humCtx.createLinearGradient(0, 0, 0, 300);
+                    humGradient.addColorStop(0, color + '40');
+                    humGradient.addColorStop(1, color + '00');
+                    
                     const lineStyle = { 
                         borderColor: color, 
-                        backgroundColor: color + '08', 
-                        borderWidth: 2.5, 
-                        tension: 0.45, 
+                        backgroundColor: tempGradient, 
+                        borderWidth: 3, 
+                        tension: 0.4, 
                         pointRadius: 0, 
-                        pointHoverRadius: 6,
+                        pointHoverRadius: 8,
                         pointHoverBackgroundColor: color,
                         pointHoverBorderColor: '#fff',
-                        pointHoverBorderWidth: 2,
+                        pointHoverBorderWidth: 3,
                         fill: true 
                     };
+                    
+                    const humLineStyle = {
+                        ...lineStyle,
+                        backgroundColor: humGradient
+                    };
+                    
                     tempChart.data.datasets.push({ label: displayName, data: trendHistory.temp[room], ...lineStyle });
-                    humChart.data.datasets.push({ label: displayName, data: trendHistory.hum[room], ...lineStyle });
+                    humChart.data.datasets.push({ label: displayName, data: trendHistory.hum[room], ...humLineStyle });
                 }
 
                 const tDs = tempChart.data.datasets.find(ds => ds.label === displayName);
@@ -1726,6 +1912,9 @@
                 tempChart.data.labels = trendHistory.timeline;
                 humChart.data.labels = trendHistory.timeline;
             }
+
+            // Update current value indicators
+            updateCurrentValueIndicators();
 
             // Update analytics section if viewing temperature/humidity for today
             if (currentPeriod === 'day' && (currentMetric === 'temperature' || currentMetric === 'humidity')) {
