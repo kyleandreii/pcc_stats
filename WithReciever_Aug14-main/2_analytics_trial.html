@@ -3081,7 +3081,7 @@
                     }
                 }
             } else {
-                // For temp/humidity, fetch from /history
+                // For temp/humidity, fetch from /history and calculate overall average
                 const snapshot = await db.ref(`history/${room}`).once('value');
                 const roomHistory = snapshot.val();
                 if (roomHistory) {
@@ -3090,21 +3090,22 @@
                         startDate = dates[0];
                     }
 
+                    const allValues = [];
                     for (const date of dates) {
                         const hourData = roomHistory[date];
                         if (hourData) {
                             if (currentMetric === 'temperature') {
                                 const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
-                                if (temps.length > 0) {
-                                    roomTotal += temps.reduce((a, b) => a + b, 0) / temps.length;
-                                }
+                                allValues.push(...temps);
                             } else if (currentMetric === 'humidity') {
                                 const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
-                                if (hums.length > 0) {
-                                    roomTotal += hums.reduce((a, b) => a + b, 0) / hums.length;
-                                }
+                                allValues.push(...hums);
                             }
                         }
+                    }
+                    // Calculate overall average
+                    if (allValues.length > 0) {
+                        roomTotal = allValues.reduce((a, b) => a + b, 0) / allValues.length;
                     }
                 }
             }
