@@ -16,21 +16,122 @@
     <script src="ui-enhancements.js"></script>
 
     <style>
-        .stats-card { display: flex; align-items: center; gap: 1rem; padding: 1.5rem; border-radius: 24px; background-color: #800000; color: white; box-shadow: 0 10px 15px -3px rgba(128, 0, 0, 0.2); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .stats-card { 
+            display: flex; align-items: center; gap: 1rem; padding: 1.5rem; 
+            border-radius: 24px; 
+            background: linear-gradient(135deg, #800000 0%, #950000 100%);
+            color: white; 
+            box-shadow: 0 10px 25px rgba(128, 0, 0, 0.3), 0 4px 10px rgba(128, 0, 0, 0.2); 
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        .stats-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+        }
+        .stats-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 35px rgba(128, 0, 0, 0.4), 0 6px 15px rgba(128, 0, 0, 0.3);
+        }
         .stats-card .stats-icon-bg { flex-shrink: 0; }
         .stats-card > div { flex: 1; }
         .animate-flicker { animation: flicker 2s infinite; }
         @keyframes flicker { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
+        /* Incident Log Styling */
+        .incident-card {
+            background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+            border: 1px solid #fecaca;
+            border-radius: 16px;
+            padding: 16px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        .incident-card::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
+        }
+        .incident-card:hover {
+            transform: translateX(4px);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
+            border-color: #fca5a5;
+        }
+        .incident-card.offline {
+            background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+            border-color: #fed7aa;
+        }
+        .incident-card.offline::before {
+            background: linear-gradient(180deg, #f97316 0%, #ea580c 100%);
+        }
+        .incident-card.offline:hover {
+            box-shadow: 0 4px 12px rgba(249, 115, 22, 0.2);
+            border-color: #fdba74;
+        }
+
+        /* Resolution History Log Styling */
+        .history-log-container {
+            background: white;
+            border-radius: 24px;
+            border: 1px solid #e5e7eb;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.1);
+            overflow: hidden;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .history-log-container:hover {
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1), 0 4px 10px rgba(0,0,0,0.05);
+        }
+        .history-header {
+            background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+            border-bottom: 1px solid #e5e7eb;
+            padding: 16px;
+        }
+        .history-table-row {
+            border-bottom: 1px solid #f3f4f6;
+            transition: all 0.2s ease;
+        }
+        .history-table-row:hover {
+            background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+            transform: translateX(2px);
+        }
+        .history-table-row:last-child {
+            border-bottom: none;
+        }
+        .status-badge {
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 10px;
+            letter-spacing: 0.05em;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        .status-normal {
+            background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+            color: #065f46;
+            border: 1px solid #6ee7b7;
+        }
+
         /* Modal specific styling to match the PCC IOT aesthetic */
         .modal-overlay {
-            position: fixed; inset: 0; background: rgba(0, 0, 0, 0.4);
-            backdrop-filter: blur(4px); display: none; align-items: center;
+            position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(8px); display: none; align-items: center;
             justify-content: center; z-index: 100;
         }
         .modal-content {
-            background: white; width: 90%; max-width: 420px; border-radius: 40px;
+            background: white; width: 90%; max-width: 420px; border-radius: 32px;
             padding: 32px; position: relative; border-top: 6px solid #800000;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.15), 0 10px 20px rgba(0,0,0,0.1);
         }
 
         .sidebar-logo {
@@ -213,8 +314,8 @@
                 <div id="incident-container" class="space-y-4"></div>
             </div>
 
-            <div class="mt-8 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                <div class="p-4 bg-gray-50 border-b border-gray-100 flex justify-between">
+            <div class="mt-8 history-log-container">
+                <div class="history-header flex justify-between">
                     <h3 class="text-[10px] font-black uppercase tracking-widest text-gray-500">Resolution History Log</h3>
                     <button onclick="clearHistory()" class="text-[9px] text-red-400 font-bold uppercase hover:underline">Reset Logs</button>
                 </div>
@@ -294,12 +395,12 @@
         function renderHistory() {
             const tbody = document.getElementById('log-table-body');
             tbody.innerHTML = resolvedHistory.map(log => `
-                <tr class="border-b border-gray-50">
+                <tr class="history-table-row">
                     <td class="p-4 font-bold">${log.room}</td>
-                    <td class="p-4"><span class="bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold">NORMAL</span></td>
+                    <td class="p-4"><span class="status-badge status-normal">NORMAL</span></td>
                     <td class="p-4 text-gray-400 text-right font-mono text-[10px]">${log.time}</td>
                 </tr>
-            `).join('') || '<tr><td colspan="3" class="p-10 text-center text-gray-300">No history found.</td></tr>';
+            `).join('') || '<tr class="history-table-row"><td colspan="3" class="p-10 text-center text-gray-300">No history found.</td></tr>';
         }
 
         function clearHistory() {
@@ -380,8 +481,8 @@
                         const remainingMinutes = Math.ceil((AUTO_DISMISS_MS - alertAge) / (60 * 1000));
                         criticalCount++;
                         incidentHtml += `
-                            <div class="flex items-center justify-between p-5 border-l-4 border-red-500 rounded-xl bg-white shadow-md animate-in slide-in-from-top-4 duration-300 hover:shadow-lg transition-shadow">
-                                <div class="flex items-center gap-4">
+                            <div class="incident-card flex items-center justify-between">
+                                <div class="flex items-center gap-4 pl-4">
                                     <div class="stats-icon-bg" style="background-color: #fee2e2; color: #dc2626;"><i data-lucide="alert-octagon" class="animate-flicker"></i></div>
                                     <div>
                                         <h4 class="font-black text-gray-800 text-sm">${roomKey.replace('_', ' ')}</h4>
@@ -427,8 +528,8 @@
                 const timeStr = alert.timestamp ? new Date(alert.timestamp).toLocaleString() : 'Unknown';
 
                 incidentHtml += `
-                    <div class="flex items-center justify-between p-5 border-l-4 border-orange-500 rounded-xl bg-white shadow-md animate-in slide-in-from-top-4 duration-300 hover:shadow-lg transition-shadow">
-                        <div class="flex items-center gap-4">
+                    <div class="incident-card offline flex items-center justify-between">
+                        <div class="flex items-center gap-4 pl-4">
                             <div class="stats-icon-bg" style="background-color: #ffedd5; color: #ea580c;"><i data-lucide="wifi-off" class="animate-flicker"></i></div>
                             <div>
                                 <div class="flex items-center gap-2 mb-1">
