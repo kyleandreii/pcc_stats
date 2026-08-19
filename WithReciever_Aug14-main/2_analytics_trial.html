@@ -348,7 +348,6 @@
             <a href="1_dashboard_trial.html" class="nav-item"><i data-lucide="layout-dashboard"></i> Dashboard</a>
             <a href="2_analytics_trial.html" class="nav-item active"><i data-lucide="bar-chart-3"></i> Analytics</a>
             <a href="3_alert_trial.html" class="nav-item"><i data-lucide="bell"></i> Alerts</a>
-            <a href="IRreciverPage.html" class="nav-item"><i data-lucide="radio"></i> IR Receiver</a>
             <a href="4_settings_trial.html" class="nav-item"><i data-lucide="settings"></i> Settings</a>
         </nav>
         <div class="p-4 border-t border-white/10">
@@ -542,7 +541,7 @@
                 </div>
             </div>
 
-            <!-- TEMPERATURE AND HUMIDITY LINE GRAPHS -->
+            <!-- LEGACY CHARTS (hidden for now, will be removed after migration) -->
             <div class="grid grid-cols-1 gap-10 mb-12">
                 <div class="card bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
                     <div class="flex items-center justify-between mb-6">
@@ -619,6 +618,7 @@
     const lastDateStored = localStorage.getItem('last_active_date');
 
     if (lastDateStored !== todayKey) {
+        localStorage.removeItem('roomUsage');
         localStorage.removeItem('alertCounters');
         localStorage.removeItem('trendHistory');
         localStorage.setItem('last_active_date', todayKey);
@@ -631,7 +631,7 @@
     }
 
     let trendHistory = JSON.parse(localStorage.getItem('trendHistory')) || { timeline: [], temp: {}, hum: {} };
-    let roomUsage = {}; // Will be loaded from Firebase
+    let roomUsage = JSON.parse(localStorage.getItem('roomUsage')) || {};
     let alertCounters = JSON.parse(localStorage.getItem('alertCounters')) || {};
     let dailyAnalytics = JSON.parse(localStorage.getItem('dailyAnalytics')) || { data: {} }; 
     
@@ -663,8 +663,7 @@
         roomUsage = {};
         alertCounters = {};
         trendHistory = { timeline: [], temp: {}, hum: {} };
-        // Clear roomUsage from Firebase
-        db.ref('analytics/roomUsage').set({});
+        localStorage.setItem('roomUsage', JSON.stringify(roomUsage));
         localStorage.setItem('alertCounters', JSON.stringify(alertCounters));
         localStorage.setItem('trendHistory', JSON.stringify(trendHistory));
         localStorage.setItem('lastSystemReset', newTimestamp);
@@ -717,14 +716,6 @@
             text.innerText = "Firebase Connection: Secured";
             checkGlobalReset();
             loadAirconConfig();
-            // Load roomUsage from Firebase
-            db.ref('analytics/roomUsage').on('value', (snapshot) => {
-                const usageData = snapshot.val();
-                if (usageData) {
-                    roomUsage = usageData;
-                    console.log('[Analytics] Loaded roomUsage from Firebase:', roomUsage);
-                }
-            });
         } else {
             indicator.className = "flex h-3 w-3 rounded-full bg-red-500 animate-bounce";
             text.innerText = "Attempting Connection...";
@@ -1519,11 +1510,7 @@
             }
             labsData = data;
             // Filter to only include rooms that have actual data (either in dailyAnalytics or have live data)
-            const systemKeys = ['alerts', 'analytics', 'config', 'history', 'irReceiver', 'irRemoteLibrary', 'usage_daily', 'info', '.info'];
-            const allRoomKeys = Object.keys(data).filter(key => 
-                (key.startsWith("Room_") || key.startsWith("Room ")) && 
-                !systemKeys.includes(key)
-            ).sort();
+            const allRoomKeys = Object.keys(data).filter(key => key.startsWith("Room_")).sort();
             labKeys = allRoomKeys.filter(room => {
                 const roomData = data[room];
                 // Check if room has data in dailyAnalytics
@@ -1628,9 +1615,6 @@
                 }
             });
 
-            // Save roomUsage to Firebase for cross-device sync
-            db.ref('analytics/roomUsage').set(roomUsage);
-
             // Use shared utility for summary cards
             const stats = calculateStats(labsData, labKeys);
             updateSummaryCards(stats, {
@@ -1649,6 +1633,16 @@
                 humChart.data.labels = trendHistory.timeline;
             }
 
+            // Update analytics section if viewing temperature/humidity for today
+            if (currentPeriod === 'day' && (currentMetric === 'temperature' || currentMetric === 'humidity')) {
+                const todayStr = new Date().toISOString().split('T')[0];
+                const currentDateStr = currentDate.toISOString().split('T')[0];
+                if (todayStr === currentDateStr) {
+                    loadAnalyticsData();
+                }
+            }
+
+            localStorage.setItem('roomUsage', JSON.stringify(roomUsage));
             localStorage.setItem('alertCounters', JSON.stringify(alertCounters));
             document.getElementById('last-update').innerText = "LIVE SYNC: " + new Date().toLocaleTimeString();
         });
@@ -2156,20 +2150,29 @@
             } else if (currentMetric === 'usage') {
                 value = hours;
             } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
-                // For temp/humidity, still need to fetch from /history
-                const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
-                const hourData = snapshot.val();
-                
-                if (hourData) {
+                // For temp/humidity on today, use live data from labsData
+                if (dateLabel === new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })) {
                     if (currentMetric === 'temperature') {
-                        const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
-                        if (temps.length > 0) {
-                            value = temps.reduce((a, b) => a + b, 0) / temps.length;
-                        }
+                        value = parseFloat(labsData[room]?.temperature) || 0;
                     } else if (currentMetric === 'humidity') {
-                        const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
-                        if (hums.length > 0) {
-                            value = hums.reduce((a, b) => a + b, 0) / hums.length;
+                        value = parseFloat(labsData[room]?.humidity) || 0;
+                    }
+                } else {
+                    // For historical dates, fetch from /history
+                    const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
+                    const hourData = snapshot.val();
+                    
+                    if (hourData) {
+                        if (currentMetric === 'temperature') {
+                            const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
+                            if (temps.length > 0) {
+                                value = temps.reduce((a, b) => a + b, 0) / temps.length;
+                            }
+                        } else if (currentMetric === 'humidity') {
+                            const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                            if (hums.length > 0) {
+                                value = hums.reduce((a, b) => a + b, 0) / hums.length;
+                            }
                         }
                     }
                 }
@@ -2186,19 +2189,34 @@
             } else if (currentMetric === 'usage') {
                 prevValue = dailyAnalytics.data[room]?.[prevDateLabel] || 0;
             } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
-                const dateStr = prevDate.toISOString().split('T')[0];
-                const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
-                const hourData = snapshot.val();
-                if (hourData) {
-                    if (currentMetric === 'temperature') {
-                        const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
-                        if (temps.length > 0) {
-                            prevValue = temps.reduce((a, b) => a + b, 0) / temps.length;
+                // For temp/humidity, use live data if today, otherwise fetch from /history
+                const todayStr = new Date().toISOString().split('T')[0];
+                if (dateStr === todayStr) {
+                    // Use live data from labsData
+                    const liveData = labsData[room];
+                    if (liveData) {
+                        if (currentMetric === 'temperature') {
+                            prevValue = parseFloat(liveData.temperature) || 0;
+                        } else if (currentMetric === 'humidity') {
+                            prevValue = parseFloat(liveData.humidity) || 0;
                         }
-                    } else if (currentMetric === 'humidity') {
-                        const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
-                        if (hums.length > 0) {
-                            prevValue = hums.reduce((a, b) => a + b, 0) / hums.length;
+                    }
+                } else {
+                    // Historical: fetch from /history
+                    const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
+                    const hourData = snapshot.val();
+                    
+                    if (hourData) {
+                        if (currentMetric === 'temperature') {
+                            const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
+                            if (temps.length > 0) {
+                                prevValue = temps.reduce((a, b) => a + b, 0) / temps.length;
+                            }
+                        } else if (currentMetric === 'humidity') {
+                            const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                            if (hums.length > 0) {
+                                prevValue = hums.reduce((a, b) => a + b, 0) / hums.length;
+                            }
                         }
                     }
                 }
@@ -2543,21 +2561,35 @@
                 } else if (currentMetric === 'usage') {
                     value = hours;
                 } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
-                    // For temp/humidity, fetch from /history
+                    // For temp/humidity, use live data if today, otherwise fetch from /history
+                    const todayStr = new Date().toISOString().split('T')[0];
                     const dateStr = d.toISOString().split('T')[0];
-                    const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
-                    const hourData = snapshot.val();
-                    
-                    if (hourData) {
-                        if (currentMetric === 'temperature') {
-                            const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
-                            if (temps.length > 0) {
-                                value = temps.reduce((a, b) => a + b, 0) / temps.length;
+                    if (dateStr === todayStr) {
+                        // Use live data from labsData
+                        const liveData = labsData[room];
+                        if (liveData) {
+                            if (currentMetric === 'temperature') {
+                                value = parseFloat(liveData.temperature) || 0;
+                            } else if (currentMetric === 'humidity') {
+                                value = parseFloat(liveData.humidity) || 0;
                             }
-                        } else if (currentMetric === 'humidity') {
-                            const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
-                            if (hums.length > 0) {
-                                value = hums.reduce((a, b) => a + b, 0) / hums.length;
+                        }
+                    } else {
+                        // Historical: fetch from /history
+                        const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
+                        const hourData = snapshot.val();
+                        
+                        if (hourData) {
+                            if (currentMetric === 'temperature') {
+                                const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
+                                if (temps.length > 0) {
+                                    value = temps.reduce((a, b) => a + b, 0) / temps.length;
+                                }
+                            } else if (currentMetric === 'humidity') {
+                                const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                                if (hums.length > 0) {
+                                    value = hums.reduce((a, b) => a + b, 0) / hums.length;
+                                }
                             }
                         }
                     }
@@ -2594,19 +2626,34 @@
                 } else if (currentMetric === 'usage') {
                     value = dailyAnalytics.data[room]?.[dateLabel] || 0;
                 } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
+                    // For temp/humidity, use live data if today, otherwise fetch from /history
+                    const todayStr = new Date().toISOString().split('T')[0];
                     const dateStr = d.toISOString().split('T')[0];
-                    const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
-                    const hourData = snapshot.val();
-                    if (hourData) {
-                        if (currentMetric === 'temperature') {
-                            const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
-                            if (temps.length > 0) {
-                                value = temps.reduce((a, b) => a + b, 0) / temps.length;
+                    if (dateStr === todayStr) {
+                        // Use live data from labsData
+                        const liveData = labsData[room];
+                        if (liveData) {
+                            if (currentMetric === 'temperature') {
+                                value = parseFloat(liveData.temperature) || 0;
+                            } else if (currentMetric === 'humidity') {
+                                value = parseFloat(liveData.humidity) || 0;
                             }
-                        } else if (currentMetric === 'humidity') {
-                            const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
-                            if (hums.length > 0) {
-                                value = hums.reduce((a, b) => a + b, 0) / hums.length;
+                        }
+                    } else {
+                        // Historical: fetch from /history
+                        const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
+                        const hourData = snapshot.val();
+                        if (hourData) {
+                            if (currentMetric === 'temperature') {
+                                const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
+                                if (temps.length > 0) {
+                                    value = temps.reduce((a, b) => a + b, 0) / temps.length;
+                                }
+                            } else if (currentMetric === 'humidity') {
+                                const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                                if (hums.length > 0) {
+                                    value = hums.reduce((a, b) => a + b, 0) / hums.length;
+                                }
                             }
                         }
                     }
@@ -2698,21 +2745,35 @@
                 } else if (currentMetric === 'usage') {
                     value = hours;
                 } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
-                    // For temp/humidity, fetch from /history
+                    // For temp/humidity, use live data if today, otherwise fetch from /history
+                    const todayStr = new Date().toISOString().split('T')[0];
                     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                    const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
-                    const hourData = snapshot.val();
-                    
-                    if (hourData) {
-                        if (currentMetric === 'temperature') {
-                            const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
-                            if (temps.length > 0) {
-                                value = temps.reduce((a, b) => a + b, 0) / temps.length;
+                    if (dateStr === todayStr) {
+                        // Use live data from labsData
+                        const liveData = labsData[room];
+                        if (liveData) {
+                            if (currentMetric === 'temperature') {
+                                value = parseFloat(liveData.temperature) || 0;
+                            } else if (currentMetric === 'humidity') {
+                                value = parseFloat(liveData.humidity) || 0;
                             }
-                        } else if (currentMetric === 'humidity') {
-                            const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
-                            if (hums.length > 0) {
-                                value = hums.reduce((a, b) => a + b, 0) / hums.length;
+                        }
+                    } else {
+                        // Historical: fetch from /history
+                        const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
+                        const hourData = snapshot.val();
+                        
+                        if (hourData) {
+                            if (currentMetric === 'temperature') {
+                                const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
+                                if (temps.length > 0) {
+                                    value = temps.reduce((a, b) => a + b, 0) / temps.length;
+                                }
+                            } else if (currentMetric === 'humidity') {
+                                const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                                if (hums.length > 0) {
+                                    value = hums.reduce((a, b) => a + b, 0) / hums.length;
+                                }
                             }
                         }
                     }
@@ -2750,19 +2811,34 @@
                 } else if (currentMetric === 'usage') {
                     value = dailyAnalytics.data[room]?.[dateLabel] || 0;
                 } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
+                    // For temp/humidity, use live data if today, otherwise fetch from /history
+                    const todayStr = new Date().toISOString().split('T')[0];
                     const dateStr = d.toISOString().split('T')[0];
-                    const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
-                    const hourData = snapshot.val();
-                    if (hourData) {
-                        if (currentMetric === 'temperature') {
-                            const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
-                            if (temps.length > 0) {
-                                value = temps.reduce((a, b) => a + b, 0) / temps.length;
+                    if (dateStr === todayStr) {
+                        // Use live data from labsData
+                        const liveData = labsData[room];
+                        if (liveData) {
+                            if (currentMetric === 'temperature') {
+                                value = parseFloat(liveData.temperature) || 0;
+                            } else if (currentMetric === 'humidity') {
+                                value = parseFloat(liveData.humidity) || 0;
                             }
-                        } else if (currentMetric === 'humidity') {
-                            const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
-                            if (hums.length > 0) {
-                                value = hums.reduce((a, b) => a + b, 0) / hums.length;
+                        }
+                    } else {
+                        // Historical: fetch from /history
+                        const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
+                        const hourData = snapshot.val();
+                        if (hourData) {
+                            if (currentMetric === 'temperature') {
+                                const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
+                                if (temps.length > 0) {
+                                    value = temps.reduce((a, b) => a + b, 0) / temps.length;
+                                }
+                            } else if (currentMetric === 'humidity') {
+                                const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                                if (hums.length > 0) {
+                                    value = hums.reduce((a, b) => a + b, 0) / hums.length;
+                                }
                             }
                         }
                     }
