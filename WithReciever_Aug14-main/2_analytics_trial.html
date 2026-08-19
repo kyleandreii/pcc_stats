@@ -557,7 +557,6 @@
                         </div>
                     </div>
                     <div class="h-72"><canvas id="tempChart"></canvas></div>
-                    <div id="current-values-temp" class="flex flex-wrap gap-2 mt-3"></div>
                     <div id="timezone-label-temp" class="hidden text-[9px] text-gray-400 font-black uppercase tracking-wider mt-2 text-center">Times shown in Philippine Time (PHT, UTC+8)</div>
                 </div>
                 <div class="card bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
@@ -574,7 +573,6 @@
                         </div>
                     </div>
                     <div class="h-72"><canvas id="humChart"></canvas></div>
-                    <div id="current-values-hum" class="flex flex-wrap gap-2 mt-3"></div>
                     <div id="timezone-label-hum" class="hidden text-[9px] text-gray-400 font-black uppercase tracking-wider mt-2 text-center">Times shown in Philippine Time (PHT, UTC+8)</div>
                 </div>
             </div>
@@ -626,21 +624,15 @@
         localStorage.setItem('last_active_date', todayKey);
     }
 
-    // Also clear trendHistory if it's stale (older than 5 minutes)
-    const lastTrendTime = localStorage.getItem('last_trend_update');
-    if (!lastTrendTime || (Date.now() - parseInt(lastTrendTime)) > 300000) {
-        localStorage.removeItem('trendHistory');
-    }
-
     let trendHistory = JSON.parse(localStorage.getItem('trendHistory')) || { timeline: [], temp: {}, hum: {} };
     let roomUsage = JSON.parse(localStorage.getItem('roomUsage')) || {};
     let alertCounters = JSON.parse(localStorage.getItem('alertCounters')) || {};
     let dailyAnalytics = JSON.parse(localStorage.getItem('dailyAnalytics')) || { data: {} }; 
     
     let labKeys = [];
-    let labsData = {};
-    let activeAlarms = {};
-    const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777", "#0891b2", "#e11d48"];
+let labsData = {};
+let activeAlarms = {};
+const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777", "#0891b2", "#e11d48"];
     let tempChart, humChart, alertChart;
     
     // Historical view state
@@ -774,69 +766,15 @@
             data: { labels: trendHistory.timeline || [], datasets: [] }, 
             options: { 
                 ...commonCfg, 
-                animation: { duration: 750, easing: 'easeInOutQuart' },
+                animation: { duration: 0 },
                 scales: {
                     y: { 
                         ...commonCfg.scales.y,
-                        suggestedMin: 15,
-                        suggestedMax: 35,
-                        title: { display: true, text: 'Temperature (°C)', font: { weight: 'bold', size: 11 } },
-                        grid: { color: 'rgba(0,0,0,0.05)', borderDash: [5, 5] }
+                        min: 15,
+                        max: 40,
+                        title: { display: true, text: 'Temperature (°C)', font: { weight: 'bold', size: 11 } }
                     },
-                    x: { 
-                        ...commonCfg.scales.x,
-                        grid: { display: false }
-                    }
-                },
-                plugins: {
-                    ...commonCfg.plugins,
-                    legend: {
-                        ...commonCfg.plugins.legend,
-                        position: 'top',
-                        labels: { 
-                            font: { size: 11, family: 'Inter', weight: 'bold' }, 
-                            usePointStyle: true, 
-                            padding: 15,
-                            boxWidth: 8,
-                            boxHeight: 8
-                        } 
-                    },
-                    tooltip: {
-                        ...commonCfg.plugins.tooltip,
-                        backgroundColor: 'rgba(30, 41, 59, 0.95)',
-                        titleColor: '#fff',
-                        bodyColor: '#fff',
-                        borderColor: 'rgba(255,255,255,0.1)',
-                        borderWidth: 1,
-                        padding: 12,
-                        cornerRadius: 8,
-                        displayColors: true,
-                        callbacks: {
-                            title: function(context) {
-                                if (isHistoricalView) {
-                                    const label = context[0].label;
-                                    const dateKey = document.getElementById('date-picker-temp').value;
-                                    if (dateKey) {
-                                        const hourMatch = label.match(/(\d+):00 (AM|PM)/);
-                                        if (hourMatch) {
-                                            let hour = parseInt(hourMatch[1]);
-                                            const period = hourMatch[2];
-                                            if (period === 'PM' && hour !== 12) hour += 12;
-                                            if (period === 'AM' && hour === 12) hour = 0;
-                                            const hourKey = `${String(hour).padStart(2, '0')}:00`;
-                                            return formatDateTimeForTooltip(dateKey, hourKey);
-                                        }
-                                    }
-                                }
-                                return context[0].label;
-                            },
-                            label: function(context) {
-                                const value = context.parsed.y;
-                                const label = context.dataset.label;
-                                return `${label}: ${value.toFixed(1)}°C`;
-                            }
-                        }
-                    }
+                    x: commonCfg.scales.x
                 }
             }
         });
@@ -845,121 +783,67 @@
             data: { labels: trendHistory.timeline || [], datasets: [] }, 
             options: { 
                 ...commonCfg, 
-                animation: { duration: 750, easing: 'easeInOutQuart' },
+                animation: { duration: 0 },
                 scales: {
                     y: { 
                         ...commonCfg.scales.y,
-                        suggestedMin: 30,
-                        suggestedMax: 90,
-                        title: { display: true, text: 'Humidity (%)', font: { weight: 'bold', size: 11 } },
-                        grid: { color: 'rgba(0,0,0,0.05)', borderDash: [5, 5] }
+                        min: 0,
+                        max: 100,
+                        title: { display: true, text: 'Humidity (%)', font: { weight: 'bold', size: 11 } }
                     },
-                    x: { 
-                        ...commonCfg.scales.x,
-                        grid: { display: false }
-                    }
-                },
-                plugins: {
-                    ...commonCfg.plugins,
-                    legend: {
-                        ...commonCfg.plugins.legend,
-                        position: 'top',
-                        labels: { 
-                            font: { size: 11, family: 'Inter', weight: 'bold' }, 
-                            usePointStyle: true, 
-                            padding: 15,
-                            boxWidth: 8,
-                            boxHeight: 8
-                        } 
-                    },
-                    tooltip: {
-                        ...commonCfg.plugins.tooltip,
-                        backgroundColor: 'rgba(30, 41, 59, 0.95)',
-                        titleColor: '#fff',
-                        bodyColor: '#fff',
-                        borderColor: 'rgba(255,255,255,0.1)',
-                        borderWidth: 1,
-                        padding: 12,
-                        cornerRadius: 8,
-                        displayColors: true,
-                        callbacks: {
-                            title: function(context) {
-                                if (isHistoricalView) {
-                                    const label = context[0].label;
-                                    const dateKey = document.getElementById('date-picker-hum').value;
-                                    if (dateKey) {
-                                        const hourMatch = label.match(/(\d+):00 (AM|PM)/);
-                                        if (hourMatch) {
-                                            let hour = parseInt(hourMatch[1]);
-                                            const period = hourMatch[2];
-                                            if (period === 'PM' && hour !== 12) hour += 12;
-                                            if (period === 'AM' && hour === 12) hour = 0;
-                                            const hourKey = `${String(hour).padStart(2, '0')}:00`;
-                                            return formatDateTimeForTooltip(dateKey, hourKey);
-                                        }
-                                    }
-                                }
-                                return context[0].label;
-                            },
-                            label: function(context) {
-                                const value = context.parsed.y;
-                                const label = context.dataset.label;
-                                return `${label}: ${value.toFixed(1)}%`;
-                            }
-                        }
-                    }
+                    x: commonCfg.scales.x
                 }
             }
         });
-        
-        // Initialize trend charts with existing data
-        initializeTrendCharts();
         
         alertChart = new Chart(document.getElementById("alertChart"), {
-            type: 'bar', 
-            data: { labels: [], datasets: [{ label: 'Alert Events', data: [], backgroundColor: palette, borderRadius: 8 }] },
-            options: { 
-                ...commonCfg, 
-                animation: { duration: 750, easing: 'easeInOutQuart' },
-                scales: { 
-                    y: { 
-                        beginAtZero: true, 
-                        ticks: { stepSize: 1, font: { weight: 'bold', size: 10 }, color: '#64748b' },
-                        grid: { color: 'rgba(0,0,0,0.05)', borderDash: [5, 5] },
-                        border: { display: false }
-                    }, 
-                    x: { 
-                        ticks: { font: { weight: 'bold', size: 10 }, color: '#64748b' },
-                        grid: { display: false },
-                        border: { display: false }
-                    } 
-                },
-                plugins: {
-                    ...commonCfg.plugins,
-                    legend: {
-                        display: false
-                    },
-                    tooltip: {
-                        ...commonCfg.plugins.tooltip,
-                        backgroundColor: 'rgba(30, 41, 59, 0.95)',
-                        titleColor: '#fff',
-                        bodyColor: '#fff',
-                        borderColor: 'rgba(255,255,255,0.1)',
-                        borderWidth: 1,
-                        padding: 12,
-                        cornerRadius: 8,
-                        displayColors: true,
-                        callbacks: {
-                            label: function(context) {
-                                const value = context.parsed.y;
-                                const label = context.label;
-                                return `${label}: ${value} alert${value !== 1 ? 's' : ''}`;
-                            }
-                        }
-                    }
-                }
-            }
+            type: 'bar', data: { labels: [], datasets: [{ label: 'Alert Events', data: [], backgroundColor: palette, borderRadius: 8 }] },
+            options: { ...commonCfg, scales: { y: { beginAtZero: true, ticks: { stepSize: 1, font: { weight: 'bold' } } }, x: { ticks: { font: { weight: 'bold' } } } } }
         });
+    }
+
+    // Initialize charts with existing trendHistory data
+    function initializeChartsFromHistory() {
+        if (trendHistory.timeline && trendHistory.timeline.length > 0) {
+            tempChart.data.labels = trendHistory.timeline;
+            humChart.data.labels = trendHistory.timeline;
+            
+            // Build datasets from trendHistory
+            tempChart.data.datasets = [];
+            humChart.data.datasets = [];
+            
+            Object.keys(trendHistory.temp).forEach((room, index) => {
+                const displayName = room.replace('_', ' ');
+                const color = palette[index % palette.length];
+                
+                const lineStyle = { 
+                    borderColor: color, 
+                    backgroundColor: color + '08', 
+                    borderWidth: 2.5, 
+                    tension: 0.45, 
+                    pointRadius: 0, 
+                    pointHoverRadius: 6,
+                    pointHoverBackgroundColor: color,
+                    pointHoverBorderColor: '#fff',
+                    pointHoverBorderWidth: 2,
+                    fill: true 
+                };
+                
+                tempChart.data.datasets.push({ 
+                    label: displayName, 
+                    data: trendHistory.temp[room] || [], 
+                    ...lineStyle 
+                });
+                humChart.data.datasets.push({ 
+                    label: displayName, 
+                    data: trendHistory.hum[room] || [], 
+                    ...lineStyle 
+                });
+            });
+            
+            tempChart.update();
+            humChart.update();
+        }
     }
 
    // Setup live listener (replaced with function to support historical view)
@@ -970,86 +854,6 @@
         alertChart.data.labels = labels;
         alertChart.data.datasets[0].data = labKeys.map(k => alertCounters[k] || 0);
         alertChart.update();
-    }
-
-    function updateTrendCharts() {
-        if (!tempChart || !humChart) return;
-        
-        // If trendHistory is empty, use current live data as a single data point
-        if (trendHistory.timeline.length === 0 && labKeys.length > 0) {
-            const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            trendHistory.timeline.push(nowTime);
-            
-            labKeys.forEach(room => {
-                const d = labsData[room] || { temperature: 0, humidity: 0 };
-                if (!trendHistory.temp[room]) trendHistory.temp[room] = [];
-                if (!trendHistory.hum[room]) trendHistory.hum[room] = [];
-                
-                trendHistory.temp[room].push(parseFloat(d.temperature) || 0);
-                trendHistory.hum[room].push(parseFloat(d.humidity) || 0);
-            });
-            
-            localStorage.setItem('trendHistory', JSON.stringify(trendHistory));
-            localStorage.setItem('last_trend_update', Date.now().toString());
-        }
-        
-        // Create datasets from trendHistory
-        const tempDatasets = labKeys.map((room, index) => {
-            const color = palette[index % palette.length];
-            const data = trendHistory.temp[room] || [];
-            return {
-                label: labsData[room]?.customRoomName || room.replace('_', ' '),
-                data: data,
-                borderColor: color,
-                backgroundColor: (context) => {
-                    const ctx = context.chart.ctx;
-                    const gradient = ctx.createLinearGradient(0, 0, 0, 300);
-                    gradient.addColorStop(0, color + '40');
-                    gradient.addColorStop(1, color + '00');
-                    return gradient;
-                },
-                borderWidth: 2,
-                tension: 0.4,
-                fill: true,
-                pointRadius: 3,
-                pointHoverRadius: 5
-            };
-        });
-
-        const humDatasets = labKeys.map((room, index) => {
-            const color = palette[index % palette.length];
-            const data = trendHistory.hum[room] || [];
-            return {
-                label: labsData[room]?.customRoomName || room.replace('_', ' '),
-                data: data,
-                borderColor: color,
-                backgroundColor: (context) => {
-                    const ctx = context.chart.ctx;
-                    const gradient = ctx.createLinearGradient(0, 0, 0, 300);
-                    gradient.addColorStop(0, color + '40');
-                    gradient.addColorStop(1, color + '00');
-                    return gradient;
-                },
-                borderWidth: 2,
-                tension: 0.4,
-                fill: true,
-                pointRadius: 3,
-                pointHoverRadius: 5
-            };
-        });
-
-        tempChart.data.labels = trendHistory.timeline;
-        tempChart.data.datasets = tempDatasets;
-        tempChart.update();
-
-        humChart.data.labels = trendHistory.timeline;
-        humChart.data.datasets = humDatasets;
-        humChart.update();
-    }
-
-    // Initialize trend charts with existing data
-    function initializeTrendCharts() {
-        updateTrendCharts();
     }
 
     function getUsageHoursForDate(room, dateStr) {
@@ -1128,36 +932,33 @@
     function minuteUpdate() {
         if (labKeys.length === 0) return;
         const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const currentMinute = new Date().getMinutes();
         
-        // Only add new time point every 30 minutes (at :00 and :30)
-        if (currentMinute % 30 === 0) {
-            if (trendHistory.timeline.length === 0 || trendHistory.timeline[trendHistory.timeline.length - 1] !== nowTime) {
-                if (trendHistory.timeline.length >= 24) {
-                    trendHistory.timeline.shift();
-                    labKeys.forEach(room => { 
-                        if(trendHistory.temp[room]) trendHistory.temp[room].shift(); 
-                        if(trendHistory.hum[room]) trendHistory.hum[room].shift(); 
-                    });
-                }
-                
-                trendHistory.timeline.push(nowTime);
-                labKeys.forEach(room => {
-                    const d = labsData[room] || { temperature: 0, humidity: 0 };
-                    if (!trendHistory.temp[room]) trendHistory.temp[room] = [];
-                    if (!trendHistory.hum[room]) trendHistory.hum[room] = [];
-                    
-                    trendHistory.temp[room].push(parseFloat(d.temperature) || 0);
-                    trendHistory.hum[room].push(parseFloat(d.humidity) || 0);
+        // Only add new time point if it's different from the last one (prevents duplicates)
+        if (trendHistory.timeline.length === 0 || trendHistory.timeline[trendHistory.timeline.length - 1] !== nowTime) {
+            if (trendHistory.timeline.length >= 15) {
+                trendHistory.timeline.shift();
+                labKeys.forEach(room => { 
+                    if(trendHistory.temp[room]) trendHistory.temp[room].shift(); 
+                    if(trendHistory.hum[room]) trendHistory.hum[room].shift(); 
                 });
-                
-                tempChart.data.labels = trendHistory.timeline;
-                humChart.data.labels = trendHistory.timeline;
-                tempChart.update(); 
-                humChart.update();
-                localStorage.setItem('trendHistory', JSON.stringify(trendHistory));
-                localStorage.setItem('last_trend_update', Date.now().toString());
             }
+            
+            trendHistory.timeline.push(nowTime);
+            labKeys.forEach(room => {
+                const d = labsData[room] || { temperature: 0, humidity: 0 };
+                if (!trendHistory.temp[room]) trendHistory.temp[room] = [];
+                if (!trendHistory.hum[room]) trendHistory.hum[room] = [];
+                
+                trendHistory.temp[room].push(parseFloat(d.temperature) || 0);
+                trendHistory.hum[room].push(parseFloat(d.humidity) || 0);
+            });
+            
+            tempChart.data.labels = trendHistory.timeline;
+            humChart.data.labels = trendHistory.timeline;
+            tempChart.update(); 
+            humChart.update();
+            localStorage.setItem('trendHistory', JSON.stringify(trendHistory));
+            localStorage.setItem('last_trend_update', Date.now().toString());
         }
 
         const todayStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -1165,51 +966,7 @@
             if (!dailyAnalytics.data[room]) dailyAnalytics.data[room] = {};
             let liveMs = roomUsage[room]?.totalMs || 0;
             if (roomUsage[room]?.isActive) liveMs += (Date.now() - roomUsage[room].lastStart);
-            let hours = parseFloat((liveMs / 3600000).toFixed(2));
-            
-            // Handle rollover if usage exceeds 24 hours
-            if (hours > 24) {
-                const excessHours = hours - 24;
-                dailyAnalytics.data[room][todayStr] = 24; // Cap current day at 24h
-                
-                // Calculate next day's date label
-                let currentDate = new Date();
-                let currentExcess = excessHours;
-                let dayOffset = 1;
-                
-                // Cascading rollover - keep rolling over until excess is less than 24h
-                while (currentExcess > 0) {
-                    const nextDate = new Date();
-                    nextDate.setDate(nextDate.getDate() + dayOffset);
-                    const nextDateStr = nextDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                    
-                    if (!dailyAnalytics.data[room][nextDateStr]) {
-                        dailyAnalytics.data[room][nextDateStr] = 0;
-                    }
-                    
-                    // Add current excess to the next day
-                    dailyAnalytics.data[room][nextDateStr] += currentExcess;
-                    
-                    // Check if this next day now exceeds 24h
-                    if (dailyAnalytics.data[room][nextDateStr] > 24) {
-                        const newExcess = dailyAnalytics.data[room][nextDateStr] - 24;
-                        dailyAnalytics.data[room][nextDateStr] = 24; // Cap this day at 24h
-                        currentExcess = newExcess; // Continue rolling over
-                        dayOffset++;
-                    } else {
-                        currentExcess = 0; // Stop cascading
-                    }
-                }
-                
-                // Reset roomUsage to only track today's usage (subtract the rolled over amount)
-                const rolledOverMs = excessHours * 3600000;
-                roomUsage[room].totalMs = liveMs - rolledOverMs;
-                if (roomUsage[room].isActive) {
-                    roomUsage[room].lastStart = Date.now(); // Reset start time for current session
-                }
-            } else {
-                dailyAnalytics.data[room][todayStr] = hours;
-            }
+            dailyAnalytics.data[room][todayStr] = parseFloat((liveMs / 3600000).toFixed(2));
         });
         localStorage.setItem('dailyAnalytics', JSON.stringify(dailyAnalytics));
     }
@@ -1217,36 +974,33 @@
     function minuteUpdate() {
         if (labKeys.length === 0) return;
         const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const currentMinute = new Date().getMinutes();
         
-        // Only add new time point every 30 minutes (at :00 and :30)
-        if (currentMinute % 30 === 0) {
-            if (trendHistory.timeline.length === 0 || trendHistory.timeline[trendHistory.timeline.length - 1] !== nowTime) {
-                if (trendHistory.timeline.length >= 24) {
-                    trendHistory.timeline.shift();
-                    labKeys.forEach(room => { 
-                        if(trendHistory.temp[room]) trendHistory.temp[room].shift(); 
-                        if(trendHistory.hum[room]) trendHistory.hum[room].shift(); 
-                    });
-                }
-                
-                trendHistory.timeline.push(nowTime);
-                labKeys.forEach(room => {
-                    const d = labsData[room] || { temperature: 0, humidity: 0 };
-                    if (!trendHistory.temp[room]) trendHistory.temp[room] = [];
-                    if (!trendHistory.hum[room]) trendHistory.hum[room] = [];
-                    
-                    trendHistory.temp[room].push(parseFloat(d.temperature) || 0);
-                    trendHistory.hum[room].push(parseFloat(d.humidity) || 0);
+        // Only add new time point if it's different from the last one (prevents duplicates)
+        if (trendHistory.timeline.length === 0 || trendHistory.timeline[trendHistory.timeline.length - 1] !== nowTime) {
+            if (trendHistory.timeline.length >= 15) {
+                trendHistory.timeline.shift();
+                labKeys.forEach(room => { 
+                    if(trendHistory.temp[room]) trendHistory.temp[room].shift(); 
+                    if(trendHistory.hum[room]) trendHistory.hum[room].shift(); 
                 });
-                
-                tempChart.data.labels = trendHistory.timeline;
-                humChart.data.labels = trendHistory.timeline;
-                tempChart.update(); 
-                humChart.update();
-                localStorage.setItem('trendHistory', JSON.stringify(trendHistory));
-                localStorage.setItem('last_trend_update', Date.now().toString());
             }
+            
+            trendHistory.timeline.push(nowTime);
+            labKeys.forEach(room => {
+                const d = labsData[room] || { temperature: 0, humidity: 0 };
+                if (!trendHistory.temp[room]) trendHistory.temp[room] = [];
+                if (!trendHistory.hum[room]) trendHistory.hum[room] = [];
+                
+                trendHistory.temp[room].push(parseFloat(d.temperature) || 0);
+                trendHistory.hum[room].push(parseFloat(d.humidity) || 0);
+            });
+            
+            tempChart.data.labels = trendHistory.timeline;
+            humChart.data.labels = trendHistory.timeline;
+            tempChart.update(); 
+            humChart.update();
+            localStorage.setItem('trendHistory', JSON.stringify(trendHistory));
+            localStorage.setItem('last_trend_update', Date.now().toString());
         }
 
         const todayStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -1254,51 +1008,7 @@
             if (!dailyAnalytics.data[room]) dailyAnalytics.data[room] = {};
             let liveMs = roomUsage[room]?.totalMs || 0;
             if (roomUsage[room]?.isActive) liveMs += (Date.now() - roomUsage[room].lastStart);
-            let hours = parseFloat((liveMs / 3600000).toFixed(2));
-            
-            // Handle rollover if usage exceeds 24 hours
-            if (hours > 24) {
-                const excessHours = hours - 24;
-                dailyAnalytics.data[room][todayStr] = 24; // Cap current day at 24h
-                
-                // Calculate next day's date label
-                let currentDate = new Date();
-                let currentExcess = excessHours;
-                let dayOffset = 1;
-                
-                // Cascading rollover - keep rolling over until excess is less than 24h
-                while (currentExcess > 0) {
-                    const nextDate = new Date();
-                    nextDate.setDate(nextDate.getDate() + dayOffset);
-                    const nextDateStr = nextDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                    
-                    if (!dailyAnalytics.data[room][nextDateStr]) {
-                        dailyAnalytics.data[room][nextDateStr] = 0;
-                    }
-                    
-                    // Add current excess to the next day
-                    dailyAnalytics.data[room][nextDateStr] += currentExcess;
-                    
-                    // Check if this next day now exceeds 24h
-                    if (dailyAnalytics.data[room][nextDateStr] > 24) {
-                        const newExcess = dailyAnalytics.data[room][nextDateStr] - 24;
-                        dailyAnalytics.data[room][nextDateStr] = 24; // Cap this day at 24h
-                        currentExcess = newExcess; // Continue rolling over
-                        dayOffset++;
-                    } else {
-                        currentExcess = 0; // Stop cascading
-                    }
-                }
-                
-                // Reset roomUsage to only track today's usage (subtract the rolled over amount)
-                const rolledOverMs = excessHours * 3600000;
-                roomUsage[room].totalMs = liveMs - rolledOverMs;
-                if (roomUsage[room].isActive) {
-                    roomUsage[room].lastStart = Date.now(); // Reset start time for current session
-                }
-            } else {
-                dailyAnalytics.data[room][todayStr] = hours;
-            }
+            dailyAnalytics.data[room][todayStr] = parseFloat((liveMs / 3600000).toFixed(2));
         });
         localStorage.setItem('dailyAnalytics', JSON.stringify(dailyAnalytics));
 
@@ -1540,6 +1250,7 @@
     }
 
     initCharts();
+    initializeChartsFromHistory();
     
     // Export date range picker logic
     document.getElementById('export-to-today').addEventListener('change', function() {
@@ -1729,44 +1440,6 @@
         document.getElementById('last-update').innerText = noDataMessage;
     }
 
-    // Update current value indicators below charts
-    function updateCurrentValueIndicators() {
-        const tempContainer = document.getElementById('current-values-temp');
-        const humContainer = document.getElementById('current-values-hum');
-        
-        if (!tempContainer || !humContainer) return;
-        
-        tempContainer.innerHTML = '';
-        humContainer.innerHTML = '';
-        
-        labKeys.forEach((room, index) => {
-            const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
-            const color = palette[index % palette.length];
-            const temp = parseFloat(labsData[room]?.temperature) || 0;
-            const hum = parseFloat(labsData[room]?.humidity) || 0;
-            
-            // Temperature indicator
-            const tempBadge = document.createElement('div');
-            tempBadge.className = 'flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5';
-            tempBadge.innerHTML = `
-                <div class="w-2.5 h-2.5 rounded-full" style="background-color: ${color}"></div>
-                <span class="text-[10px] font-bold text-gray-600">${displayName}</span>
-                <span class="text-[10px] font-black text-gray-800">${temp.toFixed(1)}°C</span>
-            `;
-            tempContainer.appendChild(tempBadge);
-            
-            // Humidity indicator
-            const humBadge = document.createElement('div');
-            humBadge.className = 'flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5';
-            humBadge.innerHTML = `
-                <div class="w-2.5 h-2.5 rounded-full" style="background-color: ${color}"></div>
-                <span class="text-[10px] font-bold text-gray-600">${displayName}</span>
-                <span class="text-[10px] font-black text-gray-800">${hum.toFixed(1)}%</span>
-            `;
-            humContainer.appendChild(humBadge);
-        });
-    }
-
     // Diagnostic function to check for missing hours in history data
     async function diagnoseHistoryGaps(dateStr) {
         console.log(`[Diagnosis] Checking history gaps for ${dateStr}`);
@@ -1830,34 +1503,17 @@
             const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
             const color = palette[index % palette.length];
             
-            // Create gradient for temperature chart
-            const tempCtx = document.getElementById('tempChart').getContext('2d');
-            const tempGradient = tempCtx.createLinearGradient(0, 0, 0, 300);
-            tempGradient.addColorStop(0, color + '40');
-            tempGradient.addColorStop(1, color + '00');
-            
-            // Create gradient for humidity chart
-            const humCtx = document.getElementById('humChart').getContext('2d');
-            const humGradient = humCtx.createLinearGradient(0, 0, 0, 300);
-            humGradient.addColorStop(0, color + '40');
-            humGradient.addColorStop(1, color + '00');
-            
             const lineStyle = { 
                 borderColor: color, 
-                backgroundColor: tempGradient, 
-                borderWidth: 3, 
-                tension: 0.4, 
+                backgroundColor: color + '08', 
+                borderWidth: 2.5, 
+                tension: 0.45, 
                 pointRadius: 0, 
-                pointHoverRadius: 8,
+                pointHoverRadius: 6,
                 pointHoverBackgroundColor: color,
                 pointHoverBorderColor: '#fff',
-                pointHoverBorderWidth: 3,
+                pointHoverBorderWidth: 2,
                 fill: true 
-            };
-            
-            const humLineStyle = {
-                ...lineStyle,
-                backgroundColor: humGradient
             };
             
             tempChart.data.datasets.push({ 
@@ -1868,14 +1524,12 @@
             humChart.data.datasets.push({ 
                 label: displayName, 
                 data: trendHistory.hum[room] || [], 
-                ...humLineStyle 
+                ...lineStyle 
             });
         });
         
         tempChart.update();
         humChart.update();
-        
-        updateCurrentValueIndicators();
         
         document.getElementById('last-update').innerText = "LIVE SYNC: " + new Date().toLocaleTimeString();
     }
@@ -1922,12 +1576,6 @@
             if (labKeys.length === 0) {
                 console.warn('[Analytics Firebase Listener] No Room_ keys found in data!');
             }
-            
-            // Update trend charts when labKeys are populated
-            if (labKeys.length > 0) {
-                updateTrendCharts();
-            }
-            
             let sumT = 0, currentAl = 0;
             const now = Date.now();
 
@@ -1944,39 +1592,20 @@
 
                 if (!tempChart.data.datasets.find(ds => ds.label === displayName)) {
                     const color = palette[index % palette.length];
-                    
-                    // Create gradient for temperature chart
-                    const tempCtx = document.getElementById('tempChart').getContext('2d');
-                    const tempGradient = tempCtx.createLinearGradient(0, 0, 0, 300);
-                    tempGradient.addColorStop(0, color + '40');
-                    tempGradient.addColorStop(1, color + '00');
-                    
-                    // Create gradient for humidity chart
-                    const humCtx = document.getElementById('humChart').getContext('2d');
-                    const humGradient = humCtx.createLinearGradient(0, 0, 0, 300);
-                    humGradient.addColorStop(0, color + '40');
-                    humGradient.addColorStop(1, color + '00');
-                    
                     const lineStyle = { 
                         borderColor: color, 
-                        backgroundColor: tempGradient, 
-                        borderWidth: 3, 
-                        tension: 0.4, 
+                        backgroundColor: color + '08', 
+                        borderWidth: 2.5, 
+                        tension: 0.45, 
                         pointRadius: 0, 
-                        pointHoverRadius: 8,
+                        pointHoverRadius: 6,
                         pointHoverBackgroundColor: color,
                         pointHoverBorderColor: '#fff',
-                        pointHoverBorderWidth: 3,
+                        pointHoverBorderWidth: 2,
                         fill: true 
                     };
-                    
-                    const humLineStyle = {
-                        ...lineStyle,
-                        backgroundColor: humGradient
-                    };
-                    
                     tempChart.data.datasets.push({ label: displayName, data: trendHistory.temp[room], ...lineStyle });
-                    humChart.data.datasets.push({ label: displayName, data: trendHistory.hum[room], ...humLineStyle });
+                    humChart.data.datasets.push({ label: displayName, data: trendHistory.hum[room], ...lineStyle });
                 }
 
                 const tDs = tempChart.data.datasets.find(ds => ds.label === displayName);
@@ -2035,23 +1664,12 @@
             });
             
             updateBarCharts();
-            updateTrendCharts();
+            tempChart.update('none');
+            humChart.update('none');
             
             if (trendHistory.timeline.length > 0) {
                 tempChart.data.labels = trendHistory.timeline;
                 humChart.data.labels = trendHistory.timeline;
-            }
-
-            // Update current value indicators
-            updateCurrentValueIndicators();
-
-            // Update analytics section if viewing temperature/humidity for today
-            if (currentPeriod === 'day' && (currentMetric === 'temperature' || currentMetric === 'humidity')) {
-                const todayStr = new Date().toISOString().split('T')[0];
-                const currentDateStr = currentDate.toISOString().split('T')[0];
-                if (todayStr === currentDateStr) {
-                    loadAnalyticsData();
-                }
             }
 
             localStorage.setItem('roomUsage', JSON.stringify(roomUsage));
@@ -2161,61 +1779,32 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                animation: { duration: 750, easing: 'easeInOutQuart' },
                 plugins: {
                     legend: {
                         display: false
                     },
                     tooltip: {
-                        backgroundColor: 'rgba(30, 41, 59, 0.95)',
-                        titleColor: '#fff',
-                        bodyColor: '#fff',
-                        borderColor: 'rgba(255,255,255,0.1)',
-                        borderWidth: 1,
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
                         titleFont: { family: 'Inter', size: 12, weight: 'bold' },
                         bodyFont: { family: 'Inter', size: 11 },
                         padding: 12,
                         cornerRadius: 8,
-                        displayColors: true,
-                        callbacks: {
-                            label: function(context) {
-                                const value = context.parsed.y;
-                                const label = context.dataset.label || '';
-                                const metric = currentMetric;
-                                
-                                let formattedValue;
-                                if (metric === 'cost') {
-                                    formattedValue = `₱${value.toFixed(2)}`;
-                                } else if (metric === 'usage') {
-                                    formattedValue = formatUsageTime(value);
-                                } else if (metric === 'temperature') {
-                                    formattedValue = `${value.toFixed(1)}°C`;
-                                } else if (metric === 'humidity') {
-                                    formattedValue = `${value.toFixed(1)}%`;
-                                } else {
-                                    formattedValue = value.toFixed(2);
-                                }
-                                
-                                return `${label}: ${formattedValue}`;
-                            }
-                        }
+                        displayColors: true
                     }
                 },
                 scales: {
                     x: {
                         grid: { display: false },
-                        border: { display: false },
                         ticks: {
-                            font: { family: 'Inter', size: 10, weight: 'bold' },
-                            color: '#64748b'
+                            font: { family: 'Inter', size: 10, weight: '600' },
+                            color: '#6b7280'
                         }
                     },
                     y: {
-                        grid: { color: 'rgba(0,0,0,0.05)', borderDash: [5, 5] },
-                        border: { display: false },
+                        grid: { color: '#f3f4f6' },
                         ticks: {
-                            font: { family: 'Inter', size: 10, weight: 'bold' },
-                            color: '#64748b'
+                            font: { family: 'Inter', size: 10, weight: '600' },
+                            color: '#6b7280'
                         },
                         beginAtZero: true
                     }
@@ -2630,34 +2219,19 @@
             } else if (currentMetric === 'usage') {
                 prevValue = dailyAnalytics.data[room]?.[prevDateLabel] || 0;
             } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
-                // For temp/humidity, use live data if today, otherwise fetch from /history
-                const todayStr = new Date().toISOString().split('T')[0];
-                if (dateStr === todayStr) {
-                    // Use live data from labsData
-                    const liveData = labsData[room];
-                    if (liveData) {
-                        if (currentMetric === 'temperature') {
-                            prevValue = parseFloat(liveData.temperature) || 0;
-                        } else if (currentMetric === 'humidity') {
-                            prevValue = parseFloat(liveData.humidity) || 0;
+                const dateStr = prevDate.toISOString().split('T')[0];
+                const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
+                const hourData = snapshot.val();
+                if (hourData) {
+                    if (currentMetric === 'temperature') {
+                        const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
+                        if (temps.length > 0) {
+                            prevValue = temps.reduce((a, b) => a + b, 0) / temps.length;
                         }
-                    }
-                } else {
-                    // Historical: fetch from /history
-                    const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
-                    const hourData = snapshot.val();
-                    
-                    if (hourData) {
-                        if (currentMetric === 'temperature') {
-                            const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
-                            if (temps.length > 0) {
-                                prevValue = temps.reduce((a, b) => a + b, 0) / temps.length;
-                            }
-                        } else if (currentMetric === 'humidity') {
-                            const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
-                            if (hums.length > 0) {
-                                prevValue = hums.reduce((a, b) => a + b, 0) / hums.length;
-                            }
+                    } else if (currentMetric === 'humidity') {
+                        const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                        if (hums.length > 0) {
+                            prevValue = hums.reduce((a, b) => a + b, 0) / hums.length;
                         }
                     }
                 }
@@ -3002,35 +2576,21 @@
                 } else if (currentMetric === 'usage') {
                     value = hours;
                 } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
-                    // For temp/humidity, use live data if today, otherwise fetch from /history
-                    const todayStr = new Date().toISOString().split('T')[0];
+                    // For temp/humidity, fetch from /history
                     const dateStr = d.toISOString().split('T')[0];
-                    if (dateStr === todayStr) {
-                        // Use live data from labsData
-                        const liveData = labsData[room];
-                        if (liveData) {
-                            if (currentMetric === 'temperature') {
-                                value = parseFloat(liveData.temperature) || 0;
-                            } else if (currentMetric === 'humidity') {
-                                value = parseFloat(liveData.humidity) || 0;
+                    const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
+                    const hourData = snapshot.val();
+                    
+                    if (hourData) {
+                        if (currentMetric === 'temperature') {
+                            const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
+                            if (temps.length > 0) {
+                                value = temps.reduce((a, b) => a + b, 0) / temps.length;
                             }
-                        }
-                    } else {
-                        // Historical: fetch from /history
-                        const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
-                        const hourData = snapshot.val();
-                        
-                        if (hourData) {
-                            if (currentMetric === 'temperature') {
-                                const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
-                                if (temps.length > 0) {
-                                    value = temps.reduce((a, b) => a + b, 0) / temps.length;
-                                }
-                            } else if (currentMetric === 'humidity') {
-                                const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
-                                if (hums.length > 0) {
-                                    value = hums.reduce((a, b) => a + b, 0) / hums.length;
-                                }
+                        } else if (currentMetric === 'humidity') {
+                            const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                            if (hums.length > 0) {
+                                value = hums.reduce((a, b) => a + b, 0) / hums.length;
                             }
                         }
                     }
@@ -3067,34 +2627,19 @@
                 } else if (currentMetric === 'usage') {
                     value = dailyAnalytics.data[room]?.[dateLabel] || 0;
                 } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
-                    // For temp/humidity, use live data if today, otherwise fetch from /history
-                    const todayStr = new Date().toISOString().split('T')[0];
                     const dateStr = d.toISOString().split('T')[0];
-                    if (dateStr === todayStr) {
-                        // Use live data from labsData
-                        const liveData = labsData[room];
-                        if (liveData) {
-                            if (currentMetric === 'temperature') {
-                                value = parseFloat(liveData.temperature) || 0;
-                            } else if (currentMetric === 'humidity') {
-                                value = parseFloat(liveData.humidity) || 0;
+                    const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
+                    const hourData = snapshot.val();
+                    if (hourData) {
+                        if (currentMetric === 'temperature') {
+                            const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
+                            if (temps.length > 0) {
+                                value = temps.reduce((a, b) => a + b, 0) / temps.length;
                             }
-                        }
-                    } else {
-                        // Historical: fetch from /history
-                        const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
-                        const hourData = snapshot.val();
-                        if (hourData) {
-                            if (currentMetric === 'temperature') {
-                                const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
-                                if (temps.length > 0) {
-                                    value = temps.reduce((a, b) => a + b, 0) / temps.length;
-                                }
-                            } else if (currentMetric === 'humidity') {
-                                const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
-                                if (hums.length > 0) {
-                                    value = hums.reduce((a, b) => a + b, 0) / hums.length;
-                                }
+                        } else if (currentMetric === 'humidity') {
+                            const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                            if (hums.length > 0) {
+                                value = hums.reduce((a, b) => a + b, 0) / hums.length;
                             }
                         }
                     }
@@ -3186,35 +2731,21 @@
                 } else if (currentMetric === 'usage') {
                     value = hours;
                 } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
-                    // For temp/humidity, use live data if today, otherwise fetch from /history
-                    const todayStr = new Date().toISOString().split('T')[0];
+                    // For temp/humidity, fetch from /history
                     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                    if (dateStr === todayStr) {
-                        // Use live data from labsData
-                        const liveData = labsData[room];
-                        if (liveData) {
-                            if (currentMetric === 'temperature') {
-                                value = parseFloat(liveData.temperature) || 0;
-                            } else if (currentMetric === 'humidity') {
-                                value = parseFloat(liveData.humidity) || 0;
+                    const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
+                    const hourData = snapshot.val();
+                    
+                    if (hourData) {
+                        if (currentMetric === 'temperature') {
+                            const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
+                            if (temps.length > 0) {
+                                value = temps.reduce((a, b) => a + b, 0) / temps.length;
                             }
-                        }
-                    } else {
-                        // Historical: fetch from /history
-                        const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
-                        const hourData = snapshot.val();
-                        
-                        if (hourData) {
-                            if (currentMetric === 'temperature') {
-                                const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
-                                if (temps.length > 0) {
-                                    value = temps.reduce((a, b) => a + b, 0) / temps.length;
-                                }
-                            } else if (currentMetric === 'humidity') {
-                                const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
-                                if (hums.length > 0) {
-                                    value = hums.reduce((a, b) => a + b, 0) / hums.length;
-                                }
+                        } else if (currentMetric === 'humidity') {
+                            const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                            if (hums.length > 0) {
+                                value = hums.reduce((a, b) => a + b, 0) / hums.length;
                             }
                         }
                     }
@@ -3252,34 +2783,19 @@
                 } else if (currentMetric === 'usage') {
                     value = dailyAnalytics.data[room]?.[dateLabel] || 0;
                 } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
-                    // For temp/humidity, use live data if today, otherwise fetch from /history
-                    const todayStr = new Date().toISOString().split('T')[0];
                     const dateStr = d.toISOString().split('T')[0];
-                    if (dateStr === todayStr) {
-                        // Use live data from labsData
-                        const liveData = labsData[room];
-                        if (liveData) {
-                            if (currentMetric === 'temperature') {
-                                value = parseFloat(liveData.temperature) || 0;
-                            } else if (currentMetric === 'humidity') {
-                                value = parseFloat(liveData.humidity) || 0;
+                    const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
+                    const hourData = snapshot.val();
+                    if (hourData) {
+                        if (currentMetric === 'temperature') {
+                            const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
+                            if (temps.length > 0) {
+                                value = temps.reduce((a, b) => a + b, 0) / temps.length;
                             }
-                        }
-                    } else {
-                        // Historical: fetch from /history
-                        const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
-                        const hourData = snapshot.val();
-                        if (hourData) {
-                            if (currentMetric === 'temperature') {
-                                const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
-                                if (temps.length > 0) {
-                                    value = temps.reduce((a, b) => a + b, 0) / temps.length;
-                                }
-                            } else if (currentMetric === 'humidity') {
-                                const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
-                                if (hums.length > 0) {
-                                    value = hums.reduce((a, b) => a + b, 0) / hums.length;
-                                }
+                        } else if (currentMetric === 'humidity') {
+                            const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                            if (hums.length > 0) {
+                                value = hums.reduce((a, b) => a + b, 0) / hums.length;
                             }
                         }
                     }
@@ -3522,7 +3038,7 @@
                     }
                 }
             } else {
-                // For temp/humidity, fetch from /history and calculate overall average
+                // For temp/humidity, fetch from /history
                 const snapshot = await db.ref(`history/${room}`).once('value');
                 const roomHistory = snapshot.val();
                 if (roomHistory) {
@@ -3531,22 +3047,21 @@
                         startDate = dates[0];
                     }
 
-                    const allValues = [];
                     for (const date of dates) {
                         const hourData = roomHistory[date];
                         if (hourData) {
                             if (currentMetric === 'temperature') {
                                 const temps = Object.values(hourData).map(h => h.temperature).filter(t => t);
-                                allValues.push(...temps);
+                                if (temps.length > 0) {
+                                    roomTotal += temps.reduce((a, b) => a + b, 0) / temps.length;
+                                }
                             } else if (currentMetric === 'humidity') {
                                 const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
-                                allValues.push(...hums);
+                                if (hums.length > 0) {
+                                    roomTotal += hums.reduce((a, b) => a + b, 0) / hums.length;
+                                }
                             }
                         }
-                    }
-                    // Calculate overall average
-                    if (allValues.length > 0) {
-                        roomTotal = allValues.reduce((a, b) => a + b, 0) / allValues.length;
                     }
                 }
             }
