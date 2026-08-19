@@ -1715,13 +1715,17 @@
     let currentDate = new Date();
     let analyticsChart = null;
 
-    // Format usage time - show days if > 24h, hours/minutes if < 24h
-    function formatUsageTime(hours) {
+    // Format usage time - show hours/minutes, cap at 24h for daily usage to avoid confusion
+    function formatUsageTime(hours, isDaily = false) {
+        if (isDaily && hours > 24) {
+            // For daily usage, cap at 24h to avoid showing "2d" which is misleading
+            hours = 24;
+        }
         if (hours < 1) {
             const minutes = Math.round(hours * 60);
             return `${minutes}m`;
         }
-        if (hours >= 24) {
+        if (hours >= 24 && !isDaily) {
             const days = Math.floor(hours / 24);
             const remainingHours = Math.floor(hours % 24);
             if (remainingHours === 0) {
@@ -2251,7 +2255,7 @@
         if (currentMetric === 'cost') {
             statEl.textContent = `₱${totalValue.toFixed(2)}`;
         } else if (currentMetric === 'usage') {
-            statEl.textContent = formatUsageTime(totalValue);
+            statEl.textContent = formatUsageTime(totalValue, currentPeriod === 'day');
         } else if (currentMetric === 'temperature') {
             statEl.textContent = `${totalValue > 0 ? totalValue.toFixed(1) : '--'}°C`;
         } else if (currentMetric === 'humidity') {
@@ -2472,7 +2476,7 @@
         if (currentMetric === 'cost') {
             summaryTotal.textContent = `₱${totalValue.toFixed(2)}`;
         } else if (currentMetric === 'usage') {
-            summaryTotal.textContent = formatUsageTime(totalValue);
+            summaryTotal.textContent = formatUsageTime(totalValue, currentPeriod === 'day');
         } else if (currentMetric === 'temperature') {
             summaryTotal.textContent = `${totalValue > 0 ? totalValue.toFixed(1) : '--'}°C`;
         } else if (currentMetric === 'humidity') {
@@ -2683,7 +2687,7 @@
         if (currentMetric === 'cost') {
             statEl.textContent = `₱${totalValue.toFixed(2)}`;
         } else if (currentMetric === 'usage') {
-            statEl.textContent = formatUsageTime(totalValue);
+            statEl.textContent = formatUsageTime(totalValue, currentPeriod === 'day');
         } else if (currentMetric === 'temperature') {
             statEl.textContent = `${totalValue > 0 ? totalValue.toFixed(1) : '--'}°C`;
         } else if (currentMetric === 'humidity') {
@@ -2868,7 +2872,7 @@
         if (currentMetric === 'cost') {
             statEl.textContent = `₱${totalValue.toFixed(2)}`;
         } else if (currentMetric === 'usage') {
-            statEl.textContent = formatUsageTime(totalValue);
+            statEl.textContent = formatUsageTime(totalValue, currentPeriod === 'day');
         } else if (currentMetric === 'temperature') {
             statEl.textContent = `${totalValue > 0 ? totalValue.toFixed(1) : '--'}°C`;
         } else if (currentMetric === 'humidity') {
@@ -3030,7 +3034,7 @@
         if (currentMetric === 'cost') {
             statEl.textContent = `₱${totalValue.toFixed(2)}`;
         } else if (currentMetric === 'usage') {
-            statEl.textContent = formatUsageTime(totalValue);
+            statEl.textContent = formatUsageTime(totalValue, currentPeriod === 'day');
         } else if (currentMetric === 'temperature') {
             statEl.textContent = `${totalValue > 0 ? totalValue.toFixed(1) : '--'}°C`;
         } else if (currentMetric === 'humidity') {
@@ -3143,7 +3147,7 @@
         if (currentMetric === 'cost') {
             statEl.textContent = `₱${totalValue.toFixed(2)}`;
         } else if (currentMetric === 'usage') {
-            statEl.textContent = formatUsageTime(totalValue);
+            statEl.textContent = formatUsageTime(totalValue, currentPeriod === 'day');
         } else if (currentMetric === 'temperature') {
             statEl.textContent = `${totalValue > 0 ? totalValue.toFixed(1) : '--'}°C`;
         } else if (currentMetric === 'humidity') {
