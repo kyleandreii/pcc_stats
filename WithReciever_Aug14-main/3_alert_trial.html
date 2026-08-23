@@ -102,11 +102,6 @@
 </head>
 <body class="antialiased">
 
-    <!-- Theme Toggle -->
-    <button class="theme-toggle" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
-        <i data-lucide="sun" class="w-5 h-5" id="theme-icon"></i>
-    </button>
-
     <button id="menu-toggle" class="mobile-menu-toggle">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
     </button>
@@ -135,10 +130,6 @@
     </div>
 
     <aside id="sidebar" class="sidebar">
-        <button class="mobile-menu-toggle">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-        </button>
-        
         <a href="1_dashboard_trial.html" class="sidebar-header flex items-center gap-3">
             <img class="sidebar-logo" src="statswhite.png">
             <span>PCC S.T.A.T.S.</span>
@@ -150,50 +141,75 @@
             <a href="IRreciverPage.html" class="nav-item"><i data-lucide="radio"></i> IR Receiver</a>
             <a href="4_settings_trial.html" class="nav-item"><i data-lucide="settings"></i> Settings</a>
         </nav>
-        <div class="p-4 border-t border-white/10">
-            <button onclick="confirmLogout()" class="nav-item opacity-60 w-full text-left">
-                <i data-lucide="log-out"></i> Logout
-            </button>
+        <div class="p-4">
+            <button onclick="confirmLogout && confirmLogout()" class="nav-item opacity-60 w-full text-left"><i data-lucide="log-out"></i> Logout</button>
         </div>
     </aside>
 
     <main class="main-wrapper">
         <div class="max-w-[1440px] mx-auto p-4 md:p-8 min-h-[calc(100vh-80px)] flex flex-col">
-            <!-- Bento Grid Stats Cards -->
+            <!-- Bento Grid Stats Cards - Glass-Neumorphic -->
             <div class="bento-grid-4 mb-10">
-                <div class="stats-card animate-scale-in stagger-1">
-                    <div class="stats-icon-bg maroon flex-shrink-0"><i data-lucide="layers" class="w-6 h-6"></i></div>
-                    <div class="flex-1"><p class="text-[10px] uppercase font-bold opacity-70 tracking-widest">Total Labs</p><h2 id="total-labs" class="text-4xl font-black">--</h2></div>
+                <!-- Total Labs - Deep Maroon Glassmorphism -->
+                <div class="glass-card-deep flex items-center gap-4 p-6 animate-scale-in stagger-1">
+                    <div class="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
+                        <i data-lucide="layers" class="w-7 h-7 text-white"></i>
+                    </div>
+                    <div class="flex-1">
+                        <p class="text-[10px] uppercase font-bold text-white/70 tracking-widest">Total Labs</p>
+                        <h2 id="total-labs" class="text-4xl font-black text-white">--</h2>
+                    </div>
                 </div>
-                <div class="card card-success flex items-center gap-4 p-6 animate-scale-in stagger-2">
-                    <div class="stats-icon-bg green flex-shrink-0"><i data-lucide="check-circle" class="w-6 h-6"></i></div>
-                    <div class="flex-1"><p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Normal</p><h2 id="normal-count" class="text-3xl font-black">--</h2></div>
+                
+                <!-- Normal - Neumorphic -->
+                <div class="neumorph-card flex items-center gap-4 p-6 animate-scale-in stagger-2">
+                    <div class="w-14 h-14 rounded-2xl bg-green-100 flex items-center justify-center flex-shrink-0">
+                        <i data-lucide="check-circle" class="w-7 h-7 text-green-600"></i>
+                    </div>
+                    <div class="flex-1">
+                        <p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Normal</p>
+                        <h2 id="normal-count" class="text-3xl font-black text-gray-800">--</h2>
+                    </div>
                 </div>
-                <div class="card card-danger flex items-center gap-4 p-6 animate-scale-in stagger-3">
-                    <div class="stats-icon-bg yellow flex-shrink-0"><i data-lucide="alert-triangle" class="w-6 h-6"></i></div>
-                    <div class="flex-1"><p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Critical</p><h2 id="alert-count" class="text-3xl font-black">--</h2></div>
+                
+                <!-- Critical - Neumorphic with Maroon accent -->
+                <div class="neumorph-card flex items-center gap-4 p-6 animate-scale-in stagger-3">
+                    <div class="w-14 h-14 rounded-2xl bg-red-100 flex items-center justify-center flex-shrink-0">
+                        <i data-lucide="alert-triangle" class="w-7 h-7 text-red-600"></i>
+                    </div>
+                    <div class="flex-1">
+                        <p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Critical</p>
+                        <h2 id="alert-count" class="text-3xl font-black text-gray-800">--</h2>
+                    </div>
                 </div>
-                <div class="card card-warning flex items-center gap-4 p-6 animate-scale-in stagger-4">
-                    <div class="stats-icon-bg blue flex-shrink-0"><i data-lucide="thermometer" class="w-6 h-6"></i></div>
-                    <div class="flex-1"><p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Avg Temp</p><h2 id="avg-temp" class="text-3xl font-black">--</h2></div>
+                
+                <!-- Avg Temp - Neumorphic with Maroon accent -->
+                <div class="neumorph-card flex items-center gap-4 p-6 animate-scale-in stagger-4">
+                    <div class="w-14 h-14 rounded-2xl bg-blue-100 flex items-center justify-center flex-shrink-0">
+                        <i data-lucide="thermometer" class="w-7 h-7 text-blue-600"></i>
+                    </div>
+                    <div class="flex-1">
+                        <p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Avg Temp</p>
+                        <h2 id="avg-temp" class="text-3xl font-black text-gray-800">--</h2>
+                    </div>
                 </div>
             </div>
 
-            <div class="card p-6 min-h-[300px] bg-white rounded-2xl shadow-sm border border-gray-100">
+            <div class="glass-card p-6 min-h-[300px] rounded-2xl">
                 <div class="flex items-center justify-between mb-8">
                     <div class="flex items-center gap-2">
                         <i data-lucide="bell-ring" class="w-5 h-5 text-[#800000]"></i>
                         <h3 class="font-black text-gray-800 uppercase tracking-widest text-[11px]">Active Incident Log</h3>
                     </div>
-                    <div id="alert-badge" class="bg-[#800000] text-white text-[9px] font-bold px-3 py-1 rounded-full uppercase">0 Alerts</div>
+                    <div id="alert-badge" class="glass-card-deep text-white text-[9px] font-bold px-3 py-1 rounded-full uppercase">0 Alerts</div>
                 </div>
                 <div id="incident-container" class="space-y-4"></div>
             </div>
 
-            <div class="mt-8 history-log-container">
-                <div class="history-header flex justify-between">
+            <div class="mt-8 neumorph-card p-6 rounded-2xl">
+                <div class="history-header flex justify-between mb-4">
                     <h3 class="text-[10px] font-black uppercase tracking-widest text-gray-500">Resolution History Log</h3>
-                    <button onclick="clearHistory()" class="text-[9px] text-red-400 font-bold uppercase hover:underline">Reset Logs</button>
+                    <button onclick="clearHistory()" class="neumorph-btn text-[9px] text-red-400 font-bold uppercase hover:text-red-600">Reset Logs</button>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-left text-xs">
@@ -492,29 +508,6 @@
         document.getElementById('menu-toggle').addEventListener('click', () => document.getElementById('sidebar').classList.toggle('hidden'));
         
         renderHistory();
-    </script>
-
-    <!-- Theme Toggle Functionality -->
-    <script>
-        function toggleTheme() {
-            const html = document.documentElement;
-            const currentTheme = html.getAttribute('data-theme');
-            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
-            html.setAttribute('data-theme', newTheme);
-            localStorage.setItem('theme', newTheme);
-            
-            const icon = document.getElementById('theme-icon');
-            icon.setAttribute('data-lucide', newTheme === 'light' ? 'moon' : 'sun');
-            lucide.createIcons();
-        }
-
-        // Load saved theme
-        const savedTheme = localStorage.getItem('theme') || 'dark';
-        document.documentElement.setAttribute('data-theme', savedTheme);
-        const themeIcon = document.getElementById('theme-icon');
-        if (themeIcon) {
-            themeIcon.setAttribute('data-lucide', savedTheme === 'light' ? 'moon' : 'sun');
-        }
     </script>
 
     <!-- Mobile Bottom Navigation -->

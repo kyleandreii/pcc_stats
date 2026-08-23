@@ -69,11 +69,6 @@
 </head>
 <body class="antialiased">
 
-    <!-- Theme Toggle -->
-    <button class="theme-toggle" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
-        <i data-lucide="sun" class="w-5 h-5" id="theme-icon"></i>
-    </button>
-
     <button id="menu-toggle" class="mobile-menu-toggle">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
     </button>
@@ -99,10 +94,6 @@
     </button>
 
     <aside id="sidebar" class="sidebar">
-        <button class="mobile-menu-toggle">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-        </button>
-        
         <a href="1_dashboard_trial.html" class="sidebar-header flex items-center gap-3">
             <img src="statswhite.png" alt="PCC Logo" class="sidebar-logo">
             <span class="tracking-tight font-black whitespace-nowrap">PCC S.T.A.T.S.</span>
@@ -114,37 +105,64 @@
             <a href="IRreciverPage.html" class="nav-item"><i data-lucide="radio"></i> IR Receiver</a>
             <a href="4_settings_trial.html" class="nav-item"><i data-lucide="settings"></i> Settings</a>
         </nav>
-        <div class="p-4 border-t border-white/10">
-            <button onclick="confirmLogout()" class="nav-item opacity-70 w-full text-left font-bold"><i data-lucide="log-out"></i> Logout</button>
+        <div class="p-4">
+            <button onclick="confirmLogout && confirmLogout()" class="nav-item opacity-60 w-full text-left"><i data-lucide="log-out"></i> Logout</button>
         </div>
     </aside>
 
     <main class="main-wrapper">
         <div class="max-w-[1440px] mx-auto p-4 md:p-10 min-h-[calc(100vh-80px)] flex flex-col">
 
-            <!-- Bento Grid Stats Cards -->
+            <!-- Bento Grid Stats Cards - Glass-Neumorphic -->
             <div class="bento-grid-4 mb-12">
-                <div class="stats-card animate-scale-in stagger-1">
-                    <div class="stats-icon-bg maroon flex-shrink-0"><i data-lucide="layers" class="w-6 h-6"></i></div>
-                    <div class="flex-1"><p class="text-[10px] uppercase font-bold opacity-70 tracking-widest">Total Labs</p><h2 id="total-labs" class="text-4xl font-black">--</h2></div>
+                <!-- Total Labs - Deep Maroon Glassmorphism -->
+                <div class="glass-card-deep flex items-center gap-4 p-6 animate-scale-in stagger-1">
+                    <div class="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
+                        <i data-lucide="layers" class="w-7 h-7 text-white"></i>
+                    </div>
+                    <div class="flex-1">
+                        <p class="text-[10px] uppercase font-bold text-white/70 tracking-widest">Total Labs</p>
+                        <h2 id="total-labs" class="text-4xl font-black text-white">--</h2>
+                    </div>
                 </div>
-                <div class="card card-success flex items-center gap-4 p-6 animate-scale-in stagger-2">
-                    <div class="stats-icon-bg green flex-shrink-0"><i data-lucide="check-circle" class="w-6 h-6"></i></div>
-                    <div class="flex-1"><p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Normal</p><h2 id="normal-count" class="text-3xl font-black">--</h2></div>
+                
+                <!-- Normal - Neumorphic -->
+                <div class="neumorph-card flex items-center gap-4 p-6 animate-scale-in stagger-2">
+                    <div class="w-14 h-14 rounded-2xl bg-green-100 flex items-center justify-center flex-shrink-0">
+                        <i data-lucide="check-circle" class="w-7 h-7 text-green-600"></i>
+                    </div>
+                    <div class="flex-1">
+                        <p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Normal</p>
+                        <h2 id="normal-count" class="text-3xl font-black text-gray-800">--</h2>
+                    </div>
                 </div>
-                <div class="card card-danger flex items-center gap-4 p-6 animate-scale-in stagger-3">
-                    <div class="stats-icon-bg yellow flex-shrink-0"><i data-lucide="alert-triangle" class="w-6 h-6"></i></div>
-                    <div class="flex-1"><p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Active Alerts</p><h2 id="alert-count" class="text-3xl font-black">--</h2></div>
+                
+                <!-- Active Alerts - Neumorphic with Maroon accent -->
+                <div class="neumorph-card flex items-center gap-4 p-6 animate-scale-in stagger-3">
+                    <div class="w-14 h-14 rounded-2xl bg-red-100 flex items-center justify-center flex-shrink-0">
+                        <i data-lucide="alert-triangle" class="w-7 h-7 text-red-600"></i>
+                    </div>
+                    <div class="flex-1">
+                        <p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Active Alerts</p>
+                        <h2 id="alert-count" class="text-3xl font-black text-gray-800">--</h2>
+                    </div>
                 </div>
-                <div class="card card-warning flex items-center gap-4 p-6 animate-scale-in stagger-4">
-                    <div class="stats-icon-bg blue flex-shrink-0"><i data-lucide="thermometer" class="w-6 h-6"></i></div>
-                    <div class="flex-1"><p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Avg Temp</p><h2 id="avg-temp" class="text-3xl font-black">--</h2></div>
+                
+                <!-- Avg Temp - Neumorphic with Maroon accent -->
+                <div class="neumorph-card flex items-center gap-4 p-6 animate-scale-in stagger-4">
+                    <div class="w-14 h-14 rounded-2xl bg-blue-100 flex items-center justify-center flex-shrink-0">
+                        <i data-lucide="thermometer" class="w-7 h-7 text-blue-600"></i>
+                    </div>
+                    <div class="flex-1">
+                        <p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Avg Temp</p>
+                        <h2 id="avg-temp" class="text-3xl font-black text-gray-800">--</h2>
+                    </div>
                 </div>
             </div>
 
             <div class="flex items-center justify-between mb-8">
                 <div class="flex items-center gap-4">
-                    <div class="flex items-center gap-2 bg-gray-100 rounded-xl px-4 py-2">
+                    <div class="neumorph-card flex items-center gap-2 px-4 py-2 rounded-xl">
                         <span class="text-[10px] font-black text-gray-500 uppercase">From:</span>
                         <input type="date" id="export-date-from" class="text-[10px] font-black text-gray-600 bg-transparent border-none outline-none cursor-pointer">
                         <span class="text-[10px] font-black text-gray-500 uppercase">To:</span>
@@ -156,52 +174,62 @@
                     </div>
                 </div>
                 
-                <button onclick="exportAnalytics()" class="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-2xl font-black transition-all uppercase text-sm flex items-center gap-2 shadow-lg">
+                <button onclick="exportAnalytics()" class="neumorph-btn-primary px-6 py-3 rounded-2xl font-black uppercase text-sm flex items-center gap-2">
                     <i data-lucide="download" class="w-5 h-5"></i> Export CSV
                 </button>
             </div>
 
-            <!-- NEW REDESIGNED ANALYTICS SECTION -->
-            <div class="card bg-white p-8 rounded-3xl shadow-sm border border-gray-100 animate-fade-in">
+            <!-- NEW REDESIGNED ANALYTICS SECTION - Glassmorphic -->
+            <div class="glass-card p-8 rounded-3xl animate-fade-in text-center">
                 <!-- Time Period Tabs -->
-                <div class="flex items-center justify-center gap-2 mb-6">
-                    <button onclick="setPeriodTab('day')" id="period-day" class="period-tab active px-4 py-2 rounded-xl font-black text-xs uppercase">Day</button>
-                    <button onclick="setPeriodTab('week')" id="period-week" class="period-tab px-4 py-2 rounded-xl font-black text-xs uppercase">Week</button>
-                    <button onclick="setPeriodTab('month')" id="period-month" class="period-tab px-4 py-2 rounded-xl font-black text-xs uppercase">Month</button>
-                    <button onclick="setPeriodTab('year')" id="period-year" class="period-tab px-4 py-2 rounded-xl font-black text-xs uppercase">Year</button>
-                    <button onclick="setPeriodTab('total')" id="period-total" class="period-tab px-4 py-2 rounded-xl font-black text-xs uppercase">Total</button>
+                <div class="neumorph-card inline-flex items-center justify-center gap-2 mb-6 p-2 rounded-2xl mx-auto">
+                    <button onclick="setPeriodTab('day')" id="period-day" class="neumorph-btn flex items-center gap-2 px-5 py-2.5 rounded-full font-black text-xs uppercase active">
+                        <i data-lucide="sun" class="w-4 h-4"></i> Day
+                    </button>
+                    <button onclick="setPeriodTab('week')" id="period-week" class="neumorph-btn flex items-center gap-2 px-5 py-2.5 rounded-full font-black text-xs uppercase">
+                        <i data-lucide="calendar" class="w-4 h-4"></i> Week
+                    </button>
+                    <button onclick="setPeriodTab('month')" id="period-month" class="neumorph-btn flex items-center gap-2 px-5 py-2.5 rounded-full font-black text-xs uppercase">
+                        <i data-lucide="calendar-days" class="w-4 h-4"></i> Month
+                    </button>
+                    <button onclick="setPeriodTab('year')" id="period-year" class="neumorph-btn flex items-center gap-2 px-5 py-2.5 rounded-full font-black text-xs uppercase">
+                        <i data-lucide="calendar-range" class="w-4 h-4"></i> Year
+                    </button>
+                    <button onclick="setPeriodTab('total')" id="period-total" class="neumorph-btn flex items-center gap-2 px-5 py-2.5 rounded-full font-black text-xs uppercase">
+                        <i data-lucide="bar-chart-2" class="w-4 h-4"></i> Total
+                    </button>
                 </div>
 
                 <!-- Date Range Navigator -->
                 <div class="flex items-center justify-center gap-6 mb-6">
-                    <button onclick="navigateDate(-1)" class="p-2 hover:bg-gray-100 rounded-full transition-all">
+                    <button onclick="navigateDate(-1)" class="neumorph-btn p-2 rounded-full transition-all">
                         <i data-lucide="chevron-left" class="w-6 h-6 text-gray-600"></i>
                     </button>
-                    <button onclick="openDatePicker()" id="date-display" class="text-lg font-black text-gray-800 hover:text-[#800000] transition-all cursor-pointer">
+                    <button onclick="openDatePicker()" id="date-display" class="text-lg font-black text-gray-800 hover:text-[#800000] transition-all cursor-pointer px-4 py-2 neumorph-card rounded-xl">
                         07 Aug 2026
                     </button>
-                    <button onclick="navigateDate(1)" class="p-2 hover:bg-gray-100 rounded-full transition-all">
+                    <button onclick="navigateDate(1)" class="neumorph-btn p-2 rounded-full transition-all">
                         <i data-lucide="chevron-right" class="w-6 h-6 text-gray-600"></i>
                     </button>
                 </div>
 
                 <!-- Metric Icon Tabs -->
-                <div class="flex items-center justify-center gap-3 mb-8">
-                    <button onclick="setMetricTab('temperature')" id="metric-temperature" class="metric-tab active flex flex-col items-center gap-1 p-3 rounded-xl transition-all">
+                <div class="neumorph-card inline-flex items-center justify-center gap-3 mb-8 p-3 rounded-2xl mx-auto">
+                    <button onclick="setMetricTab('temperature')" id="metric-temperature" class="neumorph-btn flex flex-col items-center gap-1.5 p-4 rounded-2xl transition-all active">
                         <i data-lucide="thermometer" class="w-5 h-5"></i>
-                        <span class="text-[10px] font-black uppercase">Temp</span>
+                        <span class="text-[10px] font-black uppercase tracking-wide">Temp</span>
                     </button>
-                    <button onclick="setMetricTab('humidity')" id="metric-humidity" class="metric-tab flex flex-col items-center gap-1 p-3 rounded-xl transition-all">
+                    <button onclick="setMetricTab('humidity')" id="metric-humidity" class="neumorph-btn flex flex-col items-center gap-1.5 p-4 rounded-2xl transition-all">
                         <i data-lucide="droplet" class="w-5 h-5"></i>
-                        <span class="text-[10px] font-black uppercase">Humidity</span>
+                        <span class="text-[10px] font-black uppercase tracking-wide">Humidity</span>
                     </button>
-                    <button onclick="setMetricTab('cost')" id="metric-cost" class="metric-tab flex flex-col items-center gap-1 p-3 rounded-xl transition-all">
+                    <button onclick="setMetricTab('cost')" id="metric-cost" class="neumorph-btn flex flex-col items-center gap-1.5 p-4 rounded-2xl transition-all">
                         <i data-lucide="currency" class="w-5 h-5"></i>
-                        <span class="text-[10px] font-black uppercase">Cost</span>
+                        <span class="text-[10px] font-black uppercase tracking-wide">Cost</span>
                     </button>
-                    <button onclick="setMetricTab('usage')" id="metric-usage" class="metric-tab flex flex-col items-center gap-1 p-3 rounded-xl transition-all">
+                    <button onclick="setMetricTab('usage')" id="metric-usage" class="neumorph-btn flex flex-col items-center gap-1.5 p-4 rounded-2xl transition-all">
                         <i data-lucide="clock" class="w-5 h-5"></i>
-                        <span class="text-[10px] font-black uppercase">Usage</span>
+                        <span class="text-[10px] font-black uppercase tracking-wide">Usage</span>
                     </button>
                 </div>
 
@@ -1581,7 +1609,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
     // Set period tab
     function setPeriodTab(period) {
         currentPeriod = period;
-        document.querySelectorAll('.period-tab').forEach(tab => tab.classList.remove('active'));
+        document.querySelectorAll('[id^="period-"]').forEach(tab => tab.classList.remove('active'));
         document.getElementById(`period-${period}`).classList.add('active');
         updateDateDisplay();
         loadAnalyticsData();
@@ -1590,7 +1618,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
     // Set metric tab
     function setMetricTab(metric) {
         currentMetric = metric;
-        document.querySelectorAll('.metric-tab').forEach(tab => tab.classList.remove('active'));
+        document.querySelectorAll('[id^="metric-"]').forEach(tab => tab.classList.remove('active'));
         document.getElementById(`metric-${metric}`).classList.add('active');
         loadAnalyticsData();
     }
@@ -2876,27 +2904,6 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
         summaryTitle.textContent = `All-Time ${currentMetric === 'cost' ? 'Total Cost' : currentMetric === 'usage' ? 'Total Usage' : currentMetric === 'temperature' ? 'Temperature' : 'Humidity'} (Since ${startDate})`;
 
         updateSummarySection(totalValue);
-    }
-
-    // Theme Toggle Functionality
-    function toggleTheme() {
-        const html = document.documentElement;
-        const currentTheme = html.getAttribute('data-theme');
-        const newTheme = currentTheme === 'light' ? 'dark' : 'light';
-        html.setAttribute('data-theme', newTheme);
-        localStorage.setItem('theme', newTheme);
-        
-        const icon = document.getElementById('theme-icon');
-        icon.setAttribute('data-lucide', newTheme === 'light' ? 'moon' : 'sun');
-        lucide.createIcons();
-    }
-
-    // Load saved theme
-    const savedTheme = localStorage.getItem('theme') || 'dark';
-    document.documentElement.setAttribute('data-theme', savedTheme);
-    const themeIcon = document.getElementById('theme-icon');
-    if (themeIcon) {
-        themeIcon.setAttribute('data-lucide', savedTheme === 'light' ? 'moon' : 'sun');
     }
 
     // Initialize new analytics UI when page loads

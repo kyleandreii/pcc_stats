@@ -154,17 +154,17 @@
         .signal-panel { display: block; margin-top: var(--space-5); background: var(--bg-secondary); border: var(--glass-border); border-radius: var(--radius-xl); padding: var(--space-5); box-shadow: var(--glass-shadow); transition: var(--transition-base); }
         .signal-panel.hidden { display: none; }
         
-        /* Compact Library Card Design */
+        /* Compact Library Card Design - Neumorphic */
         .library-grid { display: flex; flex-direction: column; gap: var(--space-3); }
         .library-entry { 
-            border: var(--glass-border); 
             border-radius: var(--radius-lg); 
             padding: var(--space-4); 
-            background: var(--bg-card);
-            backdrop-filter: var(--glass-blur);
+            background: var(--bg-neumorph);
+            backdrop-filter: var(--glass-blur-soft);
             transition: var(--transition-base);
             position: relative;
             overflow: hidden;
+            box-shadow: var(--neumorph-shadow-light);
         }
         .library-entry::before {
             content: '';
@@ -177,8 +177,7 @@
         }
         .library-entry:hover {
             transform: translateY(-2px);
-            box-shadow: var(--shadow-base);
-            border-color: var(--maroon-primary);
+            box-shadow: var(--neumorph-shadow-dark);
         }
         
         /* Compact Card Header */
@@ -218,7 +217,7 @@
             color: var(--text-muted);
         }
         
-        /* Grouped Action Buttons */
+        /* Grouped Action Buttons - Neumorphic */
         .library-entry-actions {
             display: flex;
             gap: var(--space-2);
@@ -232,21 +231,22 @@
             font-weight: 700;
             text-transform: uppercase;
             border-radius: var(--radius-base);
-            border: 1px solid var(--border-color);
-            background: var(--bg-secondary);
+            background: var(--bg-neumorph);
             color: var(--text-primary);
             cursor: pointer;
             transition: var(--transition-fast);
             text-align: center;
+            box-shadow: var(--neumorph-shadow-light);
+            border: none;
         }
         .library-action-btn:hover {
             background: var(--maroon-primary);
             color: white;
-            border-color: var(--maroon-primary);
+            box-shadow: var(--shadow-glow-maroon);
         }
         .library-action-btn.delete:hover {
             background: var(--status-danger);
-            border-color: var(--status-danger);
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
         }
         
         .library-form { display: none; margin-top: var(--space-5); border: var(--glass-border); border-radius: var(--radius-xl); background: var(--bg-secondary); padding: var(--space-5); box-shadow: var(--glass-shadow); }
@@ -271,20 +271,11 @@
 </head>
 <body class="antialiased">
 
-    <!-- Theme Toggle -->
-    <button class="theme-toggle" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
-        <i data-lucide="sun" class="w-5 h-5" id="theme-icon"></i>
-    </button>
-
     <button id="menu-toggle" class="mobile-menu-toggle">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
     </button>
 
     <aside id="sidebar" class="sidebar">
-        <button class="mobile-menu-toggle">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-        </button>
-        
         <a href="1_dashboard_trial.html" class="sidebar-header">
             <img src="statswhite.png" alt="PCC Logo" class="sidebar-logo">
             <span>PCC S.T.A.T.S.</span>
@@ -296,7 +287,7 @@
             <a href="IRreciverPage.html" class="nav-item active"><i data-lucide="radio"></i> IR Receiver</a>
             <a href="4_settings_trial.html" class="nav-item"><i data-lucide="settings"></i> Settings</a>
         </nav>
-        <div class="p-4 border-t border-white/10">
+        <div class="p-4">
             <button onclick="confirmLogout && confirmLogout()" class="nav-item opacity-60 w-full text-left"><i data-lucide="log-out"></i> Logout</button>
         </div>
     </aside>
@@ -316,7 +307,7 @@
             <div class="flex flex-col gap-6">
                 
                 <!-- Panel A: Signal Capture & Control (Left Column) -->
-                <section class="card receiver-panel">
+                <section class="neumorph-card receiver-panel">
                     <h2 class="text-xl font-black text-gray-800 mb-4">Signal Capture & Control</h2>
                     
                     <!-- Dynamic Status Indicator -->
@@ -352,7 +343,7 @@
 
                     <!-- Captured Signal Block (Hidden by default) -->
                     <div class="signal-panel hidden" id="signalPanel">
-                        <div class="bg-gradient-to-br from-green-50 to-emerald-50/50 rounded-xl p-4 border border-green-200 mb-4">
+                        <div class="glass-card p-4 mb-4">
                             <div class="flex items-center gap-2 mb-3">
                                 <i data-lucide="check-circle" class="w-5 h-5 text-green-600"></i>
                                 <h3 class="text-lg font-black text-green-800">Signal Received!</h3>
@@ -364,33 +355,33 @@
                             </div>
                         </div>
                         
-                        <!-- Syntax-highlighted code block -->
-                        <div class="bg-gray-900 rounded-xl p-4 mb-4">
+                        <!-- Syntax-highlighted code block with deep maroon glassmorphism -->
+                        <div class="glass-card-deep p-4 mb-4">
                             <div class="flex items-center justify-between mb-2">
-                                <span class="text-xs font-bold text-gray-400 uppercase">Raw IR Code</span>
-                                <button id="copySignalBtn" class="text-xs font-bold text-[#7A001E] hover:text-[#B31238] uppercase">Copy</button>
+                                <span class="text-xs font-bold text-white/70 uppercase">Raw IR Code</span>
+                                <button id="copySignalBtn" class="neumorph-btn text-xs font-bold text-white hover:text-white/80 uppercase">Copy</button>
                             </div>
                             <pre id="rawSignalOutput" class="text-xs font-mono text-green-400 overflow-x-auto whitespace-pre-wrap">uint16_t rawData[] = {\n    0\n};</pre>
                         </div>
                         
                         <div class="flex gap-2">
-                            <button id="pasteSignalBtn" class="flex-1 bg-[#7A001E] text-white font-black py-3 rounded-lg text-xs uppercase hover:bg-[#4A0012] transition-all">Paste to Library</button>
+                            <button id="pasteSignalBtn" class="neumorph-btn-primary flex-1 py-3 rounded-lg text-xs uppercase">Paste to Library</button>
                         </div>
                     </div>
 
                     <!-- Control Buttons -->
                     <div class="flex gap-2 mt-4">
-                        <button id="readyBtn" class="flex-1 bg-[#7A001E] text-white font-black py-3 rounded-lg text-xs uppercase hover:bg-[#4A0012] transition-all">Ready to Receive</button>
-                        <button id="receiveAgainBtn" class="flex-1 bg-gray-200 text-gray-700 font-black py-3 rounded-lg text-xs uppercase hover:bg-gray-300 transition-all">Receive Again</button>
-                        <button id="stopBtn" class="flex-1 bg-gray-200 text-gray-700 font-black py-3 rounded-lg text-xs uppercase hover:bg-gray-300 transition-all">Stop</button>
+                        <button id="readyBtn" class="neumorph-btn-primary flex-1 py-3 rounded-lg text-xs uppercase">Ready to Receive</button>
+                        <button id="receiveAgainBtn" class="neumorph-btn flex-1 py-3 rounded-lg text-xs uppercase">Receive Again</button>
+                        <button id="stopBtn" class="neumorph-btn flex-1 py-3 rounded-lg text-xs uppercase">Stop</button>
                     </div>
                 </section>
 
                 <!-- Panel B: Remote Library (Right Column) -->
-                <section id="library" class="card library-panel">
+                <section id="library" class="neumorph-card library-panel">
                     <div class="flex items-center justify-between mb-4">
                         <h2 class="text-xl font-black text-gray-800">Remote Library</h2>
-                        <button id="addSignalBtn" class="bg-[#7A001E] text-white font-black px-4 py-2 rounded-lg text-xs uppercase hover:bg-[#4A0012] transition-all flex items-center gap-2">
+                        <button id="addSignalBtn" class="neumorph-btn-primary px-4 py-2 rounded-lg text-xs uppercase flex items-center gap-2">
                             <i data-lucide="plus" class="w-4 h-4"></i> Add Command
                         </button>
                     </div>
@@ -399,7 +390,7 @@
                     <div class="mb-4">
                         <label class="text-xs font-bold text-gray-500 uppercase block mb-2">Laboratory</label>
                         <div class="relative">
-                            <select id="labFilterSelect" class="field w-full appearance-none pr-10">
+                            <select id="labFilterSelect" class="neumorph-input w-full appearance-none pr-10">
                                 <option value="">Select laboratory</option>
                             </select>
                             <i data-lucide="chevron-down" class="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"></i>
@@ -415,29 +406,15 @@
                             </div>
                             <div>
                                 <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Command</label>
-                                <select id="saveCommandSelect" class="field w-full">
-                                    <option value="acOn">AC ON</option>
-                                    <option value="acOff">AC OFF</option>
-                                    <option value="temperatureUp">Temperature UP</option>
-                                    <option value="temperatureDown">Temperature DOWN</option>
-                                </select>
                             </div>
                         </div>
                         <div class="mb-3">
-                            <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Signal Name</label>
-                            <input id="saveSignalName" class="field w-full" placeholder="AC ON"/>
-                        </div>
-                        <div class="mb-3">
-                            <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Protocol</label>
-                            <input id="saveProtocolInput" class="field w-full" value="PANASONIC"/>
-                        </div>
-                        <div class="mb-3">
-                            <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Raw IR Signal</label>
-                            <textarea id="saveRawDataInput" class="field w-full" rows="4" placeholder="Paste the captured IR raw data here..."></textarea>
+                            <label class="text-xs font-bold text-gray-500 uppercase block mb-2">Raw Data</label>
+                            <textarea id="formRawData" class="neumorph-input" rows="3" placeholder="e.g., 9000, 4500, 650, 550..."></textarea>
                         </div>
                         <div class="flex gap-2">
-                            <button id="saveSignalBtn" class="flex-1 bg-[#7A001E] text-white font-black py-2 rounded-lg text-xs uppercase hover:bg-[#4A0012] transition-all">Save</button>
-                            <button id="cancelSignalBtn" class="flex-1 bg-gray-200 text-gray-700 font-black py-2 rounded-lg text-xs uppercase hover:bg-gray-300 transition-all">Cancel</button>
+                            <button id="saveSignalBtn" class="neumorph-btn-primary flex-1 py-3 rounded-lg text-xs uppercase">Save Signal</button>
+                            <button id="cancelSignalBtn" class="neumorph-btn flex-1 py-3 rounded-lg text-xs uppercase">Cancel</button>
                         </div>
                     </div>
 
@@ -969,29 +946,6 @@
                 const librarySection = document.getElementById('library');
                 if (librarySection) librarySection.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }, 150);
-        }
-    </script>
-
-    <!-- Theme Toggle Functionality -->
-    <script>
-        function toggleTheme() {
-            const html = document.documentElement;
-            const currentTheme = html.getAttribute('data-theme');
-            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
-            html.setAttribute('data-theme', newTheme);
-            localStorage.setItem('theme', newTheme);
-            
-            const icon = document.getElementById('theme-icon');
-            icon.setAttribute('data-lucide', newTheme === 'light' ? 'moon' : 'sun');
-            lucide.createIcons();
-        }
-
-        // Load saved theme
-        const savedTheme = localStorage.getItem('theme') || 'dark';
-        document.documentElement.setAttribute('data-theme', savedTheme);
-        const themeIcon = document.getElementById('theme-icon');
-        if (themeIcon) {
-            themeIcon.setAttribute('data-lucide', savedTheme === 'light' ? 'moon' : 'sun');
         }
     </script>
 

@@ -170,20 +170,11 @@
         </div>
     </div>
 
-    <!-- Theme Toggle -->
-    <button class="theme-toggle" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
-        <i data-lucide="sun" class="w-5 h-5" id="theme-icon"></i>
-    </button>
-
     <button id="menu-toggle" class="mobile-menu-toggle">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
     </button>
 
     <aside id="sidebar" class="sidebar">
-        <button class="mobile-menu-toggle">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-        </button>
-        
         <a href="1_dashboard_trial.html" class="sidebar-header flex items-center gap-3">
             <img class="sidebar-logo" src="statswhite.png">
             <span>PCC S.T.A.T.S.</span>
@@ -198,7 +189,7 @@
                 <i data-lucide="plus-circle"></i> Add Room
             </button>
         </nav>
-        <div class="p-4 border-t border-white/10">
+        <div class="p-4">
             <button onclick="confirmLogout()" class="nav-item opacity-60 w-full text-left">
                 <i data-lucide="log-out"></i> Logout
             </button>
@@ -207,36 +198,63 @@
 
     <main class="main-wrapper">
         <div class="max-w-[1440px] mx-auto">
-            <!-- Bento Grid Stats Cards -->
+            <!-- Bento Grid Stats Cards - Glass-Neumorphic -->
             <div class="bento-grid-4 mb-10">
-                <div class="stats-card animate-scale-in stagger-1">
-                    <div class="stats-icon-bg maroon flex-shrink-0"><i data-lucide="layers" class="w-6 h-6"></i></div>
-                    <div class="flex-1"><p class="text-[10px] uppercase font-bold opacity-70 tracking-widest">Total Labs</p><h2 id="total-count" class="text-4xl font-black">0</h2></div>
+                <!-- Total Labs - Deep Maroon Glassmorphism -->
+                <div class="glass-card-deep flex items-center gap-4 p-6 animate-scale-in stagger-1">
+                    <div class="w-14 h-14 rounded-2xl bg-white/10 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
+                        <i data-lucide="layers" class="w-7 h-7 text-white"></i>
+                    </div>
+                    <div class="flex-1">
+                        <p class="text-[10px] uppercase font-bold text-white/70 tracking-widest">Total Labs</p>
+                        <h2 id="total-count" class="text-4xl font-black text-white">0</h2>
+                    </div>
                 </div>
-                <div class="card card-success flex items-center gap-4 p-6 animate-scale-in stagger-2">
-                    <div class="stats-icon-bg green flex-shrink-0"><i data-lucide="check-circle" class="w-6 h-6"></i></div>
-                    <div class="flex-1"><p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Normal</p><h2 id="normal-count" class="text-3xl font-black">--</h2></div>
+                
+                <!-- Normal - Neumorphic -->
+                <div class="neumorph-card flex items-center gap-4 p-6 animate-scale-in stagger-2">
+                    <div class="w-14 h-14 rounded-2xl bg-green-100 flex items-center justify-center flex-shrink-0">
+                        <i data-lucide="check-circle" class="w-7 h-7 text-green-600"></i>
+                    </div>
+                    <div class="flex-1">
+                        <p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Normal</p>
+                        <h2 id="normal-count" class="text-3xl font-black text-gray-800">--</h2>
+                    </div>
                 </div>
-                <div class="card card-danger flex items-center gap-4 p-6 animate-scale-in stagger-3">
-                    <div class="stats-icon-bg yellow flex-shrink-0"><i data-lucide="alert-triangle" class="w-6 h-6"></i></div>
-                    <div class="flex-1"><p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Critical</p><h2 id="alert-count" class="text-3xl font-black">--</h2></div>
+                
+                <!-- Critical - Neumorphic with Maroon accent -->
+                <div class="neumorph-card flex items-center gap-4 p-6 animate-scale-in stagger-3">
+                    <div class="w-14 h-14 rounded-2xl bg-red-100 flex items-center justify-center flex-shrink-0">
+                        <i data-lucide="alert-triangle" class="w-7 h-7 text-red-600"></i>
+                    </div>
+                    <div class="flex-1">
+                        <p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Critical</p>
+                        <h2 id="alert-count" class="text-3xl font-black text-gray-800">--</h2>
+                    </div>
                 </div>
-                <div class="card card-warning flex items-center gap-4 p-6 animate-scale-in stagger-4">
-                    <div class="stats-icon-bg blue flex-shrink-0"><i data-lucide="thermometer" class="w-6 h-6"></i></div>
-                    <div class="flex-1"><p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Avg Temp</p><h2 id="avg-temp" class="text-3xl font-black">--</h2></div>
+                
+                <!-- Avg Temp - Neumorphic with Maroon accent -->
+                <div class="neumorph-card flex items-center gap-4 p-6 animate-scale-in stagger-4">
+                    <div class="w-14 h-14 rounded-2xl bg-blue-100 flex items-center justify-center flex-shrink-0">
+                        <i data-lucide="thermometer" class="w-7 h-7 text-blue-600"></i>
+                    </div>
+                    <div class="flex-1">
+                        <p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Avg Temp</p>
+                        <h2 id="avg-temp" class="text-3xl font-black text-gray-800">--</h2>
+                    </div>
                 </div>
             </div>
 
             <div class="flex flex-col md:flex-row items-center justify-between gap-4 mb-8 animate-slide-down">
                 <div class="relative w-full md:w-96">
-                    <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"></i>
+                    <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"></i>
                     <input type="text" id="labSearch" placeholder="Search Laboratory (e.g. 401)..." 
-                           class="info-input pl-10">
+                           class="neumorph-input pl-10">
                 </div>
-                <div class="flex bg-secondary/50 p-1 rounded-xl w-full md:w-auto backdrop-blur-sm border border-glass">
-                    <button onclick="setFilter('all')" id="btn-all" class="filter-btn active">All Rooms</button>
-                    <button onclick="setFilter('on')" id="btn-on" class="filter-btn">Turned On</button>
-                    <button onclick="setFilter('off')" id="btn-off" class="filter-btn">Turned Off</button>
+                <div class="neumorph-card flex p-1 rounded-2xl w-full md:w-auto gap-2">
+                    <button onclick="setFilter('all')" id="btn-all" class="neumorph-btn px-4 py-2 text-xs font-bold uppercase rounded-xl active">All Rooms</button>
+                    <button onclick="setFilter('on')" id="btn-on" class="neumorph-btn px-4 py-2 text-xs font-bold uppercase rounded-xl">Turned On</button>
+                    <button onclick="setFilter('off')" id="btn-off" class="neumorph-btn px-4 py-2 text-xs font-bold uppercase rounded-xl">Turned Off</button>
                 </div>
             </div>
 
@@ -279,27 +297,6 @@
     </nav>
 
     <script>
-        // Theme Toggle Functionality
-        function toggleTheme() {
-            const html = document.documentElement;
-            const currentTheme = html.getAttribute('data-theme');
-            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
-            html.setAttribute('data-theme', newTheme);
-            localStorage.setItem('theme', newTheme);
-            
-            const icon = document.getElementById('theme-icon');
-            icon.setAttribute('data-lucide', newTheme === 'light' ? 'moon' : 'sun');
-            lucide.createIcons();
-        }
-
-        // Load saved theme
-        const savedTheme = localStorage.getItem('theme') || 'dark';
-        document.documentElement.setAttribute('data-theme', savedTheme);
-        const themeIcon = document.getElementById('theme-icon');
-        if (themeIcon) {
-            themeIcon.setAttribute('data-lucide', savedTheme === 'light' ? 'moon' : 'sun');
-        }
-
         const firebaseConfig = {
             apiKey: "AIzaSyAv9fvbotQfi21Nu7LNZYBuzNUJOD5Vj0E",
             databaseURL: "https://pcc-stats-default-rtdb.asia-southeast1.firebasedatabase.app/",
@@ -984,7 +981,7 @@
                     const powerStyle = isPoweredOn ? statusClass : "border-gray-200 opacity-60 grayscale-[0.5]";
 
                     gridHtml += `
-                        <div class="card p-6 transition-all duration-500 border-t-4 ${powerStyle} hover:shadow-xl hover:scale-[1.02]">
+                        <div class="neumorph-card p-6 transition-all duration-500 hover:shadow-xl hover:scale-[1.02]">
                             <div class="flex justify-between items-center mb-5">
                                 <div class="flex items-center gap-3">
                                     <div class="relative">
@@ -995,7 +992,7 @@
                                         <h3 class="font-black text-gray-800 tracking-tight uppercase text-sm">${label}</h3>
                                         <p class="text-[8px] font-bold text-gray-400 uppercase">${isDeviceOnline ? 'Online' : 'Offline'}</p>
                                     </div>
-                                    <button onclick="showInfo(${i})" class="p-2 bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl text-gray-400 hover:text-[#800000] hover:from-[#800000] hover:to-[#600000] hover:text-white transition-all shadow-sm">
+                                    <button onclick="showInfo(${i})" class="neumorph-btn p-2 rounded-xl text-gray-400 hover:text-[#800000] transition-all">
                                         <i data-lucide="info" class="w-4 h-4"></i>
                                     </button>
                                 </div>
@@ -1003,9 +1000,9 @@
                                     ${isDualUnitRoom ? `
                                         <span class="text-[9px] font-bold text-[#800000] bg-[#800000]/10 px-3 py-1 rounded-full uppercase">Dual Units</span>
                                     ` : `
-                                        <label class="switch">
+                                        <label class="neumorph-switch">
                                             <input type="checkbox" ${isPoweredOn ? 'checked' : ''} onchange="toggleAC('${roomPath}', this.checked)">
-                                            <span class="slider"></span>
+                                            <span class="neumorph-switch-slider"></span>
                                         </label>
                                         <div class="flex flex-col items-center mt-1">
                                             <span class="text-[8px] font-bold text-gray-400 uppercase">AC Power</span>
@@ -1021,14 +1018,14 @@
                                 ${isDualUnitRoom ? `<span class="text-[8px] font-bold text-gray-400">(${unit1State && unit2State ? 'Both Units' : (unit1State ? 'Unit 1' : (unit2State ? 'Unit 2' : 'No Units'))} Active)</span>` : ''}
                             </div>
                             <div class="grid grid-cols-2 gap-4 mb-5">
-                                <div class="bg-gradient-to-br from-red-50 to-red-100/50 rounded-2xl p-5 text-center border border-red-200 shadow-sm">
+                                <div class="glass-card p-5 text-center">
                                     <div class="w-10 h-10 mx-auto mb-2 rounded-full ${isTooHigh && isPoweredOn ? 'bg-red-500' : 'bg-red-200'} flex items-center justify-center">
                                         <i data-lucide="thermometer" class="w-5 h-5 ${isTooHigh && isPoweredOn ? 'text-white' : 'text-red-400'}"></i>
                                     </div>
                                     <h2 class="text-3xl font-black ${isTooHigh && isPoweredOn ? 'text-red-600' : 'text-gray-800'}">${temp.toFixed(1)}°C</h2>
                                     <p class="text-[9px] font-bold text-red-400 uppercase tracking-widest mt-1">Temperature</p>
                                 </div>
-                                <div class="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-2xl p-5 text-center border border-blue-200 shadow-sm">
+                                <div class="glass-card p-5 text-center">
                                     <div class="w-10 h-10 mx-auto mb-2 rounded-full bg-blue-200 flex items-center justify-center">
                                         <i data-lucide="droplets" class="w-5 h-5 text-blue-400"></i>
                                     </div>
@@ -1039,29 +1036,29 @@
                             ${isDualUnitRoom ? `
                             <div class="grid grid-cols-2 gap-4 mb-5">
                                 <!-- Individual unit controls for dual-unit room -->
-                                <div class="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-4 border border-gray-200 shadow-sm">
+                                <div class="neumorph-card p-4">
                                     <div class="flex justify-between items-center mb-2">
                                         <p class="text-[9px] font-bold text-gray-600 uppercase">Unit 1</p>
-                                        <label class="switch scale-75">
+                                        <label class="neumorph-switch scale-75">
                                             <input type="checkbox" ${unit1State ? 'checked' : ''} onchange="toggleUnitAC('${roomPath}', 'unit_1', this.checked)">
-                                            <span class="slider"></span>
+                                            <span class="neumorph-switch-slider"></span>
                                         </label>
                                     </div>
                                     <p class="text-[10px] font-bold text-[#800000] text-center bg-[#800000]/10 px-3 py-1 rounded-lg shadow-sm">${getDurationDisplay(roomPath, 'unit_1')}</p>
                                 </div>
-                                <div class="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-4 border border-gray-200 shadow-sm">
+                                <div class="neumorph-card p-4">
                                     <div class="flex justify-between items-center mb-2">
                                         <p class="text-[9px] font-bold text-gray-600 uppercase">Unit 2</p>
-                                        <label class="switch scale-75">
+                                        <label class="neumorph-switch scale-75">
                                             <input type="checkbox" ${unit2State ? 'checked' : ''} onchange="toggleUnitAC('${roomPath}', 'unit_2', this.checked)">
-                                            <span class="slider"></span>
+                                            <span class="neumorph-switch-slider"></span>
                                         </label>
                                     </div>
                                     <p class="text-[10px] font-bold text-[#800000] text-center bg-[#800000]/10 px-3 py-1 rounded-lg shadow-sm">${getDurationDisplay(roomPath, 'unit_2')}</p>
                                 </div>
                             </div>
                             ` : ''}
-                            <div class="bg-gray-50 rounded-2xl p-4">
+                            <div class="neumorph-card p-4">
                                 <div class="flex mb-3 items-center justify-between text-[9px] font-bold text-gray-500 uppercase">
                                     <span class="flex items-center gap-1"><i data-lucide="arrow-down" class="w-3 h-3"></i> Min ${minT}°C</span>
                                     <span class="flex items-center gap-1"><i data-lucide="arrow-up" class="w-3 h-3"></i> Max ${maxT}°C</span>
