@@ -14,77 +14,100 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="ir-library.js"></script>
     <style>
-        .sidebar { position: fixed; left: 0; top: 0; height: 100vh; width: 260px; background-color: #800000; padding: 24px; display: flex; flex-direction: column; z-index: 40; transition: 0.3s; }
-        .sidebar-header { display: flex; align-items: center; gap: 12px; color: white; font-weight: 900; font-size: 1.25rem; margin-bottom: 24px; cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); text-decoration: none; }
-        .sidebar-header:hover { transform: translateX(4px); opacity: 0.9; }
-        .sidebar-header:active { transform: scale(0.98); }
-        .sidebar-logo { width: 60px; height: 60px; object-fit: contain; border-radius: 6px; }
-        .nav-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 12px; color: rgba(255,255,255,0.72); text-decoration: none; font-size: 14px; transition: all 0.2s ease; }
-        .nav-item:hover { background: rgba(255,255,255,0.09); color: white; transform: translateX(4px); }
-        .nav-item.active { background: rgba(255,255,255,0.16); color: white; font-weight: 700; }
-        .main-wrapper { margin-left: 260px; padding: 32px 30px 60px; min-height: 100vh; }
-        .page-shell { max-width: 1200px; margin: 0 auto; display: grid; gap: 24px; }
-        .card { 
-            background: #fff; 
-            border: 1px solid #e5e7eb; 
-            border-radius: 24px; 
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.1);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            position: relative;
-            overflow: hidden;
-        }
-        .card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 1px;
-            background: linear-gradient(90deg, transparent, rgba(0,0,0,0.05), transparent);
-        }
-        .card:hover { 
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1), 0 4px 10px rgba(0,0,0,0.05); 
-            transform: translateY(-3px);
-            border-color: #d1d5db;
-        }
-        .receiver-panel, .library-panel { padding: 28px; }
-        .status-pill { display: inline-flex; align-items: center; gap: 8px; background: #f8fafc; border-radius: 999px; padding: 8px 14px; font-size: 11px; font-weight: 900; letter-spacing: 0.15em; text-transform: uppercase; transition: all 0.2s ease; }
-        .status-pill.ready { color: #1f2937; border: 1px solid #e5e7eb; }
-        .status-pill.listening { color: #b45309; background: #fff7ed; border: 1px solid #fed7aa; box-shadow: 0 2px 8px rgba(245, 158, 11, 0.2); }
-        .status-pill.received { color: #166534; background: #ecfdf5; border: 1px solid #bbf7d0; box-shadow: 0 2px 8px rgba(34, 197, 94, 0.2); }
-        .status-pill.stopped { color: #374151; background: #f3f4f6; border: 1px solid #e5e7eb; }
+        /* IR Receiver-specific styles that complement global CSS */
+        .page-shell { max-width: 1400px; margin: 0 auto; display: grid; gap: var(--space-6); }
+        .receiver-panel, .library-panel { padding: var(--space-6); }
+        
+        /* Dynamic Status Indicator Styles */
+        .status-pill { display: inline-flex; align-items: center; gap: var(--space-2); background: var(--bg-secondary); border-radius: var(--radius-full); padding: var(--space-2) var(--space-4); font-size: var(--font-size-xs); font-weight: 900; letter-spacing: 0.15em; text-transform: uppercase; transition: var(--transition-fast); border: 1px solid var(--border-color); }
+        .status-pill.ready { color: var(--text-muted); background: var(--bg-secondary); }
+        .status-pill.listening { color: var(--maroon-primary); background: var(--maroon-soft); border-color: var(--maroon-primary); box-shadow: var(--shadow-glow-maroon); }
+        .status-pill.received { color: var(--status-success); background: var(--status-success-soft); border-color: var(--status-success); box-shadow: var(--shadow-glow-success); }
+        .status-pill.stopped { color: var(--text-muted); background: var(--bg-secondary); }
+        
+        /* Dynamic Status States */
         .receiver-stage {
-            position: relative; min-height: 390px; border-radius: 28px; background: linear-gradient(135deg,#fff7f7,#f8fafc); border: 1px solid #fee2e2; overflow: hidden; display: flex; align-items: center; justify-content: center; padding: 24px;
+            position: relative; min-height: 350px; border-radius: var(--radius-xl); background: linear-gradient(135deg,var(--bg-secondary),var(--bg-primary)); border: var(--glass-border); overflow: hidden; display: flex; align-items: center; justify-content: center; padding: var(--space-6); transition: var(--transition-base);
         }
+        
+        /* Not Ready State */
+        .receiver-stage:not(.listening):not(.received) {
+            background: linear-gradient(135deg, #F3F4F6, #E5E7EB);
+        }
+        .receiver-stage:not(.listening):not(.received) .receiver-core {
+            background: linear-gradient(135deg, #9CA3AF, #6B7280);
+            box-shadow: 0 0 20px rgba(245, 158, 11, 0.3);
+        }
+        .receiver-stage:not(.listening):not(.received) #receiverTitle {
+            color: #6B7280;
+        }
+        
+        /* Listening State */
+        .receiver-stage.listening {
+            background: linear-gradient(135deg, var(--maroon-primary), var(--maroon-dark));
+            animation: pulse-glow 2s infinite;
+        }
+        .receiver-stage.listening .receiver-core {
+            background: linear-gradient(135deg, var(--maroon-accent), var(--maroon-primary));
+            box-shadow: 0 0 40px rgba(122, 0, 30, 0.6);
+            animation: core-pulse 1s infinite;
+        }
+        .receiver-stage.listening #receiverTitle {
+            color: white;
+        }
+        .receiver-stage.listening #receiverMessage {
+            color: rgba(255, 255, 255, 0.8);
+        }
+        
+        /* Signal Received State */
+        .receiver-stage.received {
+            background: linear-gradient(135deg, var(--status-success-soft), #D1FAE5);
+        }
+        .receiver-stage.received .receiver-core {
+            background: linear-gradient(135deg, var(--status-success), #059669);
+            box-shadow: 0 0 40px rgba(16, 185, 129, 0.5);
+        }
+        .receiver-stage.received #receiverTitle {
+            color: var(--status-success);
+        }
+        
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(122, 0, 30, 0.3); }
+            50% { box-shadow: 0 0 40px rgba(122, 0, 30, 0.6); }
+        }
+        
+        @keyframes core-pulse {
+            0%, 100% { transform: translate(-50%, -50%) scale(1); }
+            50% { transform: translate(-50%, -50%) scale(1.1); }
+        }
+        
         .receiver-stage::before {
-            content: ""; position: absolute; inset: 0; background: radial-gradient(circle at center, rgba(128,0,0,0.04), transparent 52%);
+            content: ""; position: absolute; inset: 0; background: radial-gradient(circle at center, rgba(122, 0, 30, 0.04), transparent 52%); z-index: 0;
         }
-        .signal-ring { position: absolute; border-radius: 999px; border: 2px solid rgba(128,0,0,0.15); opacity: 0; animation: none; }
-        .receiver-stage.listening .signal-ring { opacity: 1; animation: pulse 2.8s infinite ease-out; }
+        .signal-ring { position: absolute; border-radius: var(--radius-full); border: 2px solid rgba(122, 0, 30, 0.15); opacity: 0; animation: none; z-index: 1; pointer-events: none; }
+        .receiver-stage.listening .signal-ring { opacity: 1; animation: pulse 2.8s infinite ease-out; border-color: rgba(255, 255, 255, 0.3); }
         .signal-ring:nth-child(1){ width: 160px; height: 160px; }
         .signal-ring:nth-child(2){ width: 220px; height: 220px; animation-delay: 0.7s; }
         .signal-ring:nth-child(3){ width: 280px; height: 280px; animation-delay: 1.4s; }
         .receiver-core {
-            position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); width: 110px; height: 110px; border-radius: 26px; background: linear-gradient(135deg,#800000,#a52a2a); display: flex; align-items: center; justify-content: center; box-shadow: 0 18px 36px rgba(128,0,0,0.25);
+            position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); width: 100px; height: 100px; border-radius: var(--radius-xl); background: linear-gradient(135deg,var(--maroon-primary),var(--maroon-accent)); display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-glow-maroon); z-index: 2; transition: var(--transition-base);
         }
         .receiver-core i { color: white; }
-        .receiver-stage.listening .receiver-core { animation: blink 1s infinite; }
-        .receiver-stage:not(.listening) .receiver-core { animation: none; }
         .receiver-illustration {
-            position: relative; width: 100%; max-width: 880px; height: 330px; display: flex; align-items: center; justify-content: center; z-index: 1;
+            position: absolute; width: 100%; max-width: 800px; height: 300px; display: flex; align-items: center; justify-content: center; z-index: 3; pointer-events: none;
         }
         .guide-scene {
             position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; opacity: 1; transition: opacity 0.25s ease;
         }
         .receiver-stage.listening .guide-scene { opacity: 0; pointer-events: none; }
         .device-glow {
-            position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); width: 220px; height: 220px; border-radius: 50%; background: radial-gradient(circle, rgba(128, 0, 0, 0.18), rgba(128, 0, 0, 0.08) 34%, rgba(255,255,255,0) 72%); filter: blur(12px); z-index: 1;
+            position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); width: 220px; height: 220px; border-radius: 50%; background: radial-gradient(circle, rgba(122, 0, 30, 0.18), rgba(122, 0, 30, 0.08) 34%, rgba(255,255,255,0) 72%); filter: blur(12px); z-index: 1;
         }
         .guide-scene .device-box {
-            position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); width: 170px; height: 170px; background: linear-gradient(135deg,#8c0f0f,#b21f1f); border: 10px solid rgba(255,255,255,0.25); border-radius: 26px; box-shadow: 0 18px 38px rgba(128,0,0,0.18), inset 0 0 18px rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; z-index: 3;
+            position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); width: 170px; height: 170px; background: linear-gradient(135deg,var(--maroon-dark),var(--maroon-accent)); border: 10px solid rgba(255,255,255,0.25); border-radius: var(--radius-xl); box-shadow: 0 18px 38px rgba(122, 0, 30, 0.18), inset 0 0 18px rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; z-index: 3;
         }
         .guide-scene .device-box::before {
-            content: ""; position: absolute; inset: 18px; border-radius: 18px; border: 2px solid rgba(255,255,255,0.15);
+            content: ""; position: absolute; inset: 18px; border-radius: var(--radius-lg); border: 2px solid rgba(255,255,255,0.15);
         }
         .guide-scene .device-box .device-icon {
             width: 74px; height: 74px; border-radius: 50%; border: 4px solid rgba(255,255,255,0.95); position: relative; background: rgba(255,255,255,0.04);
@@ -96,7 +119,7 @@
         .guide-scene .device-box .device-icon::before { transform: scale(0.54); }
         .guide-scene .device-box .device-icon::after { transform: scale(0.8); }
         .guide-scene .hand {
-            position: absolute; width: 170px; height: 130px; background: linear-gradient(135deg,#f4d0b0,#e6a574); border-radius: 55% 50% 40% 55% / 65% 60% 40% 45%; box-shadow: inset 0 -8px 0 rgba(0,0,0,0.04); z-index: 2; transform-origin: center; filter: drop-shadow(0 12px 12px rgba(0,0,0,0.08));
+            position: absolute; width: 170px; height: 130px; background: linear-gradient(135deg,#f4d0b0,#e6a574); border-radius: 55% 50% 40% 55% / 65% 60% 40% 45%; box-shadow: inset 0 -8px 0 rgba(0,0,0,0.04); z-index: 4; transform-origin: center; filter: drop-shadow(0 12px 12px rgba(0,0,0,0.08)); pointer-events: none;
         }
         .guide-scene .hand.left {
             left: 29%; bottom: 25%; transform: rotate(28deg);
@@ -111,7 +134,7 @@
             content: ""; position: absolute; width: 30px; height: 72px; left: 6px; bottom: 32px; border-radius: 18px; background: linear-gradient(180deg,#f4d0b0,#eab17d); transform: rotate(-12deg);
         }
         .guide-scene .aircon-remote {
-            position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%) rotate(12deg); width: 142px; height: 210px; background: linear-gradient(135deg,#f3f6f8,#dfe4e8); border: 6px solid rgba(127,138,149,0.18); border-radius: 26px; box-shadow: 0 18px 28px rgba(15,23,42,0.08), inset 0 0 0 3px rgba(255,255,255,0.6); z-index: 4;
+            position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%) rotate(12deg); width: 142px; height: 210px; background: linear-gradient(135deg,#f3f6f8,#dfe4e8); border: 6px solid rgba(127,138,149,0.18); border-radius: 26px; box-shadow: 0 18px 28px rgba(15,23,42,0.08), inset 0 0 0 3px rgba(255,255,255,0.6); z-index: 5; pointer-events: none;
         }
         .guide-scene .aircon-remote::before {
             content: ""; position: absolute; left: 14px; right: 14px; top: 16px; height: 36px; border-radius: 12px; background: linear-gradient(180deg,#d8dee6,#c8ced9);
@@ -120,41 +143,26 @@
             content: ""; position: absolute; left: 50%; top: 22px; width: 26px; height: 26px; border-radius: 50%; transform: translateX(-50%); background: rgba(128,0,0,0.15);
         }
         .guide-scene .remote-buttons {
-            position: absolute; inset: 68px 18px 18px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; align-items: center; justify-items: center;
+            position: absolute; inset: 68px 18px 18px; display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); align-items: center; justify-items: center;
         }
         .guide-scene .remote-buttons span {
-            display: block; width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(135deg,#d9dee5,#bfc8d2); box-shadow: inset 0 0 0 2px rgba(98,106,117,0.2);
-        }
-        .guide-scene .remote-buttons span:nth-child(2),
-        .guide-scene .remote-buttons span:nth-child(5),
-        .guide-scene .remote-buttons span:nth-child(8) {
-            width: 26px; height: 26px; background: linear-gradient(135deg,#ebeef2,#d7dfe7);
+            display: block; width: 22px; height: 22px; border-radius: var(--radius-full); background: linear-gradient(135deg,var(--bg-secondary),var(--bg-secondary)); box-shadow: inset 0 0 0 2px rgba(98,106,117,0.2);
         }
         .guide-scene .user-hint {
-            position: absolute; left: 50%; top: 26%; transform: translateX(-50%); font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: rgba(75,85,99,0.45); font-weight: 900;
+            position: absolute; left: 50%; top: 26%; transform: translateX(-50%); font-size: var(--font-size-xs); letter-spacing: 0.2em; text-transform: uppercase; color: rgba(75,85,99,0.45); font-weight: 900;
         }
-        .signal-panel { display: block; margin-top: 20px; background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border: 1px solid #e5e7eb; border-radius: 20px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); transition: all 0.3s ease; }
-        .signal-panel:hover { border-color: #d1d5db; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
-        .signal-panel.show { display: block; }
-        .mini-btn { background: #f3f4f6; color: #374151; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; border-radius: 16px; padding: 12px 18px; font-size: 10px; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; border: 1px solid #e5e7eb; }
-        .mini-btn:hover { background: #e5e7eb; transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-color: #d1d5db; }
-        .mini-btn:active { background: #d1d5db; transform: translateY(0); box-shadow: inset 0 2px 4px rgba(0,0,0,0.1); }
-        .mini-btn:focus { outline: 2px solid #800000; outline-offset: 2px; }
-        .primary-btn { background: linear-gradient(135deg, #800000 0%, #950000 100%); color: white; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; border-radius: 16px; padding: 14px 20px; font-size: 10px; box-shadow: 0 10px 25px rgba(128,0,0,0.3), 0 4px 10px rgba(128,0,0,0.2); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; border: none; }
-        .primary-btn:hover { background: linear-gradient(135deg, #950000 0%, #a00000 100%); transform: translateY(-1px); box-shadow: 0 12px 30px rgba(128,0,0,0.4), 0 6px 15px rgba(128,0,0,0.3); }
-        .primary-btn:active { background: linear-gradient(135deg, #700000 0%, #800000 100%); transform: translateY(0); box-shadow: inset 0 2px 4px rgba(0,0,0,0.2); }
-        .primary-btn:focus { outline: 2px solid #800000; outline-offset: 2px; }
-        .secondary-btn { background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%); color: #1f2937; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; border-radius: 16px; padding: 12px 18px; font-size: 10px; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; border: 1px solid #c7d2fe; }
-        .secondary-btn:hover { background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2); }
-        .secondary-btn:active { background: linear-gradient(135deg, #c7d2fe 0%, #a5b4fc 100%); transform: translateY(0); box-shadow: inset 0 2px 4px rgba(0,0,0,0.1); }
-        .secondary-btn:focus { outline: 2px solid #800000; outline-offset: 2px; }
-        .library-grid { display: grid; gap: 16px; }
+        .signal-panel { display: block; margin-top: var(--space-5); background: var(--bg-secondary); border: var(--glass-border); border-radius: var(--radius-xl); padding: var(--space-5); box-shadow: var(--glass-shadow); transition: var(--transition-base); }
+        .signal-panel.hidden { display: none; }
+        
+        /* Compact Library Card Design */
+        .library-grid { display: flex; flex-direction: column; gap: var(--space-3); }
         .library-entry { 
-            border: 1px solid #e5e7eb; 
-            border-radius: 20px; 
-            padding: 18px; 
-            background: linear-gradient(180deg,#fff 0%,#fff8f8 100%);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: var(--glass-border); 
+            border-radius: var(--radius-lg); 
+            padding: var(--space-4); 
+            background: var(--bg-card);
+            backdrop-filter: var(--glass-blur);
+            transition: var(--transition-base);
             position: relative;
             overflow: hidden;
         }
@@ -164,39 +172,119 @@
             top: 0;
             left: 0;
             right: 0;
-            height: 2px;
-            background: linear-gradient(90deg, transparent, rgba(128,0,0,0.1), transparent);
+            height: 3px;
+            background: linear-gradient(90deg, transparent, var(--maroon-primary), transparent);
         }
         .library-entry:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            border-color: #d1d5db;
+            box-shadow: var(--shadow-base);
+            border-color: var(--maroon-primary);
         }
-        .tag { font-size: 9px; font-weight: 900; letter-spacing: 0.15em; text-transform: uppercase; color: #6b7280; }
-        .tag-green { color: #166534; background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border-radius: 999px; padding: 4px 8px; border: 1px solid #bbf7d0; box-shadow: 0 1px 2px rgba(34, 197, 94, 0.1); }
-        .library-form { display: none; margin-top: 18px; border: 1px solid #e5e7eb; border-radius: 22px; background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%); padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-        .library-form.show { display: block; }
+        
+        /* Compact Card Header */
+        .library-entry-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--space-3);
+        }
+        .library-entry-title {
+            font-size: var(--font-size-sm);
+            font-weight: 800;
+            color: var(--text-primary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .library-entry-status {
+            font-size: var(--font-size-xs);
+            font-weight: 700;
+            color: var(--status-success);
+            background: var(--status-success-soft);
+            padding: 2px var(--space-2);
+            border-radius: var(--radius-full);
+            text-transform: uppercase;
+        }
+        
+        /* Combined Details Line */
+        .library-entry-details {
+            font-size: var(--font-size-xs);
+            color: var(--text-secondary);
+            margin-bottom: var(--space-3);
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+        }
+        .library-entry-details span {
+            color: var(--text-muted);
+        }
+        
+        /* Grouped Action Buttons */
+        .library-entry-actions {
+            display: flex;
+            gap: var(--space-2);
+            flex-wrap: wrap;
+        }
+        .library-action-btn {
+            flex: 1;
+            min-width: 60px;
+            padding: var(--space-2) var(--space-3);
+            font-size: var(--font-size-xs);
+            font-weight: 700;
+            text-transform: uppercase;
+            border-radius: var(--radius-base);
+            border: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: var(--transition-fast);
+            text-align: center;
+        }
+        .library-action-btn:hover {
+            background: var(--maroon-primary);
+            color: white;
+            border-color: var(--maroon-primary);
+        }
+        .library-action-btn.delete:hover {
+            background: var(--status-danger);
+            border-color: var(--status-danger);
+        }
+        
+        .library-form { display: none; margin-top: var(--space-5); border: var(--glass-border); border-radius: var(--radius-xl); background: var(--bg-secondary); padding: var(--space-5); box-shadow: var(--glass-shadow); }
+        .library-form.hidden { display: none; }
         .field { 
             width: 100%; 
-            border: 2px solid #e5e7eb; 
-            border-radius: 14px; 
-            background: white; 
-            padding: 12px 14px; 
-            font-size: 14px;
-            transition: all 0.2s ease;
+            border: 2px solid var(--border-color); 
+            border-radius: var(--radius-lg); 
+            background: var(--bg-card); 
+            padding: var(--space-3) var(--space-4); 
+            font-size: var(--font-size-base);
+            transition: var(--transition-fast);
         }
         .field:focus {
-            border-color: #800000;
-            box-shadow: 0 0 0 3px rgba(128, 0, 0, 0.1);
+            border-color: var(--maroon-primary);
+            box-shadow: 0 0 0 3px rgba(122, 0, 30, 0.1);
             outline: none;
         }
         @keyframes pulse { 0% { transform: scale(0.9); opacity: 0.8; } 70% { transform: scale(1.1); opacity: 0.3; } 100% { transform: scale(1.25); opacity: 0; } }
-        @keyframes blink { 0%,100% {opacity:0.85; box-shadow: 0 0 0 0 rgba(128,0,0,0.1);} 50% {opacity:1; box-shadow: 0 0 22px rgba(128,0,0,0.3);} }
-        @media (max-width: 768px) { .sidebar { transform: translateX(-100%); } .sidebar.show { transform: translateX(0); } .main-wrapper { margin-left: 0; padding: 18px; } }
+        @keyframes blink { 0%,100% {opacity:0.85; box-shadow: 0 0 0 0 rgba(122, 0, 30, 0.1);} 50% {opacity:1; box-shadow: 0 0 22px rgba(122, 0, 30, 0.3);} }
     </style>
 </head>
-<body class="antialiased bg-gray-50">
+<body class="antialiased">
+
+    <!-- Theme Toggle -->
+    <button class="theme-toggle" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
+        <i data-lucide="sun" class="w-5 h-5" id="theme-icon"></i>
+    </button>
+
+    <button id="menu-toggle" class="mobile-menu-toggle">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+    </button>
+
     <aside id="sidebar" class="sidebar">
+        <button class="mobile-menu-toggle">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+        </button>
+        
         <a href="1_dashboard_trial.html" class="sidebar-header">
             <img src="statswhite.png" alt="PCC Logo" class="sidebar-logo">
             <span>PCC S.T.A.T.S.</span>
@@ -215,130 +303,155 @@
 
     <main class="main-wrapper">
         <div class="page-shell">
-            <section class="card receiver-panel">
-                <div class="flex items-center justify-between gap-4 mb-5">
-                    <div>
-                        <p class="text-[10px] font-black uppercase tracking-[0.25em] text-gray-400">IR Control</p>
-                        <h1 class="text-3xl font-black text-[#800000] uppercase">IR Signal Receiver</h1>
-                    </div>
-                    <span id="receiverStatus" class="status-pill ready">Status: Not Ready</span>
+            <!-- Unified Header -->
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <p class="text-[10px] font-black uppercase tracking-[0.25em] text-gray-400">IR Control</p>
+                    <h1 class="text-3xl font-black text-[#7A001E] uppercase">IR Signal Manager</h1>
                 </div>
-                <p class="text-sm text-gray-600 mb-6">Capture and read an infrared signal from an air conditioner remote control.</p>
+                <span id="receiverStatus" class="status-pill ready">Status: Not Ready</span>
+            </div>
 
-                <div class="receiver-stage p-8 md:p-12">
-                    <div class="signal-ring"></div>
-                    <div class="signal-ring"></div>
-                    <div class="signal-ring"></div>
-                    <div id="receiverCore" class="receiver-core"><i data-lucide="radio" class="w-10 h-10"></i></div>
-                    <div class="receiver-illustration">
-                        <div class="guide-scene" aria-hidden="true">
-                            <div class="device-glow"></div>
-                            <div class="hand left"></div>
-                            <div class="hand right"></div>
-                            <div class="aircon-remote">
-                                <div class="remote-buttons">
-                                    <span></span><span></span><span></span>
-                                    <span></span><span></span><span></span>
-                                    <span></span><span></span><span></span>
+            <!-- Stacked Vertical Layout -->
+            <div class="flex flex-col gap-6">
+                
+                <!-- Panel A: Signal Capture & Control (Left Column) -->
+                <section class="card receiver-panel">
+                    <h2 class="text-xl font-black text-gray-800 mb-4">Signal Capture & Control</h2>
+                    
+                    <!-- Dynamic Status Indicator -->
+                    <div class="receiver-stage mb-6" id="receiverStage">
+                        <div class="signal-ring"></div>
+                        <div class="signal-ring"></div>
+                        <div class="signal-ring"></div>
+                        <div id="receiverCore" class="receiver-core"><i data-lucide="radio" class="w-10 h-10"></i></div>
+                        <div class="receiver-illustration">
+                            <div class="guide-scene" aria-hidden="true">
+                                <div class="device-glow"></div>
+                                <div class="hand left"></div>
+                                <div class="hand right"></div>
+                                <div class="aircon-remote">
+                                    <div class="remote-buttons">
+                                        <span></span><span></span><span></span>
+                                        <span></span><span></span><span></span>
+                                        <span></span><span></span><span></span>
+                                    </div>
+                                </div>
+                                <div class="device-box">
+                                    <div class="device-icon"></div>
                                 </div>
                             </div>
-                            <div class="device-box">
-                                <div class="device-icon"></div>
+                        </div>
+                        <div class="absolute bottom-0 left-0 right-0 z-10 flex flex-col items-center justify-center pb-8 pt-6">
+                            <div class="text-center">
+                                <h2 id="receiverTitle" class="text-lg font-black uppercase tracking-[0.18em] text-gray-700 mb-2">Not Ready</h2>
+                                <p id="receiverMessage" class="text-sm text-gray-500 max-w-lg">The IR receiver is currently inactive.</p>
                             </div>
                         </div>
                     </div>
-                    <div class="absolute bottom-0 left-0 right-0 z-10 flex flex-col items-center justify-center pb-10 pt-8">
-                        <div class="text-center">
-                            <h2 id="receiverTitle" class="text-xl font-black uppercase tracking-[0.18em] text-gray-700 mb-3">Not Ready</h2>
-                            <p id="receiverMessage" class="text-sm text-gray-500 max-w-lg mt-2">The IR receiver is currently inactive.</p>
+
+                    <!-- Captured Signal Block (Hidden by default) -->
+                    <div class="signal-panel hidden" id="signalPanel">
+                        <div class="bg-gradient-to-br from-green-50 to-emerald-50/50 rounded-xl p-4 border border-green-200 mb-4">
+                            <div class="flex items-center gap-2 mb-3">
+                                <i data-lucide="check-circle" class="w-5 h-5 text-green-600"></i>
+                                <h3 class="text-lg font-black text-green-800">Signal Received!</h3>
+                            </div>
+                            <div class="grid grid-cols-3 gap-3 text-sm mb-3">
+                                <div><span class="text-xs font-bold text-gray-500 uppercase">Protocol</span><p id="signalProtocol" class="font-bold text-gray-800">--</p></div>
+                                <div><span class="text-xs font-bold text-gray-500 uppercase">Length</span><p id="signalLength" class="font-bold text-gray-800">--</p></div>
+                                <div><span class="text-xs font-bold text-gray-500 uppercase">Status</span><p id="signalStatus" class="font-bold text-green-600">Ready</p></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Syntax-highlighted code block -->
+                        <div class="bg-gray-900 rounded-xl p-4 mb-4">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-bold text-gray-400 uppercase">Raw IR Code</span>
+                                <button id="copySignalBtn" class="text-xs font-bold text-[#7A001E] hover:text-[#B31238] uppercase">Copy</button>
+                            </div>
+                            <pre id="rawSignalOutput" class="text-xs font-mono text-green-400 overflow-x-auto whitespace-pre-wrap">uint16_t rawData[] = {\n    0\n};</pre>
+                        </div>
+                        
+                        <div class="flex gap-2">
+                            <button id="pasteSignalBtn" class="flex-1 bg-[#7A001E] text-white font-black py-3 rounded-lg text-xs uppercase hover:bg-[#4A0012] transition-all">Paste to Library</button>
                         </div>
                     </div>
-                </div>
 
-                <div class="signal-panel" id="signalPanel">
-                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
-                        <div>
-                            <p class="tag">Captured Signal</p>
-                            <h3 class="text-xl font-black text-gray-800">Signal Received ✓</h3>
-                        </div>
-                        <div class="flex gap-3 flex-wrap">
-                            <button id="copySignalBtn" class="primary-btn">Copy IR Signal</button>
-                            <button id="pasteSignalBtn" class="secondary-btn">Paste to Library</button>
-                        </div>
+                    <!-- Control Buttons -->
+                    <div class="flex gap-2 mt-4">
+                        <button id="readyBtn" class="flex-1 bg-[#7A001E] text-white font-black py-3 rounded-lg text-xs uppercase hover:bg-[#4A0012] transition-all">Ready to Receive</button>
+                        <button id="receiveAgainBtn" class="flex-1 bg-gray-200 text-gray-700 font-black py-3 rounded-lg text-xs uppercase hover:bg-gray-300 transition-all">Receive Again</button>
+                        <button id="stopBtn" class="flex-1 bg-gray-200 text-gray-700 font-black py-3 rounded-lg text-xs uppercase hover:bg-gray-300 transition-all">Stop</button>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mb-4">
-                        <div><span class="tag">Protocol</span><p id="signalProtocol" class="mt-2 font-bold text-gray-700">--</p></div>
-                        <div><span class="tag">Signal Length</span><p id="signalLength" class="mt-2 font-bold text-gray-700">--</p></div>
-                        <div><span class="tag">Status</span><p id="signalStatus" class="mt-2 font-bold text-gray-700">Ready</p></div>
-                    </div>
-                    <div class="bg-white border border-gray-200 rounded-2xl p-4">
-                        <p class="tag mb-3">Raw IR Signal</p>
-                        <pre id="rawSignalOutput" class="overflow-x-auto text-xs leading-7 text-gray-700 whitespace-pre-wrap">uint16_t rawData[] = {\n    0\n};</pre>
-                    </div>
-                </div>
+                </section>
 
-                <div class="mt-8 flex flex-wrap gap-3">
-                    <button id="readyBtn" class="primary-btn">Ready to Receive</button>
-                    <button id="receiveAgainBtn" class="mini-btn">Receive Again</button>
-                    <button id="stopBtn" class="mini-btn">Stop Receiving</button>
-                </div>
-            </section>
-
-            <section id="library" class="card library-panel">
-                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-                    <div>
-                        <p class="text-[10px] font-black uppercase tracking-[0.25em] text-gray-400">IR Control</p>
-                        <h2 class="text-3xl font-black text-[#800000] uppercase">IR Remote Library</h2>
+                <!-- Panel B: Remote Library (Right Column) -->
+                <section id="library" class="card library-panel">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-xl font-black text-gray-800">Remote Library</h2>
+                        <button id="addSignalBtn" class="bg-[#7A001E] text-white font-black px-4 py-2 rounded-lg text-xs uppercase hover:bg-[#4A0012] transition-all flex items-center gap-2">
+                            <i data-lucide="plus" class="w-4 h-4"></i> Add Command
+                        </button>
                     </div>
-                    <div class="flex items-center gap-3">
-                        <label class="tag">Laboratory</label>
-                        <select id="labFilterSelect" class="field w-auto min-w-[180px]">
-                            <option value="">Select laboratory</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="flex flex-wrap gap-3 mb-6">
-                    <button id="activateFromLibraryBtn" class="primary-btn">Activate IR Receiver</button>
-                    <button id="addSignalBtn" class="mini-btn">Add Signal</button>
-                </div>
-
-                <div id="libraryForm" class="library-form">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label class="tag block mb-2">Laboratory</label>
-                            <select id="saveLabSelect" class="field"></select>
-                        </div>
-                        <div>
-                            <label class="tag block mb-2">Command</label>
-                            <select id="saveCommandSelect" class="field">
-                                <option value="acOn">AC ON</option>
-                                <option value="acOff">AC OFF</option>
-                                <option value="temperatureUp">Temperature UP</option>
-                                <option value="temperatureDown">Temperature DOWN</option>
+                    
+                    <!-- Searchable Dropdown -->
+                    <div class="mb-4">
+                        <label class="text-xs font-bold text-gray-500 uppercase block mb-2">Laboratory</label>
+                        <div class="relative">
+                            <select id="labFilterSelect" class="field w-full appearance-none pr-10">
+                                <option value="">Select laboratory</option>
                             </select>
-                        </div>
-                        <div>
-                            <label class="tag block mb-2">Signal Name</label>
-                            <input id="saveSignalName" class="field" placeholder="AC ON"/>
-                        </div>
-                        <div>
-                            <label class="tag block mb-2">Protocol</label>
-                            <input id="saveProtocolInput" class="field" value="PANASONIC"/>
+                            <i data-lucide="chevron-down" class="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"></i>
                         </div>
                     </div>
-                    <div class="mt-4">
-                        <label class="tag block mb-2">Raw IR Signal</label>
-                        <textarea id="saveRawDataInput" class="field" rows="7" placeholder="Paste the captured IR raw data here..."></textarea>
-                    </div>
-                    <div class="mt-5 flex gap-3 flex-wrap">
-                        <button id="saveSignalBtn" class="primary-btn">Save Signal</button>
-                        <button id="cancelSignalBtn" class="mini-btn">Cancel</button>
-                    </div>
-                </div>
 
-                <div id="libraryGrid" class="library-grid mt-6"></div>
-            </section>
+                    <!-- Library Form (Hidden by default) -->
+                    <div id="libraryForm" class="library-form hidden mb-4">
+                        <div class="grid grid-cols-2 gap-3 mb-3">
+                            <div>
+                                <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Laboratory</label>
+                                <select id="saveLabSelect" class="field w-full"></select>
+                            </div>
+                            <div>
+                                <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Command</label>
+                                <select id="saveCommandSelect" class="field w-full">
+                                    <option value="acOn">AC ON</option>
+                                    <option value="acOff">AC OFF</option>
+                                    <option value="temperatureUp">Temperature UP</option>
+                                    <option value="temperatureDown">Temperature DOWN</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Signal Name</label>
+                            <input id="saveSignalName" class="field w-full" placeholder="AC ON"/>
+                        </div>
+                        <div class="mb-3">
+                            <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Protocol</label>
+                            <input id="saveProtocolInput" class="field w-full" value="PANASONIC"/>
+                        </div>
+                        <div class="mb-3">
+                            <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Raw IR Signal</label>
+                            <textarea id="saveRawDataInput" class="field w-full" rows="4" placeholder="Paste the captured IR raw data here..."></textarea>
+                        </div>
+                        <div class="flex gap-2">
+                            <button id="saveSignalBtn" class="flex-1 bg-[#7A001E] text-white font-black py-2 rounded-lg text-xs uppercase hover:bg-[#4A0012] transition-all">Save</button>
+                            <button id="cancelSignalBtn" class="flex-1 bg-gray-200 text-gray-700 font-black py-2 rounded-lg text-xs uppercase hover:bg-gray-300 transition-all">Cancel</button>
+                        </div>
+                    </div>
+
+                    <!-- Library Grid -->
+                    <div id="libraryGrid" class="library-grid space-y-3"></div>
+                    
+                    <!-- Empty State -->
+                    <div id="emptyLibraryState" class="hidden text-center py-8">
+                        <i data-lucide="database" class="w-12 h-12 text-gray-300 mx-auto mb-3"></i>
+                        <p class="text-sm font-bold text-gray-400">No signals saved yet</p>
+                        <p class="text-xs text-gray-300">Add your first IR command to get started</p>
+                    </div>
+                </section>
+            </div>
         </div>
     </main>
 
@@ -478,39 +591,38 @@
             const statusEl = document.getElementById('receiverStatus');
             const titleEl = document.getElementById('receiverTitle');
             const messageEl = document.getElementById('receiverMessage');
-            const core = document.getElementById('receiverCore');
+            const receiverStage = document.getElementById('receiverStage');
             const panel = document.getElementById('signalPanel');
-            const receiverStage = document.querySelector('.receiver-stage');
+            
             statusEl.className = 'status-pill';
-            receiverStage.classList.remove('listening');
-            core.classList.remove('receiver-blink');
+            receiverStage.classList.remove('listening', 'received');
 
             if (status === 'listening') {
                 statusEl.classList.add('listening');
                 statusEl.textContent = 'Status: Listening for IR Signal...';
-                titleEl.textContent = 'Listening for IR Signal...';
+                titleEl.textContent = 'LISTENING FOR SIGNAL';
                 messageEl.textContent = 'Receiver is powered on. Point the remote toward the module and press a button within 10 seconds.';
                 receiverStage.classList.add('listening');
-                core.classList.add('receiver-blink');
-                panel.classList.remove('show');
+                panel.classList.add('hidden');
             } else if (status === 'received') {
                 statusEl.classList.add('received');
                 statusEl.textContent = 'Status: ✓ Signal Received';
-                titleEl.textContent = 'Signal Received ✓';
+                titleEl.textContent = 'SIGNAL RECEIVED!';
                 messageEl.textContent = 'The IR signal has been captured and is ready to paste into the library.';
-                panel.classList.add('show');
+                receiverStage.classList.add('received');
+                panel.classList.remove('hidden');
             } else if (status === 'stopped') {
                 statusEl.classList.add('stopped');
                 statusEl.textContent = 'Status: Receiver Stopped';
                 titleEl.textContent = 'Receiver Stopped';
                 messageEl.textContent = 'The IR receiver is powered off until the system is ready to receive.';
-                panel.classList.remove('show');
+                panel.classList.add('hidden');
             } else {
                 statusEl.classList.add('ready');
                 statusEl.textContent = 'Status: Not Ready';
-                titleEl.textContent = 'Not Ready';
-                messageEl.textContent = 'The IR receiver is currently powered off because the system is not ready to receive.';
-                panel.classList.remove('show');
+                titleEl.textContent = 'Awaiting Connection...';
+                messageEl.textContent = 'The IR receiver is currently inactive. Click "Ready to Receive" to begin.';
+                panel.classList.add('hidden');
             }
         }
 
@@ -554,11 +666,14 @@
 
         function getLibraryByLab(labName) {
             const key = String(labName || '').trim();
+            console.log('Getting library for lab key:', key);
             const labEntry = state.libraryData[key] || {};
+            console.log('Lab entry:', labEntry);
             const result = {};
             COMMANDS.forEach((cmd) => {
                 result[cmd.key] = labEntry[cmd.key] || null;
             });
+            console.log('Result:', result);
             return result;
         }
 
@@ -573,41 +688,56 @@
         function renderLibraryCards() {
             const selectedLab = document.getElementById('labFilterSelect').value || state.availableLabs[0]?.name || 'Laboratory 1';
             const labSignals = getLibraryByLab(selectedLab);
+            console.log('Rendering cards for lab:', selectedLab, 'Signals:', labSignals);
+            console.log('COMMANDS:', COMMANDS);
             const groupMarkup = COMMANDS.map((cmd) => {
                 const entry = labSignals[cmd.key];
                 const card = entry ? `
                     <div class="library-entry">
-                        <div class="flex items-center justify-between gap-2">
-                            <div>
-                                <p class="tag">${cmd.group}</p>
-                                <h3 class="text-xl font-black text-gray-800 mt-2">${cmd.label}</h3>
-                            </div>
-                            <span class="tag-green">Saved</span>
+                        <div class="library-entry-header">
+                            <h3 class="library-entry-title">${cmd.label}</h3>
+                            <span class="library-entry-status">Saved</span>
                         </div>
-                        <div class="mt-4 space-y-2 text-sm text-gray-700">
-                            <p><span class="tag">Protocol</span> ${entry.protocol || 'PANASONIC'}</p>
-                            <p><span class="tag">Signal</span> ${entry.name || cmd.label}</p>
-                            <p><span class="tag">Length</span> ${entry.signalLength || normalizeRawData(entry.rawData || []).length}</p>
+                        <div class="library-entry-details">
+                            <span>Protocol:</span> ${entry.protocol || 'PANASONIC'} | 
+                            <span>Length:</span> ${entry.signalLength || normalizeRawData(entry.rawData || []).length}
                         </div>
-                        <div class="mt-5 flex gap-2 flex-wrap">
-                            <button data-action="view" data-lab="${selectedLab}" data-command="${cmd.key}" class="mini-btn">View</button>
-                            <button data-action="copy" data-lab="${selectedLab}" data-command="${cmd.key}" class="mini-btn">Copy</button>
-                            <button data-action="edit" data-lab="${selectedLab}" data-command="${cmd.key}" class="mini-btn">Edit</button>
-                            <button data-action="delete" data-lab="${selectedLab}" data-command="${cmd.key}" class="mini-btn">Delete</button>
+                        <div class="library-entry-actions">
+                            <button data-action="view" data-lab="${selectedLab}" data-command="${cmd.key}" class="library-action-btn">View</button>
+                            <button data-action="copy" data-lab="${selectedLab}" data-command="${cmd.key}" class="library-action-btn">Copy</button>
+                            <button data-action="edit" data-lab="${selectedLab}" data-command="${cmd.key}" class="library-action-btn">Edit</button>
+                            <button data-action="delete" data-lab="${selectedLab}" data-command="${cmd.key}" class="library-action-btn delete">Delete</button>
                         </div>
                     </div>
                 ` : `
-                    <div class="library-entry opacity-80">
-                        <p class="tag">${cmd.group}</p>
-                        <h3 class="text-xl font-black text-gray-800 mt-2">${cmd.label}</h3>
-                        <p class="text-sm text-gray-500 mt-3">No saved signal yet.</p>
-                        <button data-action="new" data-lab="${selectedLab}" data-command="${cmd.key}" class="primary-btn mt-4">Add Signal</button>
+                    <div class="library-entry opacity-60">
+                        <div class="library-entry-header">
+                            <h3 class="library-entry-title">${cmd.label}</h3>
+                            <span class="library-entry-status" style="background: var(--bg-secondary); color: var(--text-muted);">Empty</span>
+                        </div>
+                        <div class="library-entry-details">
+                            <span>No saved signal yet</span>
+                        </div>
+                        <div class="library-entry-actions">
+                            <button data-action="new" data-lab="${selectedLab}" data-command="${cmd.key}" class="library-action-btn" style="background: var(--maroon-primary); color: white; border-color: var(--maroon-primary);">Add Signal</button>
+                        </div>
                     </div>
                 `;
                 return card;
             }).join('');
 
-            document.getElementById('libraryGrid').innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">${groupMarkup}</div>`;
+            const libraryGrid = document.getElementById('libraryGrid');
+            const emptyState = document.getElementById('emptyLibraryState');
+            
+            if (groupMarkup.trim()) {
+                libraryGrid.innerHTML = groupMarkup;
+                libraryGrid.classList.remove('hidden');
+                emptyState.classList.add('hidden');
+            } else {
+                libraryGrid.innerHTML = '';
+                libraryGrid.classList.add('hidden');
+                emptyState.classList.remove('hidden');
+            }
 
             document.querySelectorAll('[data-action]').forEach((button) => {
                 const action = button.dataset.action;
@@ -626,7 +756,7 @@
                 document.getElementById('saveSignalName').value = selected.name || COMMANDS.find((item) => item.key === command)?.label || '';
                 document.getElementById('saveProtocolInput').value = selected.protocol || 'PANASONIC';
                 document.getElementById('saveRawDataInput').value = formatSignal(selected.rawData || []);
-                document.getElementById('libraryForm').classList.add('show');
+                document.getElementById('libraryForm').classList.remove('hidden');
                 return;
             }
             if (action === 'copy') {
@@ -731,7 +861,7 @@
 
             // Save to IR Remote Library only (avoid creating duplicate room entries)
             db.ref(`irRemoteLibrary/${lab}/${command}`).set(payload).then(() => {
-                document.getElementById('libraryForm').classList.remove('show');
+                document.getElementById('libraryForm').classList.add('hidden');
                 asyncAlert('IR signal saved successfully!');
             }).catch(() => asyncAlert('Unable to save to the IR library.', 'Retry'));
         }
@@ -739,20 +869,27 @@
         function loadLibrary() {
             db.ref('irRemoteLibrary').on('value', (snapshot) => {
                 state.libraryData = snapshot.val() || {};
+                console.log('Library data loaded from Firebase:', state.libraryData);
+                console.log('Available labs:', Object.keys(state.libraryData));
                 renderLibraryCards();
             });
         }
 
         function loadDashboardLabs() {
+            console.log('Loading dashboard labs...');
             db.ref().once('value').then((snapshot) => {
                 const data = snapshot.val() || {};
+                console.log('Firebase root data:', data);
                 const labList = dashboardLabListFromFirebase(data);
+                console.log('Lab list:', labList);
                 state.availableLabs = labList;
                 renderLabOptions();
                 const selected = document.getElementById('labFilterSelect').value || labList[0]?.name || 'Laboratory 1';
                 document.getElementById('labFilterSelect').value = selected;
+                console.log('Selected lab:', selected);
                 renderLibraryCards();
-            }).catch(() => {
+            }).catch((error) => {
+                console.error('Error loading labs:', error);
                 state.availableLabs = [
                     { key: 'Laboratory 1', name: 'Laboratory 1' },
                     { key: 'Laboratory 2', name: 'Laboratory 2' },
@@ -792,12 +929,7 @@
             const rawText = document.getElementById('rawSignalOutput').textContent;
             document.getElementById('saveLabSelect').value = selectedLab;
             document.getElementById('saveRawDataInput').value = rawText;
-            document.getElementById('libraryForm').classList.add('show');
-            window.location.hash = 'library';
-        });
-
-        document.getElementById('activateFromLibraryBtn').addEventListener('click', () => {
-            document.getElementById('readyBtn').click();
+            document.getElementById('libraryForm').classList.remove('hidden');
             window.location.hash = 'library';
         });
 
@@ -807,20 +939,30 @@
             document.getElementById('saveSignalName').value = 'AC ON';
             document.getElementById('saveProtocolInput').value = 'PANASONIC';
             document.getElementById('saveRawDataInput').value = 'uint16_t rawData[] = {\n    0\n};';
-            document.getElementById('libraryForm').classList.add('show');
+            document.getElementById('libraryForm').classList.remove('hidden');
             window.location.hash = 'library';
         });
 
         document.getElementById('saveSignalBtn').addEventListener('click', saveLibrarySignal);
-        document.getElementById('cancelSignalBtn').addEventListener('click', () => document.getElementById('libraryForm').classList.remove('show'));
+        document.getElementById('cancelSignalBtn').addEventListener('click', () => document.getElementById('libraryForm').classList.add('hidden'));
         document.getElementById('labFilterSelect').addEventListener('change', renderLibraryCards);
 
         document.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM Content Loaded');
+            console.log('Lucide library available:', typeof lucide);
             loadDashboardLabs();
             loadLibrary();
             setReceiverStatus('idle');
             lucide.createIcons();
+            console.log('Icons created');
         });
+
+        // Also call lucide.createIcons() after library rendering to ensure icons are updated
+        const originalRenderLibraryCards = renderLibraryCards;
+        renderLibraryCards = function() {
+            originalRenderLibraryCards.call(this);
+            lucide.createIcons();
+        };
 
         if (window.location.hash === '#library') {
             setTimeout(() => {
@@ -828,6 +970,58 @@
                 if (librarySection) librarySection.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }, 150);
         }
+    </script>
+
+    <!-- Theme Toggle Functionality -->
+    <script>
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            
+            const icon = document.getElementById('theme-icon');
+            icon.setAttribute('data-lucide', newTheme === 'light' ? 'moon' : 'sun');
+            lucide.createIcons();
+        }
+
+        // Load saved theme
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        const themeIcon = document.getElementById('theme-icon');
+        if (themeIcon) {
+            themeIcon.setAttribute('data-lucide', savedTheme === 'light' ? 'moon' : 'sun');
+        }
+    </script>
+
+    <!-- Mobile Bottom Navigation -->
+    <nav class="mobile-bottom-nav">
+        <a href="1_dashboard_trial.html" class="mobile-nav-item">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Dashboard</span>
+        </a>
+        <a href="2_analytics_trial.html" class="mobile-nav-item">
+            <i data-lucide="bar-chart-3"></i>
+            <span>Analytics</span>
+        </a>
+        <a href="3_alert_trial.html" class="mobile-nav-item">
+            <i data-lucide="bell"></i>
+            <span>Alerts</span>
+        </a>
+        <a href="IRreciverPage.html" class="mobile-nav-item active">
+            <i data-lucide="radio"></i>
+            <span>IR</span>
+        </a>
+        <a href="4_settings_trial.html" class="mobile-nav-item">
+            <i data-lucide="settings"></i>
+            <span>Settings</span>
+        </a>
+    </nav>
+
+    <!-- Mobile menu toggle -->
+    <script>
+        document.getElementById('menu-toggle').addEventListener('click', () => document.getElementById('sidebar').classList.toggle('hidden'));
     </script>
 </body>
 </html>

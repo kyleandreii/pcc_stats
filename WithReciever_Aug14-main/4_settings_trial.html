@@ -16,123 +16,45 @@
     <script src="ui-enhancements.js"></script>
 
     <style>
-        .sidebar { position: fixed; left: 0; top: 0; height: 100vh; width: 260px; background-color: #800000; padding: 24px; display: flex; flex-direction: column; z-index: 40; transition: 0.3s; }
-        .sidebar-header { display: flex; align-items: center; gap: 12px; color: white; font-weight: 900; font-size: 1.25rem; margin-bottom: 24px; }
-        .nav-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 12px; color: rgba(255, 255, 255, 0.7); text-decoration: none; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); font-size: 14px; position: relative; border-left: 3px solid transparent; }
-        .nav-item:hover { background-color: rgba(255, 255, 255, 0.1); color: white; transform: translateX(4px); }
-        .nav-item.active { background-color: rgba(255, 255, 255, 0.2); color: white; font-weight: bold; border-left-color: rgba(255, 255, 255, 0.8); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); }
-        .main-wrapper { margin-left: 260px; padding: 40px; min-height: 100vh; }
-        .card { 
-            background: white; 
-            border-radius: 24px; 
-            border: 1px solid #e5e7eb; 
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.1);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            position: relative;
-            overflow: hidden;
-        }
-        .card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 1px;
-            background: linear-gradient(90deg, transparent, rgba(0,0,0,0.05), transparent);
-        }
-        .card:hover { 
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1), 0 4px 10px rgba(0,0,0,0.05); 
-            transform: translateY(-3px);
-            border-color: #d1d5db;
-        }
-        .stats-card { 
-            display: flex; align-items: center; gap: 1rem; padding: 1.5rem; 
-            border-radius: 24px; 
-            background: linear-gradient(135deg, #800000 0%, #950000 100%);
-            color: white; 
-            box-shadow: 0 10px 25px rgba(128, 0, 0, 0.3), 0 4px 10px rgba(128, 0, 0, 0.2);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            position: relative;
-            overflow: hidden;
-        }
-        .stats-card::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            right: -50%;
-            width: 100%;
-            height: 100%;
-            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
-        }
-        .stats-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 15px 35px rgba(128, 0, 0, 0.4), 0 6px 15px rgba(128, 0, 0, 0.3);
-        }
-        .stats-card .stats-icon-bg { flex-shrink: 0; }
-        .stats-card > div { flex: 1; }
+        /* Settings-specific styles that complement global CSS */
         .circular-progress { position: relative; }
         .circular-progress svg { transform: rotate(-90deg); }
         .circular-progress .progress-ring { stroke-dasharray: 251.2; stroke-dashoffset: 251.2; transition: stroke-dashoffset 0.5s ease; }
-        .input-threshold, .info-input { 
-            background: #f9fafb; 
-            border: 2px solid #e5e7eb; 
-            padding: 12px 16px; 
-            border-radius: 12px; 
-            font-weight: bold; 
-            font-size: 14px;
-            transition: all 0.2s ease;
-        }
-        .input-threshold:focus, .info-input:focus {
-            border-color: #800000;
-            background: white;
-            box-shadow: 0 0 0 3px rgba(128, 0, 0, 0.1);
-            outline: none;
-        }
-        
-        .modal-overlay { 
-            position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); 
-            backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 100; 
-        }
-        .modal-content { 
-            background: white; width: 90%; max-width: 420px; border-radius: 32px; 
-            padding: 32px; position: relative; border-top: 6px solid #800000;
-            box-shadow: 0 25px 50px rgba(0,0,0,0.15), 0 10px 20px rgba(0,0,0,0.1);
-        }
 
         .remote-btn { 
-            background: #f3f4f6; 
-            color: #800000; 
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
-            border: 1px solid #e5e7eb; 
+            background: var(--bg-secondary); 
+            color: var(--maroon-primary); 
+            transition: var(--transition-base); 
+            border: 1px solid var(--border-color); 
             cursor: pointer;
-            border-radius: 12px;
+            border-radius: var(--radius-lg);
         }
         .remote-btn:hover { 
-            background: linear-gradient(135deg, #800000 0%, #950000 100%);
+            background: linear-gradient(135deg, var(--maroon-primary) 0%, var(--maroon-dark) 100%);
             color: white; 
-            border-color: #800000;
-            box-shadow: 0 4px 12px rgba(128, 0, 0, 0.3);
+            border-color: var(--maroon-primary);
+            box-shadow: var(--shadow-glow-maroon);
             transform: translateY(-1px);
         }
         .remote-display { 
-            border: 4px solid #f3f4f6; 
+            border: 4px solid var(--bg-secondary); 
             box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
-            border-radius: 16px;
-            transition: all 0.3s ease;
+            border-radius: var(--radius-xl);
+            transition: var(--transition-base);
         }
         .remote-display:hover {
-            border-color: #e5e7eb;
+            border-color: var(--border-color);
             box-shadow: inset 0 4px 8px rgba(0,0,0,0.08);
         }
 
         /* Lab List Items */
         .lab-item {
-            padding: 14px 16px;
-            border-radius: 12px;
-            border: 1px solid #e5e7eb;
-            background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+            padding: var(--space-4);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border-color);
+            background: var(--bg-secondary);
             cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: var(--transition-base);
             position: relative;
             overflow: hidden;
         }
@@ -144,50 +66,50 @@
             bottom: 0;
             width: 3px;
             background: transparent;
-            transition: all 0.3s ease;
+            transition: var(--transition-base);
         }
         .lab-item:hover {
             transform: translateX(4px);
-            border-color: #d1d5db;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            border-color: var(--border-color);
+            box-shadow: var(--shadow-base);
         }
         .lab-item.active {
-            border-color: #800000;
-            background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
-            box-shadow: 0 4px 12px rgba(128, 0, 0, 0.15);
+            border-color: var(--maroon-primary);
+            background: var(--maroon-soft);
+            box-shadow: var(--shadow-glow-maroon);
         }
         .lab-item.active::before {
-            background: linear-gradient(180deg, #800000 0%, #950000 100%);
+            background: linear-gradient(180deg, var(--maroon-primary) 0%, var(--maroon-dark) 100%);
         }
 
         /* Section Headers */
         .section-header {
-            border-bottom: 1px solid #e5e7eb;
-            padding-bottom: 16px;
-            margin-bottom: 24px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: var(--space-4);
+            margin-bottom: var(--space-6);
         }
         .section-badge {
-            background: linear-gradient(135deg, rgba(128, 0, 0, 0.1) 0%, rgba(128, 0, 0, 0.05) 100%);
-            color: #800000;
-            border: 1px solid rgba(128, 0, 0, 0.2);
+            background: linear-gradient(135deg, rgba(122, 0, 30, 0.1) 0%, rgba(122, 0, 30, 0.05) 100%);
+            color: var(--maroon-primary);
+            border: 1px solid rgba(122, 0, 30, 0.2);
         }
         .section-badge.green {
-            background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(34, 197, 94, 0.05) 100%);
-            color: #16a34a;
-            border-color: rgba(34, 197, 94, 0.2);
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%);
+            color: var(--status-success);
+            border-color: rgba(16, 185, 129, 0.2);
         }
 
         /* Schedule/Automation Controls */
         .schedule-row {
-            background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
-            border: 1px solid #e5e7eb;
-            border-radius: 12px;
-            padding: 16px;
-            transition: all 0.3s ease;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: var(--space-4);
+            transition: var(--transition-base);
         }
         .schedule-row:hover {
-            border-color: #d1d5db;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            border-color: var(--border-color);
+            box-shadow: var(--shadow-sm);
         }
 
         /* Toggle Switch */
@@ -195,14 +117,14 @@
             position: relative;
             width: 44px;
             height: 24px;
-            background: #cbd5e1;
-            border-radius: 12px;
+            background: var(--border-color);
+            border-radius: var(--radius-full);
             cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: var(--transition-base);
         }
         .toggle-switch.active {
-            background: linear-gradient(135deg, #800000 0%, #950000 100%);
-            box-shadow: 0 2px 8px rgba(128, 0, 0, 0.3);
+            background: linear-gradient(135deg, var(--maroon-primary) 0%, var(--maroon-dark) 100%);
+            box-shadow: var(--shadow-glow-maroon);
         }
         .toggle-switch::after {
             content: '';
@@ -213,8 +135,8 @@
             height: 20px;
             background: white;
             border-radius: 50%;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            transition: var(--transition-base);
+            box-shadow: var(--shadow-sm);
         }
         .toggle-switch.active::after {
             transform: translateX(20px);
@@ -222,85 +144,29 @@
 
         /* Threshold Section */
         .threshold-group {
-            background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
-            border: 1px solid #e5e7eb;
-            border-radius: 16px;
-            padding: 20px;
-            transition: all 0.3s ease;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-xl);
+            padding: var(--space-5);
+            transition: var(--transition-base);
         }
         .threshold-group:hover {
-            border-color: #d1d5db;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            border-color: var(--border-color);
+            box-shadow: var(--shadow-sm);
         }
 
         /* Lab Info Form */
         .info-group {
-            background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
-            border: 1px solid #e5e7eb;
-            border-radius: 12px;
-            padding: 16px;
-            margin-bottom: 16px;
-            transition: all 0.3s ease;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: var(--space-4);
+            margin-bottom: var(--space-4);
+            transition: var(--transition-base);
         }
         .info-group:hover {
-            border-color: #d1d5db;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-        }
-
-        /* Smooth Animations */
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        @keyframes scaleIn {
-            from { opacity: 0; transform: scale(0.95); }
-            to { opacity: 1; transform: scale(1); }
-        }
-
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateX(-20px); }
-            to { opacity: 1; transform: translateX(0); }
-        }
-
-        .animate-fade-in {
-            animation: fadeIn 0.4s ease-out forwards;
-        }
-
-        .animate-scale-in {
-            animation: scaleIn 0.3s ease-out forwards;
-        }
-
-        .animate-slide-in {
-            animation: slideIn 0.3s ease-out forwards;
-        }
-
-        /* Button Hover Effects */
-        button {
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        button:hover {
-            transform: translateY(-1px);
-        }
-
-        button:active {
-            transform: translateY(0);
-        }
-
-        /* Card Hover Effect */
-        .card {
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-        }
-
-        /* Smooth Scroll */
-        html {
-            scroll-behavior: smooth;
+            border-color: var(--border-color);
+            box-shadow: var(--shadow-sm);
         }
 
         /* Responsive Design */
@@ -344,7 +210,16 @@
         }
     </style>
 </head>
-<body class="antialiased bg-gray-50">
+<body class="antialiased">
+
+    <!-- Theme Toggle -->
+    <button class="theme-toggle" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
+        <i data-lucide="sun" class="w-5 h-5" id="theme-icon"></i>
+    </button>
+
+    <button id="menu-toggle" class="mobile-menu-toggle">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+    </button>
 
     <div id="logoutModal" class="modal-overlay" onclick="closeLogoutModal(event)">
         <div class="modal-content text-center" onclick="event.stopPropagation()">
@@ -362,13 +237,11 @@
         </div>
     </div>
 
-    <button id="menu-toggle" class="sm:hidden p-4 absolute top-0 left-0 text-[#800000] z-50"><i data-lucide="menu"></i></button>
-
-    <button class="mobile-menu-toggle">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-    </button>
-
     <aside id="sidebar" class="sidebar">
+        <button class="mobile-menu-toggle">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+        </button>
+        
         <a href="1_dashboard_trial.html" class="sidebar-header">
             <img id="sidebar-logo" src="statswhite.png" class="sidebar-logo">
             <span>PCC S.T.A.T.S.</span>
@@ -388,20 +261,21 @@
     <main class="main-wrapper">
         <div class="max-w-[1440px] mx-auto">
             
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-                <div class="stats-card">
+            <!-- Bento Grid Stats Cards -->
+            <div class="bento-grid-4 mb-10">
+                <div class="stats-card animate-scale-in stagger-1">
                     <div class="stats-icon-bg maroon flex-shrink-0"><i data-lucide="layers" class="w-6 h-6"></i></div>
                     <div class="flex-1"><p class="text-[10px] uppercase font-bold opacity-70 tracking-widest">Total Labs</p><h2 id="total-labs-count" class="text-4xl font-black">0</h2></div>
                 </div>
-                <div class="card border-l-4 border-green-500 flex items-center gap-4 p-6">
+                <div class="card card-success flex items-center gap-4 p-6 animate-scale-in stagger-2">
                     <div class="stats-icon-bg green flex-shrink-0"><i data-lucide="check-circle" class="w-6 h-6"></i></div>
                     <div class="flex-1"><p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Normal</p><h2 id="normal-labs-count" class="text-3xl font-black">0</h2></div>
                 </div>
-                <div class="card border-l-4 border-yellow-500 flex items-center gap-4 p-6">
+                <div class="card card-danger flex items-center gap-4 p-6 animate-scale-in stagger-3">
                     <div class="stats-icon-bg yellow flex-shrink-0"><i data-lucide="alert-triangle" class="w-6 h-6"></i></div>
                     <div class="flex-1"><p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Critical</p><h2 id="alert-count" class="text-3xl font-black">0</h2></div>
                 </div>
-                <div class="card border-l-4 border-blue-500 flex items-center gap-4 p-6">
+                <div class="card card-warning flex items-center gap-4 p-6 animate-scale-in stagger-4">
                     <div class="stats-icon-bg blue flex-shrink-0"><i data-lucide="thermometer" class="w-6 h-6"></i></div>
                     <div class="flex-1"><p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Avg Temp</p><h2 id="avg-temp" class="text-3xl font-black">--°C</h2></div>
                 </div>
@@ -1418,5 +1292,52 @@
             }
         });
     </script>
+
+    <!-- Theme Toggle Functionality -->
+    <script>
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            
+            const icon = document.getElementById('theme-icon');
+            icon.setAttribute('data-lucide', newTheme === 'light' ? 'moon' : 'sun');
+            lucide.createIcons();
+        }
+
+        // Load saved theme
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        const themeIcon = document.getElementById('theme-icon');
+        if (themeIcon) {
+            themeIcon.setAttribute('data-lucide', savedTheme === 'light' ? 'moon' : 'sun');
+        }
+    </script>
+
+    <!-- Mobile Bottom Navigation -->
+    <nav class="mobile-bottom-nav">
+        <a href="1_dashboard_trial.html" class="mobile-nav-item">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Dashboard</span>
+        </a>
+        <a href="2_analytics_trial.html" class="mobile-nav-item">
+            <i data-lucide="bar-chart-3"></i>
+            <span>Analytics</span>
+        </a>
+        <a href="3_alert_trial.html" class="mobile-nav-item">
+            <i data-lucide="bell"></i>
+            <span>Alerts</span>
+        </a>
+        <a href="IRreciverPage.html" class="mobile-nav-item">
+            <i data-lucide="radio"></i>
+            <span>IR</span>
+        </a>
+        <a href="4_settings_trial.html" class="mobile-nav-item active">
+            <i data-lucide="settings"></i>
+            <span>Settings</span>
+        </a>
+    </nav>
 </body>
 </html>

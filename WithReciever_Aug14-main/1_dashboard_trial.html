@@ -15,271 +15,92 @@
     <script src="ui-enhancements.js"></script>
 
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background-color: #f9fafb; font-family: ui-sans-serif, system-ui, sans-serif; }
-        
-        .sidebar {
-            position: fixed; left: 0; top: 0; height: 100vh; width: 260px;
-            background-color: #800000; padding: 24px; display: flex; flex-direction: column; z-index: 40;
-        }
-        .sidebar-header {
-            display: flex; align-items: center; gap: 12px; color: white;
-            font-weight: 900; font-size: 1.25rem; margin-bottom: 24px;
-            cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            text-decoration: none;
-        }
-
-        .sidebar-header:hover {
-            transform: translateX(4px);
-            opacity: 0.9;
-        }
-
-        .sidebar-header:active {
-            transform: scale(0.98);
-        }
-        .sidebar-logo {
-            width: 60px;
-            height: 60px;
-            object-fit: contain;
-            border-radius: 6px;
-        }
-        .nav-item {
-            display: flex; align-items: center; gap: 12px; padding: 12px 16px;
-            border-radius: 12px; color: rgba(255, 255, 255, 0.7); text-decoration: none; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            position: relative; border-left: 3px solid transparent;
-        }
-        .nav-item:hover { background-color: rgba(255, 255, 255, 0.1); color: white; transform: translateX(4px); }
-        .nav-item.active { background-color: rgba(255, 255, 255, 0.2); color: white; font-weight: bold; border-left-color: rgba(255, 255, 255, 0.8); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); }
-
-        .main-wrapper { margin-left: 260px; padding: 40px; min-height: 100vh; padding-bottom: 80px; }
-
-        .card { 
-            background: white; 
-            border-radius: 24px; 
-            border: 1px solid #e5e7eb; 
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.1); 
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
-            position: relative;
-            overflow: hidden;
-        }
-        .card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 1px;
-            background: linear-gradient(90deg, transparent, rgba(0,0,0,0.05), transparent);
-        }
-        .card:hover { 
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1), 0 4px 10px rgba(0,0,0,0.05); 
-            transform: translateY(-3px);
-            border-color: #d1d5db;
-        }
-        .stats-card {
-            background: linear-gradient(135deg, #800000 0%, #950000 100%);
-            border-radius: 24px; 
-            padding: 24px; 
-            color: white;
-            display: flex; 
-            align-items: center; 
-            gap: 16px; 
-            box-shadow: 0 10px 25px rgba(128, 0, 0, 0.3), 0 4px 10px rgba(128, 0, 0, 0.2);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            position: relative;
-            overflow: hidden;
-        }
-        .stats-card::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            right: -50%;
-            width: 100%;
-            height: 100%;
-            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
-        }
-        .stats-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 15px 35px rgba(128, 0, 0, 0.4), 0 6px 15px rgba(128, 0, 0, 0.3);
-        }
-        .stats-card .stats-icon-bg { flex-shrink: 0; }
-        .stats-card > div { flex: 1; }
-
+        /* Dashboard-specific styles that complement global CSS */
         .filter-btn { 
-            padding: 10px 18px; border-radius: 10px; font-size: 10px; font-weight: 900; 
-            text-transform: uppercase; cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            padding: 10px 18px; border-radius: var(--radius-base); font-size: var(--font-size-xs); font-weight: 900; 
+            text-transform: uppercase; cursor: pointer; transition: var(--transition-base);
             letter-spacing: 0.05em;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
         }
         .filter-btn.active { 
-            background: white; color: #800000; 
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15), 0 2px 4px rgba(0,0,0,0.1);
+            background: var(--bg-card); 
+            color: var(--maroon-accent);
+            box-shadow: var(--shadow-base);
             transform: translateY(-1px);
         }
-        .filter-btn:not(.active) { 
-            color: #9ca3af; 
-        }
         .filter-btn:not(.active):hover {
-            color: #6b7280;
+            color: var(--text-secondary);
             background: rgba(255,255,255,0.05);
         }
 
-        .switch { position: relative; display: inline-block; width: 34px; height: 20px; }
+        .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
         .switch input { opacity: 0; width: 0; height: 0; }
-        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #cbd5e1; transition: .3s cubic-bezier(0.4, 0, 0.2, 1); border-radius: 20px; }
-        .slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: white; transition: .3s cubic-bezier(0.4, 0, 0.2, 1); border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
-        input:checked + .slider { background-color: #800000; }
-        input:checked + .slider:before { transform: translateX(14px); }
-
-        .border-status-normal { border-top: 4px solid #10b981 !important; }
-        .border-status-high { border-top: 4px solid #ef4444 !important; }
-        .border-status-low { border-top: 4px solid #3b82f6 !important; }
-
-        .modal-overlay {
-            position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5);
-            backdrop-filter: blur(8px); display: none; align-items: center;
-            justify-content: center; z-index: 100;
+        .slider { 
+            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; 
+            background-color: var(--border-color); 
+            transition: var(--transition-base); 
+            border-radius: var(--radius-full);
         }
-        .modal-content {
-            background: white; width: 90%; max-width: 420px; border-radius: 32px;
-            padding: 32px; position: relative; border-top: 6px solid #800000;
-            box-shadow: 0 25px 50px rgba(0,0,0,0.15), 0 10px 20px rgba(0,0,0,0.1);
+        .slider:before { 
+            position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; 
+            background-color: white; transition: var(--transition-base); border-radius: 50%; 
+            box-shadow: var(--shadow-sm); 
         }
+        input:checked + .slider { background-color: var(--maroon-primary); }
+        input:checked + .slider:before { transform: translateX(20px); }
+
+        .border-status-normal { border-top: 4px solid var(--status-success) !important; }
+        .border-status-high { border-top: 4px solid var(--status-danger) !important; }
+        .border-status-low { border-top: 4px solid var(--status-info) !important; }
+
         .modal-row { 
             display: flex; justify-content: space-between; padding: 14px 16px; 
-            background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%); 
-            border-radius: 16px; margin-bottom: 10px; border: 1px solid #e5e7eb;
-            transition: all 0.2s ease;
+            background: var(--bg-secondary); 
+            border-radius: var(--radius-lg); margin-bottom: 10px; border: 1px solid var(--border-color);
+            transition: var(--transition-fast);
         }
         .modal-row:hover {
-            border-color: #d1d5db;
+            border-color: var(--maroon-accent);
             transform: translateX(2px);
         }
         .modal-highlight { 
-            background: linear-gradient(135deg, #800000 0%, #950000 100%); 
-            color: white; padding: 18px; border-radius: 16px; 
+            background: linear-gradient(135deg, var(--maroon-primary) 0%, var(--maroon-dark) 100%); 
+            color: white; padding: 18px; border-radius: var(--radius-lg); 
             display: flex; justify-content: space-between; align-items: center;
-            box-shadow: 0 4px 12px rgba(128, 0, 0, 0.3);
+            box-shadow: var(--shadow-glow-maroon);
         }
 
         .add-input { 
-            width: 100%; padding: 14px 16px; border-radius: 14px; 
-            border: 2px solid #e5e7eb; background: #f9fafb; 
+            width: 100%; padding: 14px 16px; border-radius: var(--radius-lg); 
+            border: 2px solid var(--border-color); background: var(--bg-secondary); 
             font-weight: 600; margin-bottom: 16px; outline: none;
-            transition: all 0.2s ease;
+            transition: var(--transition-fast);
+            color: var(--text-primary);
         }
         .add-input:focus {
-            border-color: #800000;
-            background: white;
-            box-shadow: 0 0 0 3px rgba(128, 0, 0, 0.1);
+            border-color: var(--maroon-accent);
+            background: var(--bg-card);
+            box-shadow: 0 0 0 4px rgba(122, 0, 30, 0.1);
         }
         .add-label { 
-            display: block; font-size: 10px; font-weight: 900; 
-            color: #6b7280; text-transform: uppercase; margin-bottom: 6px; 
+            display: block; font-size: var(--font-size-xs); font-weight: 900; 
+            color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px; 
             letter-spacing: 0.05em;
         }
 
         .conn-footer {
-            position: fixed; bottom: 0; left: 260px; right: 0;
-            background: white; border-top: 1px solid #f3f4f6;
+            position: fixed; bottom: 0; left: var(--sidebar-width); right: 0;
+            background: var(--bg-glass); 
+            backdrop-filter: var(--glass-blur);
+            border-top: var(--glass-border);
             padding: 12px 40px; display: flex; justify-content: space-between;
             align-items: center; z-index: 30;
         }
 
-        /* Smooth Animations */
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        @keyframes scaleIn {
-            from { opacity: 0; transform: scale(0.95); }
-            to { opacity: 1; transform: scale(1); }
-        }
-
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateX(-20px); }
-            to { opacity: 1; transform: translateX(0); }
-        }
-
-        @keyframes modalFadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
-        @keyframes modalScaleIn {
-            from { opacity: 0; transform: scale(0.9) translateY(-20px); }
-            to { opacity: 1; transform: scale(1) translateY(0); }
-        }
-
-        .animate-fade-in {
-            animation: fadeIn 0.4s ease-out forwards;
-        }
-
-        .animate-scale-in {
-            animation: scaleIn 0.3s ease-out forwards;
-        }
-
-        .animate-slide-in {
-            animation: slideIn 0.3s ease-out forwards;
-        }
-
-        .modal-overlay {
-            animation: modalFadeIn 0.2s ease-out forwards;
-        }
-
-        .modal-content {
-            animation: modalScaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-        }
-
-        /* Button Hover Effects */
-        button {
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        button:hover {
-            transform: translateY(-1px);
-        }
-
-        button:active {
-            transform: translateY(0);
-        }
-
-        /* Card Hover Effect */
-        .card {
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-        }
-
-        /* Smooth Scroll */
-        html {
-            scroll-behavior: smooth;
-        }
-
-        /* Responsive Design */
         @media (max-width: 768px) {
-            .sidebar { transform: translateX(-100%); }
-            .main-wrapper { margin-left: 0; padding: 20px; padding-bottom: 80px; }
-            .conn-footer { left: 0; padding: 12px 20px; }
-            .stats-card { padding: 16px; }
-            .stats-card h2 { font-size: 1.5rem; }
-            .card { padding: 16px; }
-            .filter-btn { padding: 6px 12px; font-size: 9px; }
-        }
-
-        @media (max-width: 480px) {
-            .main-wrapper { padding: 16px; padding-bottom: 80px; }
-            .stats-card { padding: 12px; gap: 12px; }
-            .stats-card h2 { font-size: 1.25rem; }
-            .stats-card p { font-size: 8px; }
-            .card { padding: 12px; border-radius: 16px; }
-            .filter-btn { padding: 4px 8px; font-size: 8px; }
-            .add-input { padding: 10px; font-size: 14px; }
-            .modal-content { padding: 20px; }
+            .conn-footer { left: 0; padding: 12px 20px; bottom: 70px; }
         }
     </style>
 </head>
@@ -349,7 +170,14 @@
         </div>
     </div>
 
-    <button id="menu-toggle" class="sm:hidden p-4 absolute top-0 left-0 text-[#800000] z-50"><i data-lucide="menu"></i></button>
+    <!-- Theme Toggle -->
+    <button class="theme-toggle" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
+        <i data-lucide="sun" class="w-5 h-5" id="theme-icon"></i>
+    </button>
+
+    <button id="menu-toggle" class="mobile-menu-toggle">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+    </button>
 
     <aside id="sidebar" class="sidebar">
         <button class="mobile-menu-toggle">
@@ -379,39 +207,40 @@
 
     <main class="main-wrapper">
         <div class="max-w-[1440px] mx-auto">
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-                <div class="stats-card">
+            <!-- Bento Grid Stats Cards -->
+            <div class="bento-grid-4 mb-10">
+                <div class="stats-card animate-scale-in stagger-1">
                     <div class="stats-icon-bg maroon flex-shrink-0"><i data-lucide="layers" class="w-6 h-6"></i></div>
                     <div class="flex-1"><p class="text-[10px] uppercase font-bold opacity-70 tracking-widest">Total Labs</p><h2 id="total-count" class="text-4xl font-black">0</h2></div>
                 </div>
-                <div class="card border-l-4 border-green-500 flex items-center gap-4 p-6">
+                <div class="card card-success flex items-center gap-4 p-6 animate-scale-in stagger-2">
                     <div class="stats-icon-bg green flex-shrink-0"><i data-lucide="check-circle" class="w-6 h-6"></i></div>
                     <div class="flex-1"><p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Normal</p><h2 id="normal-count" class="text-3xl font-black">--</h2></div>
                 </div>
-                <div class="card border-l-4 border-yellow-500 flex items-center gap-4 p-6">
+                <div class="card card-danger flex items-center gap-4 p-6 animate-scale-in stagger-3">
                     <div class="stats-icon-bg yellow flex-shrink-0"><i data-lucide="alert-triangle" class="w-6 h-6"></i></div>
                     <div class="flex-1"><p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Critical</p><h2 id="alert-count" class="text-3xl font-black">--</h2></div>
                 </div>
-                <div class="card border-l-4 border-blue-500 flex items-center gap-4 p-6">
+                <div class="card card-warning flex items-center gap-4 p-6 animate-scale-in stagger-4">
                     <div class="stats-icon-bg blue flex-shrink-0"><i data-lucide="thermometer" class="w-6 h-6"></i></div>
                     <div class="flex-1"><p class="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Avg Temp</p><h2 id="avg-temp" class="text-3xl font-black">--</h2></div>
                 </div>
             </div>
 
-            <div class="flex flex-col md:flex-row items-center justify-between gap-4 mb-8">
+            <div class="flex flex-col md:flex-row items-center justify-between gap-4 mb-8 animate-slide-down">
                 <div class="relative w-full md:w-96">
                     <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"></i>
                     <input type="text" id="labSearch" placeholder="Search Laboratory (e.g. 401)..." 
-                           class="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#800000]/20 transition-all shadow-sm">
+                           class="info-input pl-10">
                 </div>
-                <div class="flex bg-gray-200/50 p-1 rounded-xl w-full md:w-auto">
+                <div class="flex bg-secondary/50 p-1 rounded-xl w-full md:w-auto backdrop-blur-sm border border-glass">
                     <button onclick="setFilter('all')" id="btn-all" class="filter-btn active">All Rooms</button>
                     <button onclick="setFilter('on')" id="btn-on" class="filter-btn">Turned On</button>
                     <button onclick="setFilter('off')" id="btn-off" class="filter-btn">Turned Off</button>
                 </div>
             </div>
 
-            <div id="lab-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+            <div id="lab-grid" class="bento-grid-2"></div>
         </div>
     </main>
 
@@ -425,7 +254,52 @@
         </div>
     </footer>
 
+    <!-- Mobile Bottom Navigation -->
+    <nav class="mobile-bottom-nav">
+        <a href="1_dashboard_trial.html" class="mobile-nav-item active">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Dashboard</span>
+        </a>
+        <a href="2_analytics_trial.html" class="mobile-nav-item">
+            <i data-lucide="bar-chart-3"></i>
+            <span>Analytics</span>
+        </a>
+        <a href="3_alert_trial.html" class="mobile-nav-item">
+            <i data-lucide="bell"></i>
+            <span>Alerts</span>
+        </a>
+        <a href="IRreciverPage.html" class="mobile-nav-item">
+            <i data-lucide="radio"></i>
+            <span>IR</span>
+        </a>
+        <a href="4_settings_trial.html" class="mobile-nav-item">
+            <i data-lucide="settings"></i>
+            <span>Settings</span>
+        </a>
+    </nav>
+
     <script>
+        // Theme Toggle Functionality
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            
+            const icon = document.getElementById('theme-icon');
+            icon.setAttribute('data-lucide', newTheme === 'light' ? 'moon' : 'sun');
+            lucide.createIcons();
+        }
+
+        // Load saved theme
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        const themeIcon = document.getElementById('theme-icon');
+        if (themeIcon) {
+            themeIcon.setAttribute('data-lucide', savedTheme === 'light' ? 'moon' : 'sun');
+        }
+
         const firebaseConfig = {
             apiKey: "AIzaSyAv9fvbotQfi21Nu7LNZYBuzNUJOD5Vj0E",
             databaseURL: "https://pcc-stats-default-rtdb.asia-southeast1.firebasedatabase.app/",
@@ -465,6 +339,24 @@
         let heartbeatListeners = {}; // Track heartbeat listeners to prevent duplicates
         const HEARTBEAT_TIMEOUT = 15000; // 15 seconds - device offline if no heartbeat for this duration
         const CHECK_INTERVAL_MS = 10000; // 10 seconds
+
+        // Format seconds into human-readable format (days/hours/minutes)
+        function formatDuration(seconds) {
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = seconds % 60;
+
+            if (days > 0) {
+                return `${days}d ${hours}h ${minutes}m`;
+            } else if (hours > 0) {
+                return `${hours}h ${minutes}m`;
+            } else if (minutes > 0) {
+                return `${minutes}m ${secs}s`;
+            } else {
+                return `${secs}s`;
+            }
+        }
         
         // Force periodic re-render to ensure heartbeat status updates in real-time
         setInterval(() => {
@@ -1232,7 +1124,7 @@
                         room: roomId,
                         roomLabel: roomLabel,
                         title: `Device Offline: ${roomLabel}`,
-                        message: `No heartbeat received for ${Math.floor(timeDiff / 1000)} seconds`,
+                        message: `No heartbeat received for ${formatDuration(Math.floor(timeDiff / 1000))}`,
                         timestamp: firebase.database.ServerValue.TIMESTAMP,
                         acknowledged: false
                     };
@@ -1278,7 +1170,7 @@
                             room: roomId,
                             roomLabel: roomLabel,
                             title: `Device Offline: ${roomLabel}`,
-                            message: `No heartbeat received for ${Math.floor(timeDiff / 1000)} seconds`,
+                            message: `No heartbeat received for ${formatDuration(Math.floor(timeDiff / 1000))}`,
                             timestamp: firebase.database.ServerValue.TIMESTAMP,
                             acknowledged: false
                         };
