@@ -229,6 +229,56 @@
     box-shadow: var(--shadow-glow-maroon);
 }
 
+.neumorph-switch.cooldown {
+    pointer-events: none;
+    opacity: 0.6;
+    position: relative;
+}
+
+.neumorph-switch.cooldown::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: -4px;
+    right: -4px;
+    bottom: -4px;
+    border-radius: var(--radius-full);
+    border: 2px solid rgba(128, 0, 0, 0.3);
+    animation: cooldownPulse 1s ease-in-out infinite;
+}
+
+.neumorph-switch.cooldown::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(128, 0, 0, 0.1);
+    border-radius: var(--radius-full);
+    animation: cooldownFill 5s linear forwards;
+}
+
+@keyframes cooldownPulse {
+    0%, 100% {
+        opacity: 0.3;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.6;
+        transform: scale(1.05);
+    }
+}
+
+@keyframes cooldownFill {
+    0% {
+        opacity: 0;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
 /* --- NEUMORPHIC INPUTS --- */
 .neumorph-input {
     background: var(--bg-neumorph);

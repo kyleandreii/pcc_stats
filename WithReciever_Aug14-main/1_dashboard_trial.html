@@ -680,7 +680,17 @@
             renderDashboard();
         });
 
+        // Cooldown tracking for power button
+        let powerButtonCooldown = false;
+        const POWER_COOLDOWN_MS = 5000;
+
         function toggleAC(roomPath, isChecked) {
+            if (powerButtonCooldown) {
+                console.log(`[Dashboard] Power button on cooldown, ignoring request`);
+                return;
+            }
+            powerButtonCooldown = true;
+
             console.log(`[Dashboard] Toggle ${roomPath} to ${isChecked ? 'ON' : 'OFF'}`);
             
             // Firebase is authoritative - update it directly for cross-device sync
@@ -727,9 +737,23 @@
             
             // Force immediate re-render to show the change
             renderDashboard();
+            
+            // Add cooldown class to all switches AFTER re-render
+            document.querySelectorAll('.neumorph-switch').forEach(sw => sw.classList.add('cooldown'));
+            
+            setTimeout(() => {
+                powerButtonCooldown = false;
+                document.querySelectorAll('.neumorph-switch').forEach(sw => sw.classList.remove('cooldown'));
+            }, POWER_COOLDOWN_MS);
         }
 
         function toggleUnitAC(roomPath, unit, isChecked) {
+            if (powerButtonCooldown) {
+                console.log(`[Dashboard] Power button on cooldown, ignoring request`);
+                return;
+            }
+            powerButtonCooldown = true;
+
             const unitPath = `${roomPath}/units/${unit}`;
             const cmd = isChecked ? "ON" : "OFF";
             console.log(`[Dashboard] Toggle ${unitPath} to ${isChecked ? 'ON' : 'OFF'}`);
@@ -748,6 +772,14 @@
             
             // Force immediate re-render to show the change
             renderDashboard();
+            
+            // Add cooldown class to all switches AFTER re-render
+            document.querySelectorAll('.neumorph-switch').forEach(sw => sw.classList.add('cooldown'));
+            
+            setTimeout(() => {
+                powerButtonCooldown = false;
+                document.querySelectorAll('.neumorph-switch').forEach(sw => sw.classList.remove('cooldown'));
+            }, POWER_COOLDOWN_MS);
         }
         
         function formatDuration(timestamp) {
@@ -1000,7 +1032,7 @@
                                     ${isDualUnitRoom ? `
                                         <span class="text-[9px] font-bold text-[#800000] bg-[#800000]/10 px-3 py-1 rounded-full uppercase">Dual Units</span>
                                     ` : `
-                                        <label class="neumorph-switch">
+                                        <label class="neumorph-switch ${powerButtonCooldown ? 'cooldown' : ''}">
                                             <input type="checkbox" ${isPoweredOn ? 'checked' : ''} onchange="toggleAC('${roomPath}', this.checked)">
                                             <span class="neumorph-switch-slider"></span>
                                         </label>
@@ -1039,7 +1071,7 @@
                                 <div class="neumorph-card p-4">
                                     <div class="flex justify-between items-center mb-2">
                                         <p class="text-[9px] font-bold text-gray-600 uppercase">Unit 1</p>
-                                        <label class="neumorph-switch scale-75">
+                                        <label class="neumorph-switch scale-75 ${powerButtonCooldown ? 'cooldown' : ''}">
                                             <input type="checkbox" ${unit1State ? 'checked' : ''} onchange="toggleUnitAC('${roomPath}', 'unit_1', this.checked)">
                                             <span class="neumorph-switch-slider"></span>
                                         </label>
@@ -1049,7 +1081,7 @@
                                 <div class="neumorph-card p-4">
                                     <div class="flex justify-between items-center mb-2">
                                         <p class="text-[9px] font-bold text-gray-600 uppercase">Unit 2</p>
-                                        <label class="neumorph-switch scale-75">
+                                        <label class="neumorph-switch scale-75 ${powerButtonCooldown ? 'cooldown' : ''}">
                                             <input type="checkbox" ${unit2State ? 'checked' : ''} onchange="toggleUnitAC('${roomPath}', 'unit_2', this.checked)">
                                             <span class="neumorph-switch-slider"></span>
                                         </label>
