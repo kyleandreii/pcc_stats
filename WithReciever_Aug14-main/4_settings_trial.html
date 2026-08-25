@@ -349,7 +349,7 @@
                                 <label class="flex items-center gap-3 cursor-pointer">
                                     <span class="text-xs font-bold text-gray-500 uppercase">Enable Automation</span>
                                     <div class="neumorph-switch" id="automation-toggle" onclick="handleAutomationToggle(event)">
-                                        <input type="checkbox" class="hidden">
+                                        <input type="checkbox" id="automation-enabled" class="hidden">
                                         <span class="neumorph-switch-slider"></span>
                                     </div>
                                 </label>
@@ -730,6 +730,19 @@
                 }
             });
             targetTempListeners[roomId][singlePath] = true;
+            
+            // Listen for automation enabled state
+            const automationPath = `${roomId}/automation/enabled`;
+            db.ref(automationPath).on('value', (snapshot) => {
+                const enabled = snapshot.val();
+                console.log(`[Settings] ${roomId} automation enabled updated:`, enabled);
+                const checkbox = document.getElementById('automation-enabled');
+                if (checkbox) {
+                    checkbox.checked = enabled || false;
+                    toggleAutomation();
+                }
+            });
+            targetTempListeners[roomId][automationPath] = true;
         }
 
         function refreshConfigUI() {
