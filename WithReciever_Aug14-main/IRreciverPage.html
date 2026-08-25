@@ -300,7 +300,10 @@
                     <p class="text-[10px] font-black uppercase tracking-[0.25em] text-gray-400">IR Control</p>
                     <h1 class="text-3xl font-black text-[#7A001E] uppercase">IR Signal Manager</h1>
                 </div>
-                <span id="receiverStatus" class="status-pill ready">Status: Not Ready</span>
+                <div class="flex items-center gap-3">
+                    <span id="firebaseStatus" class="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1 rounded-full">Firebase: Connecting...</span>
+                    <span id="receiverStatus" class="status-pill ready">Status: Not Ready</span>
+                </div>
             </div>
 
             <!-- Stacked Vertical Layout -->
@@ -355,13 +358,26 @@
                             </div>
                         </div>
                         
-                        <!-- Syntax-highlighted code block with deep maroon glassmorphism -->
-                        <div class="glass-card-deep p-4 mb-4">
-                            <div class="flex items-center justify-between mb-2">
-                                <span class="text-xs font-bold text-white/70 uppercase">Raw IR Code</span>
-                                <button id="copySignalBtn" class="neumorph-btn text-xs font-bold text-white hover:text-white/80 uppercase">Copy</button>
+                        <!-- Syntax-highlighted code block with white/red theme -->
+                        <div class="bg-white rounded-2xl p-5 mb-4 border-2 border-[#7A001E] shadow-lg">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-lg bg-[#7A001E] flex items-center justify-center">
+                                        <i data-lucide="code-2" class="w-4 h-4 text-white"></i>
+                                    </div>
+                                    <span class="text-xs font-black text-[#7A001E] uppercase tracking-wider">Raw IR Code</span>
+                                </div>
+                                <button id="copySignalBtn" class="bg-[#7A001E] hover:bg-[#5a0016] text-white text-xs font-bold py-2.5 px-4 rounded-xl transition-all shadow-lg hover:shadow-xl flex items-center gap-2">
+                                    <i data-lucide="copy" class="w-3.5 h-3.5"></i> Copy Code
+                                </button>
                             </div>
-                            <pre id="rawSignalOutput" class="text-xs font-mono text-green-400 overflow-x-auto whitespace-pre-wrap">uint16_t rawData[] = {\n    0\n};</pre>
+                            <div class="bg-gray-50 rounded-xl p-5 border border-gray-200 shadow-inner">
+                                <pre id="rawSignalOutput" class="text-xs font-mono text-black overflow-x-auto whitespace-pre-wrap leading-relaxed tracking-wide">uint16_t rawData[] = {\n    0\n};</pre>
+                            </div>
+                            <div class="flex items-center gap-2 mt-3 text-[10px] font-bold text-gray-500 uppercase">
+                                <i data-lucide="info" class="w-3 h-3"></i>
+                                <span>Copy this code to use in your ESP32 project</span>
+                            </div>
                         </div>
                         
                         <div class="flex gap-2">
@@ -398,23 +414,38 @@
                     </div>
 
                     <!-- Library Form (Hidden by default) -->
-                    <div id="libraryForm" class="library-form hidden mb-4">
+                    <div id="libraryForm" class="library-form hidden mb-4 bg-gradient-to-br from-white to-gray-50 border-2 border-gray-200 rounded-xl p-4 shadow-sm">
+                        <div class="flex items-center gap-2 mb-4">
+                            <i data-lucide="edit-3" class="w-5 h-5 text-[#7A001E]"></i>
+                            <h3 class="text-sm font-black text-gray-800 uppercase tracking-wide">Edit IR Signal</h3>
+                        </div>
                         <div class="grid grid-cols-2 gap-3 mb-3">
                             <div>
                                 <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Laboratory</label>
-                                <select id="saveLabSelect" class="field w-full"></select>
+                                <select id="saveLabSelect" class="field w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#7A001E] focus:border-transparent"></select>
                             </div>
                             <div>
                                 <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Command</label>
+                                <select id="saveCommandSelect" class="field w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#7A001E] focus:border-transparent"></select>
                             </div>
                         </div>
-                        <div class="mb-3">
+                        <div class="grid grid-cols-2 gap-3 mb-3">
+                            <div>
+                                <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Signal Name</label>
+                                <input type="text" id="saveSignalName" class="field w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#7A001E] focus:border-transparent" placeholder="e.g., AC ON">
+                            </div>
+                            <div>
+                                <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Protocol</label>
+                                <input type="text" id="saveProtocolInput" class="field w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#7A001E] focus:border-transparent" value="PANASONIC">
+                            </div>
+                        </div>
+                        <div class="mb-4">
                             <label class="text-xs font-bold text-gray-500 uppercase block mb-2">Raw Data</label>
-                            <textarea id="formRawData" class="neumorph-input" rows="3" placeholder="e.g., 9000, 4500, 650, 550..."></textarea>
+                            <textarea id="saveRawDataInput" class="neumorph-input w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[#7A001E] focus:border-transparent" rows="4" placeholder="e.g., 9000, 4500, 650, 550..."></textarea>
                         </div>
                         <div class="flex gap-2">
-                            <button id="saveSignalBtn" class="neumorph-btn-primary flex-1 py-3 rounded-lg text-xs uppercase">Save Signal</button>
-                            <button id="cancelSignalBtn" class="neumorph-btn flex-1 py-3 rounded-lg text-xs uppercase">Cancel</button>
+                            <button id="saveSignalBtn" class="neumorph-btn-primary flex-1 py-3 rounded-lg text-xs uppercase font-bold">Save Signal</button>
+                            <button id="cancelSignalBtn" class="neumorph-btn flex-1 py-3 rounded-lg text-xs uppercase font-bold">Cancel</button>
                         </div>
                     </div>
 
@@ -442,6 +473,28 @@
             firebase.initializeApp(firebaseConfig);
         }
         const db = firebase.database();
+
+        // Update Firebase connection status
+        const firebaseStatus = document.getElementById('firebaseStatus');
+        if (firebaseStatus) {
+            firebaseStatus.textContent = 'Firebase: Connected';
+            firebaseStatus.style.background = '#dcfce7';
+            firebaseStatus.style.color = '#166534';
+        }
+
+        db.ref('.info/connected').on('value', (snapshot) => {
+            if (firebaseStatus) {
+                if (snapshot.val() === true) {
+                    firebaseStatus.textContent = 'Firebase: Connected';
+                    firebaseStatus.style.background = '#dcfce7';
+                    firebaseStatus.style.color = '#166534';
+                } else {
+                    firebaseStatus.textContent = 'Firebase: Disconnected';
+                    firebaseStatus.style.background = '#fee2e2';
+                    firebaseStatus.style.color = '#991b1b';
+                }
+            }
+        });
 
         const COMMANDS = [
             { key: 'acOn', label: 'AC ON', group: 'Power Control' },
@@ -494,6 +547,7 @@
         }
 
         function startListeningSession() {
+            console.log('[Start Listening] Starting listening session...');
             clearListeningTimeout();
             state.receiving = true;
             setReceiverStatus('listening');
@@ -502,12 +556,16 @@
             document.getElementById('receiveAgainBtn').style.cursor = 'pointer';
 
             if (!state.irReceiverListener) {
+                console.log('[Start Listening] Setting up Firebase listener on /irReceiver...');
                 state.irReceiverListener = db.ref('irReceiver').on('value', (snapshot) => {
                     const data = snapshot.val() || {};
+                    console.log('[IR Receiver] Firebase data received:', data);
                     
                     if (data.state === 'listening') {
+                        console.log('[IR Receiver] State: listening');
                         setReceiverStatus('listening');
                     } else if (data.state === 'received' && data.lastSignal) {
+                        console.log('[IR Receiver] State: received, signal:', data.lastSignal);
                         clearListeningTimeout();
                         const signal = data.lastSignal;
                         const rawArray = normalizeRawData(signal.rawData || []);
@@ -520,22 +578,33 @@
                         displaySignal(state.capturedSignal);
                         setReceiverStatus('received');
                     } else if (data.state === 'stopped') {
+                        console.log('[IR Receiver] State: stopped');
                         clearListeningTimeout();
                         setReceiverStatus('stopped');
                     } else {
+                        console.log('[IR Receiver] State: idle/other, data:', data);
                         setReceiverStatus('idle');
                     }
                 });
+                console.log('[Start Listening] Firebase listener set up successfully');
+            } else {
+                console.log('[Start Listening] Firebase listener already exists');
             }
 
+            console.log('[Start Listening] Setting Firebase state to listening...');
             db.ref('irReceiver').set({
                 state: 'listening',
                 status: 'Listening for IR Signal...',
                 updatedAt: Date.now(),
                 signal: null
+            }).then(() => {
+                console.log('[Start Listening] Firebase state set to listening successfully');
+            }).catch((error) => {
+                console.error('[Start Listening] Error setting Firebase state:', error);
             });
 
             state.listeningTimeoutId = setTimeout(() => {
+                console.log('[Start Listening] Timeout reached, stopping...');
                 stopListeningSession('timeout');
             }, 10000);
         }
@@ -562,6 +631,15 @@
             document.getElementById('signalLength').textContent = Number(safe.signalLength || rawData.length || 0);
             document.getElementById('signalStatus').textContent = 'Captured';
             document.getElementById('rawSignalOutput').textContent = formatSignal(rawData);
+            
+            // Update receiver stage title
+            const receiverTitle = document.getElementById('receiverTitle');
+            if (receiverTitle) {
+                receiverTitle.textContent = `SIGNAL RECEIVED! (${rawData.length} values)`;
+            }
+            
+            console.log('[Display Signal] Protocol:', safe.protocol, 'Length:', rawData.length);
+            console.log('[Display Signal] Raw data preview:', rawData.slice(0, 10).join(', '));
         }
 
         function setReceiverStatus(status) {
@@ -639,6 +717,13 @@
             if (!document.getElementById('labFilterSelect').value && labOptions.length) {
                 document.getElementById('labFilterSelect').value = labOptions[0].name;
             }
+
+            // Populate command select dropdown
+            const commandOptionsHtml = COMMANDS.map((cmd) => `<option value="${cmd.key}">${cmd.label}</option>`).join('');
+            const saveCommandSelect = document.getElementById('saveCommandSelect');
+            if (saveCommandSelect) {
+                saveCommandSelect.innerHTML = commandOptionsHtml;
+            }
         }
 
         function getLibraryByLab(labName) {
@@ -662,6 +747,56 @@
             alert(message);
         }
 
+        function getFormElement(id) {
+            const el = document.getElementById(id);
+            if (!el) {
+                console.error(`[Form Error] Missing element with id="${id}"`);
+                throw new Error(`Form element "${id}" not found in DOM. Please check HTML structure.`);
+            }
+            return el;
+        }
+
+        function populateForm(data) {
+            console.log('[populateForm] ===== START =====');
+            console.log('[populateForm] Data to populate:', data);
+            try {
+                const labSelect = getFormElement('saveLabSelect');
+                const commandSelect = getFormElement('saveCommandSelect');
+                const nameInput = getFormElement('saveSignalName');
+                const protocolInput = getFormElement('saveProtocolInput');
+                const rawDataInput = getFormElement('saveRawDataInput');
+                const libraryForm = getFormElement('libraryForm');
+                
+                console.log('[populateForm] Elements found:', {
+                    labSelect: !!labSelect,
+                    commandSelect: !!commandSelect,
+                    nameInput: !!nameInput,
+                    protocolInput: !!protocolInput,
+                    rawDataInput: !!rawDataInput,
+                    libraryForm: !!libraryForm
+                });
+                
+                labSelect.value = data.lab || '';
+                commandSelect.value = data.command || '';
+                nameInput.value = data.name || '';
+                protocolInput.value = data.protocol || 'PANASONIC';
+                rawDataInput.value = data.rawData || '';
+                
+                console.log('[populateForm] Values set, removing hidden class from form');
+                libraryForm.classList.remove('hidden');
+                libraryForm.style.display = 'block';
+                console.log('[populateForm] Form classes after remove:', libraryForm.className);
+                console.log('[populateForm] Form display style:', libraryForm.style.display);
+                
+                // Scroll to form so user can see it
+                libraryForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                console.log('[populateForm] Scrolled to form');
+            } catch (error) {
+                console.error('[Form Population Error]', error);
+                asyncAlert('Error populating form: ' + error.message, 'OK');
+            }
+        }
+
         function renderLibraryCards() {
             const selectedLab = document.getElementById('labFilterSelect').value || state.availableLabs[0]?.name || 'Laboratory 1';
             const labSignals = getLibraryByLab(selectedLab);
@@ -670,33 +805,35 @@
             const groupMarkup = COMMANDS.map((cmd) => {
                 const entry = labSignals[cmd.key];
                 const card = entry ? `
-                    <div class="library-entry">
-                        <div class="library-entry-header">
-                            <h3 class="library-entry-title">${cmd.label}</h3>
-                            <span class="library-entry-status">Saved</span>
+                    <div class="library-entry bg-gradient-to-br from-white to-gray-50 border-2 border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
+                        <div class="library-entry-header flex items-center justify-between mb-3">
+                            <h3 class="library-entry-title text-sm font-black text-gray-800 uppercase tracking-wide">${cmd.label}</h3>
+                            <span class="library-entry-status bg-green-100 text-green-700 text-xs font-bold px-2 py-1 rounded-full">Saved</span>
                         </div>
-                        <div class="library-entry-details">
-                            <span>Protocol:</span> ${entry.protocol || 'PANASONIC'} | 
-                            <span>Length:</span> ${entry.signalLength || normalizeRawData(entry.rawData || []).length}
+                        <div class="library-entry-details text-xs text-gray-600 mb-3 flex gap-4">
+                            <span><strong>Protocol:</strong> ${entry.protocol || 'PANASONIC'}</span>
+                            <span><strong>Length:</strong> ${entry.signalLength || normalizeRawData(entry.rawData || []).length}</span>
                         </div>
-                        <div class="library-entry-actions">
-                            <button data-action="view" data-lab="${selectedLab}" data-command="${cmd.key}" class="library-action-btn">View</button>
-                            <button data-action="copy" data-lab="${selectedLab}" data-command="${cmd.key}" class="library-action-btn">Copy</button>
-                            <button data-action="edit" data-lab="${selectedLab}" data-command="${cmd.key}" class="library-action-btn">Edit</button>
-                            <button data-action="delete" data-lab="${selectedLab}" data-command="${cmd.key}" class="library-action-btn delete">Delete</button>
+                        <div class="library-entry-actions flex gap-2">
+                            <button data-action="view" data-lab="${selectedLab}" data-command="${cmd.key}" class="library-action-btn flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold py-2 px-3 rounded-lg transition-colors">View</button>
+                            <button data-action="copy" data-lab="${selectedLab}" data-command="${cmd.key}" class="library-action-btn flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold py-2 px-3 rounded-lg transition-colors">Copy</button>
+                            <button data-action="edit" data-lab="${selectedLab}" data-command="${cmd.key}" class="library-action-btn flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold py-2 px-3 rounded-lg transition-colors">Edit</button>
+                            <button data-action="delete" data-lab="${selectedLab}" data-command="${cmd.key}" class="library-action-btn flex-1 bg-red-100 hover:bg-red-200 text-red-700 text-xs font-bold py-2 px-3 rounded-lg transition-colors">Delete</button>
                         </div>
                     </div>
                 ` : `
-                    <div class="library-entry opacity-60">
-                        <div class="library-entry-header">
-                            <h3 class="library-entry-title">${cmd.label}</h3>
-                            <span class="library-entry-status" style="background: var(--bg-secondary); color: var(--text-muted);">Empty</span>
+                    <div class="library-entry bg-gradient-to-br from-gray-50 to-gray-100 border-2 border-dashed border-gray-300 rounded-xl p-4 opacity-70">
+                        <div class="library-entry-header flex items-center justify-between mb-3">
+                            <h3 class="library-entry-title text-sm font-black text-gray-500 uppercase tracking-wide">${cmd.label}</h3>
+                            <span class="library-entry-status bg-gray-200 text-gray-500 text-xs font-bold px-2 py-1 rounded-full">Empty</span>
                         </div>
-                        <div class="library-entry-details">
+                        <div class="library-entry-details text-xs text-gray-400 mb-3">
                             <span>No saved signal yet</span>
                         </div>
                         <div class="library-entry-actions">
-                            <button data-action="new" data-lab="${selectedLab}" data-command="${cmd.key}" class="library-action-btn" style="background: var(--maroon-primary); color: white; border-color: var(--maroon-primary);">Add Signal</button>
+                            <button data-action="new" data-lab="${selectedLab}" data-command="${cmd.key}" class="library-action-btn w-full bg-[#7A001E] hover:bg-[#5a0016] text-white text-xs font-bold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2">
+                                <i data-lucide="plus" class="w-4 h-4"></i> Add Signal
+                            </button>
                         </div>
                     </div>
                 `;
@@ -720,20 +857,28 @@
                 const action = button.dataset.action;
                 const lab = button.dataset.lab;
                 const command = button.dataset.command;
-                button.addEventListener('click', () => handleLibraryAction(action, lab, command));
+                console.log('[Card Button] Binding button:', action, lab, command);
+                button.addEventListener('click', (e) => {
+                    console.log('[Card Button] Clicked:', action, lab, command);
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleLibraryAction(action, lab, command);
+                });
             });
         }
 
         function handleLibraryAction(action, lab, command) {
             const data = state.libraryData[lab]?.[command];
+            
             if (action === 'new' || action === 'edit') {
                 const selected = data || { protocol: 'PANASONIC', name: command, rawData: [], signalLength: 0 };
-                document.getElementById('saveLabSelect').value = lab;
-                document.getElementById('saveCommandSelect').value = command;
-                document.getElementById('saveSignalName').value = selected.name || COMMANDS.find((item) => item.key === command)?.label || '';
-                document.getElementById('saveProtocolInput').value = selected.protocol || 'PANASONIC';
-                document.getElementById('saveRawDataInput').value = formatSignal(selected.rawData || []);
-                document.getElementById('libraryForm').classList.remove('hidden');
+                populateForm({
+                    lab: lab,
+                    command: command,
+                    name: selected.name || COMMANDS.find((item) => item.key === command)?.label || '',
+                    protocol: selected.protocol || 'PANASONIC',
+                    rawData: formatSignal(selected.rawData || [])
+                });
                 return;
             }
             if (action === 'copy') {
@@ -904,24 +1049,34 @@
         document.getElementById('pasteSignalBtn').addEventListener('click', () => {
             const selectedLab = document.getElementById('labFilterSelect').value || state.availableLabs[0]?.name || 'Laboratory 1';
             const rawText = document.getElementById('rawSignalOutput').textContent;
-            document.getElementById('saveLabSelect').value = selectedLab;
-            document.getElementById('saveRawDataInput').value = rawText;
-            document.getElementById('libraryForm').classList.remove('hidden');
+            populateForm({
+                lab: selectedLab,
+                command: 'acOn',
+                name: 'AC ON',
+                protocol: 'PANASONIC',
+                rawData: rawText
+            });
             window.location.hash = 'library';
         });
 
         document.getElementById('addSignalBtn').addEventListener('click', () => {
             const selectedLab = document.getElementById('labFilterSelect').value || state.availableLabs[0]?.name || 'Laboratory 1';
-            document.getElementById('saveLabSelect').value = selectedLab;
-            document.getElementById('saveSignalName').value = 'AC ON';
-            document.getElementById('saveProtocolInput').value = 'PANASONIC';
-            document.getElementById('saveRawDataInput').value = 'uint16_t rawData[] = {\n    0\n};';
-            document.getElementById('libraryForm').classList.remove('hidden');
+            populateForm({
+                lab: selectedLab,
+                command: 'acOn',
+                name: 'AC ON',
+                protocol: 'PANASONIC',
+                rawData: 'uint16_t rawData[] = {\n    0\n};'
+            });
             window.location.hash = 'library';
         });
 
         document.getElementById('saveSignalBtn').addEventListener('click', saveLibrarySignal);
-        document.getElementById('cancelSignalBtn').addEventListener('click', () => document.getElementById('libraryForm').classList.add('hidden'));
+        document.getElementById('cancelSignalBtn').addEventListener('click', () => {
+            const libraryForm = document.getElementById('libraryForm');
+            libraryForm.classList.add('hidden');
+            libraryForm.style.display = 'none';
+        });
         document.getElementById('labFilterSelect').addEventListener('change', renderLibraryCards);
 
         document.addEventListener('DOMContentLoaded', () => {

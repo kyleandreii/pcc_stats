@@ -14,10 +14,13 @@
 #define OLED_SDA 21
 #define OLED_SCL 22
 
-#define WIFI_SSID "ALT"
-#define WIFI_PASSWORD "baDge7Es"
+#define WIFI_SSID "BA1D616R8"
+#define WIFI_PASSWORD "GM6AA4X8rm128!"
 #define DATABASE_SECRET "DvhZNBNmaFVHMFSup70ezVZlEVHWwO87OrGK4Td7"
 #define DATABASE_URL "https://pcc-stats-default-rtdb.asia-southeast1.firebasedatabase.app/"
+
+// CHANGE THIS TO YOUR ROOM ID (e.g., "Room_1", "Room_402", "Room_403", etc.)
+#define ROOM_ID "Room_1"
 
 const uint16_t kIrLedPin = 4;
 const uint16_t kIrLedPin2 = 5;
@@ -68,7 +71,7 @@ unsigned long lastAutomationCheckMillis = 0;
 unsigned long lastIRSendMillis = 0;
 unsigned long lastSerialLogMillis = 0;
 
-void handleACCommand(String cmd, String unit = "unit_1");
+void handleACCommand(String cmd);
 void updateOLED(float currentTemp);
 void runAutomation(float temp, float humidity);
 void handleIRReceiver();
@@ -88,6 +91,7 @@ void setup() {
   irsend.begin();
   irsend2.begin();
   irrecv.enableIRIn();
+  Serial.println("[IR Receiver] IR receiver enabled on pin " + String(kIrRecvPin));
 
   pinMode(LED_PIN, OUTPUT);
   pinMode(RELAY_PIN, OUTPUT);
@@ -109,12 +113,12 @@ void setup() {
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
 
-  if (!Firebase.RTDB.beginStream(&stream, "/Room_1")) {
+  if (!Firebase.RTDB.beginStream(&stream, "/" + String(ROOM_ID))) {
   } else {
   }
 
   // Sync automation enabled state from Firebase on startup
-  Firebase.RTDB.getBool(&fbdo, "/Room_1/automation/enabled");
+  Firebase.RTDB.getBool(&fbdo, "/" + String(ROOM_ID) + "/automation/enabled");
   if (fbdo.httpCode() == FIREBASE_ERROR_HTTP_CODE_OK) {
     automationEnabled = fbdo.boolData();
     preferences.putBool("automationEnabled", automationEnabled);
@@ -124,12 +128,19 @@ void setup() {
 
   FirebaseJson json;
   json.set(".sv", "timestamp");
-  Firebase.RTDB.setJSON(&fbdo, "/Room_1/last_seen", &json);
-  Firebase.RTDB.setBool(&fbdo, "/Room_1/online", true);
+  Firebase.RTDB.setJSON(&fbdo, "/" + String(ROOM_ID) + "/last_seen", &json);
+  Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/online", true);
+  Firebase.RTDB.setString(&fbdo, "/" + String(ROOM_ID) + "/device_room_id", ROOM_ID);
   // Don't overwrite Firebase currentKnownTemp on startup - use Firebase as source of truth
 }
 
 void loop() {
+  static unsigned long lastLoopLog = 0;
+  if (millis() - lastLoopLog > 5000) {
+    Serial.println("[Loop] ESP32 is running, millis: " + String(millis()));
+    lastLoopLog = millis();
+  }
+
   if (Firebase.ready() && Firebase.RTDB.readStream(&stream)) {
     if (stream.streamAvailable()) {
       String path = stream.dataPath();
@@ -156,20 +167,8 @@ void loop() {
             Serial.println("Automation " + String(automationEnabled ? "ENABLED" : "DISABLED"));
           }
         }
-      } else if (path == "/units/unit_1" || path.indexOf("unit_1") >= 0) {
-        FirebaseJson &json = stream.jsonObject();
-        FirebaseJsonData jsonData;
-        if (json.get(jsonData, "ac_command")) {
-          handleACCommand(jsonData.stringValue, "unit_1");
-        }
-      } else if (path == "/units/unit_2" || path.indexOf("unit_2") >= 0) {
-        FirebaseJson &json = stream.jsonObject();
-        FirebaseJsonData jsonData;
-        if (json.get(jsonData, "ac_command")) {
-          handleACCommand(jsonData.stringValue, "unit_2");
-        }
       } else if (path == "/ac_command" || path.endsWith("ac_command")) {
-        handleACCommand(stream.stringData(), "unit_1");
+        handleACCommand(stream.stringData());
       }
     }
   }
@@ -206,12 +205,12 @@ void loop() {
     updateData.add("temperature", t);
     updateData.add("humidity", h);
     updateData.add("status", (!isnan(t) && (t < minTemp || t > maxTemp)) ? "ALARM" : "NORMAL");
-    Firebase.RTDB.updateNode(&fbdo, "/Room_1", &updateData);
+    Firebase.RTDB.updateNode(&fbdo, "/" + String(ROOM_ID), &updateData);
 
     // Heartbeat
     FirebaseJson json;
     json.set(".sv", "timestamp");
-    Firebase.RTDB.setJSON(&fbdo, "/Room_1/last_seen", &json);
+    Firebase.RTDB.setJSON(&fbdo, "/" + String(ROOM_ID) + "/last_seen", &json);
 
     // Store historical data for analytics
     if (!isnan(t) && !isnan(h)) {
@@ -223,7 +222,7 @@ void loop() {
       strftime(dateStr, sizeof(dateStr), "%Y-%m-%d", timeinfo);
       strftime(hourStr, sizeof(hourStr), "%H", timeinfo);
       
-      String historyPath = "/history/Room_1/" + String(dateStr) + "/" + String(hourStr);
+      String historyPath = "/history/" + String(ROOM_ID) + "/" + String(dateStr) + "/" + String(hourStr);
       FirebaseJson historyData;
       historyData.add("temperature", t);
       historyData.add("humidity", h);
@@ -273,50 +272,52 @@ void updateOLED(float currentTemp) {
   display.display();
 }
 
-void handleACCommand(String cmd, String unit) {
+void handleACCommand(String cmd) {
   if (cmd == "IDLE" || cmd == "") {
     return;
   }
 
-  IRsend* irSender = (unit == "unit_1") ? &irsend : &irsend2;
-  String firebasePath = "/Room_1/units/" + unit + "/ac_command";
+  Serial.println("AC Command: " + cmd);
 
   if (cmd == "ON") {
-    Serial.println("AC Command: POWER ON for " + unit);
+    Serial.println("AC Command: POWER ON");
     uint16_t on_buf[149];
     memcpy_P(on_buf, rawOn, sizeof(rawOn));
-    irSender->sendRaw(on_buf, 149, kFrequency);
+    irsend.sendRaw(on_buf, 149, kFrequency);
   } else if (cmd == "OFF") {
-    Serial.println("AC Command: POWER OFF for " + unit);
+    Serial.println("AC Command: POWER OFF");
     uint16_t off_buf[149];
     memcpy_P(off_buf, rawOff, sizeof(rawOff));
-    irSender->sendRaw(off_buf, 149, kFrequency);
+    irsend.sendRaw(off_buf, 149, kFrequency);
   } else if (cmd == "TEMP_UP") {
-    Serial.println("AC Command: TEMPERATURE UP for " + unit);
+    Serial.println("AC Command: TEMPERATURE UP");
     uint16_t up_buf[75];
     memcpy_P(up_buf, rawTempUp, sizeof(rawTempUp));
-    irSender->sendRaw(up_buf, 75, kFrequency);
+    irsend.sendRaw(up_buf, 75, kFrequency);
   } else if (cmd == "TEMP_DOWN") {
-    Serial.println("AC Command: TEMPERATURE DOWN for " + unit);
+    Serial.println("AC Command: TEMPERATURE DOWN");
     uint16_t down_buf[75];
     memcpy_P(down_buf, rawTempDown, sizeof(rawTempDown));
-    irSender->sendRaw(down_buf, 75, kFrequency);
+    irsend.sendRaw(down_buf, 75, kFrequency);
   }
 
-  Firebase.RTDB.setString(&fbdo, firebasePath.c_str(), "IDLE");
-  Firebase.RTDB.setBool(&fbdo, ("/Room_1/units/" + unit + "/ac").c_str(), (cmd == "ON"));
+  Firebase.RTDB.setString(&fbdo, "/" + String(ROOM_ID) + "/ac_command", "IDLE");
+  Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/ac", (cmd == "ON"));
 }
 
 void handleIRReceiver() {
   if (irrecv.decode(&irResults)) {
+    Serial.println("[IR Receiver] Signal detected!");
     String rawData = "";
     int len = irResults.rawlen;
+    Serial.print("[IR Receiver] Raw length: "); Serial.println(len);
     
     if (len > 0 && len < 200) {
       for (int i = 0; i < len; i++) {
         if (i > 0) rawData += ",";
         rawData += String(irResults.rawbuf[i] * RAWTICK);
       }
+      Serial.print("[IR Receiver] Raw data: "); Serial.println(rawData);
     }
     
     FirebaseJson signalJson;
@@ -325,8 +326,15 @@ void handleIRReceiver() {
     signalJson.add("protocol", "PANASONIC");
     signalJson.add("timestamp", String(millis()));
     
-    Firebase.RTDB.setJSON(&fbdo, "/irReceiver/lastSignal", &signalJson);
-    Firebase.RTDB.setString(&fbdo, "/irReceiver/state", "received");
+    Serial.println("[IR Receiver] Sending to Firebase...");
+    bool success = Firebase.RTDB.setJSON(&fbdo, "/irReceiver/lastSignal", &signalJson);
+    Serial.print("[IR Receiver] SetJSON success: "); Serial.println(success ? "true" : "false");
+    if (!success) {
+      Serial.print("[IR Receiver] Error: "); Serial.println(fbdo.errorReason());
+    }
+    
+    success = Firebase.RTDB.setString(&fbdo, "/irReceiver/state", "received");
+    Serial.print("[IR Receiver] SetState success: "); Serial.println(success ? "true" : "false");
     
     irrecv.resume();
     delay(100);
@@ -336,7 +344,6 @@ void handleIRReceiver() {
 void runAutomation(float temp, float humidity) {
   // Check if automation is enabled - early exit if disabled
   if (!automationEnabled) {
-    Serial.println("Automation disabled, skipping check");
     return;
   }
 

@@ -437,7 +437,7 @@
                             </div>
                             
                             <div id="temp-controls-container" class="flex justify-center">
-                                        <!-- Single unit controls (for non-Room_1 rooms) -->
+                                        <!-- Single unit controls (for Room_402) -->
                                         <div id="single-unit-temp-controls" class="flex items-center justify-center gap-8">
                                             <div class="circular-progress w-28 h-28 rounded-full bg-white flex flex-col items-center justify-center relative">
                                                 <svg class="absolute inset-0 w-full h-full" viewBox="0 0 100 100">
@@ -457,60 +457,7 @@
                                                 </button>
                                             </div>
                                         </div>
-                                        
-                                        <!-- Dual unit controls (for Room_1) -->
-                                        <div id="dual-unit-temp-controls" class="hidden">
-                                            <div class="grid grid-cols-2 gap-4">
-                                                <!-- Unit 1 -->
-                                                <div class="flex flex-col items-center">
-                                                    <p class="text-[9px] font-bold text-gray-500 uppercase mb-2">Unit 1</p>
-                                                    <div class="flex items-center justify-center gap-4">
-                                                        <div class="circular-progress w-20 h-20 rounded-full bg-white flex flex-col items-center justify-center relative">
-                                                            <svg class="absolute inset-0 w-full h-full" viewBox="0 0 100 100">
-                                                                <circle cx="50" cy="50" r="35" stroke="#f3f4f6" stroke-width="6" fill="none"/>
-                                                                <circle id="temp-progress-ring-unit1" cx="50" cy="50" r="35" stroke="#800000" stroke-width="6" fill="none" class="progress-ring" stroke-linecap="round"/>
-                                                            </svg>
-                                                            <span id="manual-temp-val-unit1" class="text-2xl font-black text-[#800000] relative z-10">--</span>
-                                                            <span class="text-[7px] font-bold text-gray-300 uppercase tracking-tighter relative z-10">°C</span>
-                                                        </div>
-
-                                                        <div class="flex flex-col gap-2">
-                                                            <button onclick="adjustManualTemp(1, 1)" class="remote-btn w-10 h-10 rounded-xl flex items-center justify-center shadow-sm">
-                                                                <i data-lucide="chevron-up" class="w-5 h-5"></i>
-                                                            </button>
-                                                            <button onclick="adjustManualTemp(-1, 1)" class="remote-btn w-10 h-10 rounded-xl flex items-center justify-center shadow-sm">
-                                                                <i data-lucide="chevron-down" class="w-5 h-5"></i>
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                
-                                                <!-- Unit 2 -->
-                                                <div class="flex flex-col items-center">
-                                                    <p class="text-[9px] font-bold text-gray-500 uppercase mb-2">Unit 2</p>
-                                                    <div class="flex items-center justify-center gap-4">
-                                                        <div class="circular-progress w-20 h-20 rounded-full bg-white flex flex-col items-center justify-center relative">
-                                                            <svg class="absolute inset-0 w-full h-full" viewBox="0 0 100 100">
-                                                                <circle cx="50" cy="50" r="35" stroke="#f3f4f6" stroke-width="6" fill="none"/>
-                                                                <circle id="temp-progress-ring-unit2" cx="50" cy="50" r="35" stroke="#800000" stroke-width="6" fill="none" class="progress-ring" stroke-linecap="round"/>
-                                                            </svg>
-                                                            <span id="manual-temp-val-unit2" class="text-2xl font-black text-[#800000] relative z-10">--</span>
-                                                            <span class="text-[7px] font-bold text-gray-300 uppercase tracking-tighter relative z-10">°C</span>
-                                                        </div>
-
-                                                        <div class="flex flex-col gap-2">
-                                                            <button onclick="adjustManualTemp(1, 2)" class="remote-btn w-10 h-10 rounded-xl flex items-center justify-center shadow-sm">
-                                                                <i data-lucide="chevron-up" class="w-5 h-5"></i>
-                                                            </button>
-                                                            <button onclick="adjustManualTemp(-1, 2)" class="remote-btn w-10 h-10 rounded-xl flex items-center justify-center shadow-sm">
-                                                                <i data-lucide="chevron-down" class="w-5 h-5"></i>
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
+                            </div>
                                 </div>
 
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10 mt-8">
@@ -667,7 +614,21 @@
                         return numA - numB;
                     });
                 
-                if (!selectedRoom && labKeys.length > 0) selectedRoom = labKeys[0];
+                // Auto-select device room if not already selected
+                if (!selectedRoom && labKeys.length > 0) {
+                    // Try to find the device's room from device_room_id
+                    for (const key of labKeys) {
+                        if (labsData[key] && labsData[key].device_room_id) {
+                            selectedRoom = labsData[key].device_room_id;
+                            console.log(`[Settings] Auto-selected device room: ${selectedRoom}`);
+                            break;
+                        }
+                    }
+                    // Fallback to first room if no device_room_id found
+                    if (!selectedRoom) {
+                        selectedRoom = labKeys[0];
+                    }
+                }
                 updateGlobalUI();
                 renderLabList();
                 if (selectedRoom) refreshConfigUI();
@@ -716,40 +677,16 @@
             }
             targetTempListeners[roomId] = {};
             
-            if (roomId === "Room_1") {
-                // Listen for unit_1 target temperature
-                const unit1Path = `${roomId}/units/unit_1/targetTemp`;
-                db.ref(unit1Path).on('value', (snapshot) => {
-                    const newTarget = snapshot.val();
-                    console.log(`[Settings] ${roomId}/unit_1 targetTemp updated:`, newTarget);
-                    if (newTarget !== null) {
-                        document.getElementById('manual-temp-val-unit1').innerText = newTarget;
-                    }
-                });
-                targetTempListeners[roomId][unit1Path] = true;
-                
-                // Listen for unit_2 target temperature
-                const unit2Path = `${roomId}/units/unit_2/targetTemp`;
-                db.ref(unit2Path).on('value', (snapshot) => {
-                    const newTarget = snapshot.val();
-                    console.log(`[Settings] ${roomId}/unit_2 targetTemp updated:`, newTarget);
-                    if (newTarget !== null) {
-                        document.getElementById('manual-temp-val-unit2').innerText = newTarget;
-                    }
-                });
-                targetTempListeners[roomId][unit2Path] = true;
-            } else {
-                // Listen for single room target temperature
-                const singlePath = `${roomId}/targetTemp`;
-                db.ref(singlePath).on('value', (snapshot) => {
-                    const newTarget = snapshot.val();
-                    console.log(`[Settings] ${roomId} targetTemp updated:`, newTarget);
-                    if (newTarget !== null) {
-                        document.getElementById('manual-temp-val').innerText = newTarget;
-                    }
-                });
-                targetTempListeners[roomId][singlePath] = true;
-            }
+            // Listen for single room target temperature
+            const singlePath = `${roomId}/targetTemp`;
+            db.ref(singlePath).on('value', (snapshot) => {
+                const newTarget = snapshot.val();
+                console.log(`[Settings] ${roomId} targetTemp updated:`, newTarget);
+                if (newTarget !== null) {
+                    document.getElementById('manual-temp-val').innerText = newTarget;
+                }
+            });
+            targetTempListeners[roomId][singlePath] = true;
         }
 
         function refreshConfigUI() {
@@ -769,46 +706,13 @@
             // Set up Firebase listeners for target temperature to ensure persistence
             setupTargetTempListeners(selectedRoom);
             
-            // Check if this is Room_1 with dual-unit structure
-            const isDualUnitRoom = selectedRoom === "Room_1" && data.units;
+            // Hide unit tabs - single-unit only
+            document.getElementById('unit-tabs').classList.add('hidden');
+            // Show single-unit controls
+            document.getElementById('single-unit-temp-controls').classList.remove('hidden');
             
-            if (isDualUnitRoom) {
-                // Show unit tabs
-                document.getElementById('unit-tabs').classList.remove('hidden');
-                // Show dual-unit controls
-                document.getElementById('single-unit-temp-controls').classList.add('hidden');
-                document.getElementById('dual-unit-temp-controls').classList.remove('hidden');
-                
-                // Populate unit-specific target temperatures
-                const unit1Target = data.units?.unit_1?.targetTemp || 24;
-                const unit2Target = data.units?.unit_2?.targetTemp || 24;
-                document.getElementById('manual-temp-val-unit1').innerText = unit1Target;
-                document.getElementById('manual-temp-val-unit2').innerText = unit2Target;
-                
-                // Set unit-specific thresholds if available
-                const unit1Min = data.units?.unit_1?.thresholds?.minTemp || thresholds.minTemp;
-                const unit1Max = data.units?.unit_1?.thresholds?.maxTemp || thresholds.maxTemp;
-                const unit2Min = data.units?.unit_2?.thresholds?.minTemp || thresholds.minTemp;
-                const unit2Max = data.units?.unit_2?.thresholds?.maxTemp || thresholds.maxTemp;
-                
-                // Store unit-specific thresholds for tab switching
-                window.unitThresholds = {
-                    unit_1: { min: unit1Min, max: unit1Max },
-                    unit_2: { min: unit2Min, max: unit2Max }
-                };
-                
-                // Default to Unit 1 tab
-                switchUnitTab('unit_1');
-            } else {
-                // Hide unit tabs
-                document.getElementById('unit-tabs').classList.add('hidden');
-                // Show single-unit controls
-                document.getElementById('single-unit-temp-controls').classList.remove('hidden');
-                document.getElementById('dual-unit-temp-controls').classList.add('hidden');
-                
-                const displayTarget = data.targetTemp !== undefined ? data.targetTemp : 24;
-                document.getElementById('manual-temp-val').innerText = displayTarget;
-            }
+            const displayTarget = data.targetTemp !== undefined ? data.targetTemp : 24;
+            document.getElementById('manual-temp-val').innerText = displayTarget;
 
             document.getElementById('input-on-time').value = schedule.onTime || "";
             document.getElementById('input-off-time').value = schedule.offTime || "";
@@ -890,15 +794,12 @@
                 return;
             }
 
-            // Check if this is a dual-unit room and a unit tab is selected
-            const savePath = (selectedRoom === "Room_1" && window.selectedUnit) 
-                ? `${selectedRoom}/units/${window.selectedUnit}/schedule`
-                : `${selectedRoom}/schedule`;
+            // Save to room-level schedule
+            const savePath = `${selectedRoom}/schedule`;
 
             db.ref(savePath).set({ onTime, offTime })
             .then(() => {
-                const unitLabel = window.selectedUnit ? (window.selectedUnit === 'unit_1' ? 'Unit 1' : 'Unit 2') : '';
-                Swal.fire({ icon: 'success', title: 'Automation Set', text: `${unitLabel} AC will trigger at ${onTime} and ${offTime}`, timer: 2000, showConfirmButton: false });
+                Swal.fire({ icon: 'success', title: 'Automation Set', text: `AC will trigger at ${onTime} and ${offTime}`, timer: 2000, showConfirmButton: false });
                 // Reset tracker for this room to allow immediate action if current time matches
                 lastAutomationAction[selectedRoom] = null;
 
@@ -907,27 +808,15 @@
                 const nowTime = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
                 const within = isTimeBetween(nowTime, onTime, offTime);
                 
-                if (selectedRoom === "Room_1" && window.selectedUnit) {
-                    // Update unit-specific AC state
-                    const acPath = `${selectedRoom}/units/${window.selectedUnit}`;
-                    if (within) {
-                        db.ref(acPath).update({ ac_command: 'ON', ac: true })
-                            .then(() => console.log(`Automation: ${acPath} immediate ON`));
-                    } else {
-                        db.ref(acPath).update({ ac_command: 'OFF', ac: false })
-                            .then(() => console.log(`Automation: ${acPath} immediate OFF`));
-                    }
+                // Update room-level AC state
+                if (within) {
+                    db.ref(`${selectedRoom}`).update({ ac_command: 'ON', ac: true })
+                        .then(() => console.log(`Automation: ${selectedRoom} immediate ON`));
+                    lastAutomationAction[selectedRoom] = `${selectedRoom}_${nowTime}_ON`;
                 } else {
-                    // Update room-level AC state
-                    if (within) {
-                        db.ref(`${selectedRoom}`).update({ ac_command: 'ON', ac: true })
-                            .then(() => console.log(`Automation: ${selectedRoom} immediate ON`));
-                        lastAutomationAction[selectedRoom] = `${selectedRoom}_${nowTime}_ON`;
-                    } else {
-                        db.ref(`${selectedRoom}`).update({ ac_command: 'OFF', ac: false })
-                            .then(() => console.log(`Automation: ${selectedRoom} immediate OFF`));
-                        lastAutomationAction[selectedRoom] = `${selectedRoom}_${nowTime}_OFF`;
-                    }
+                    db.ref(`${selectedRoom}`).update({ ac_command: 'OFF', ac: false })
+                        .then(() => console.log(`Automation: ${selectedRoom} immediate OFF`));
+                    lastAutomationAction[selectedRoom] = `${selectedRoom}_${nowTime}_OFF`;
                 }
             });
         }
@@ -969,101 +858,12 @@
             const currentData = labsData[selectedRoom];
             const cmd = change > 0 ? "TEMP_UP" : "TEMP_DOWN";
             
-            // Check if this is Room_1 and unitNumber is provided (dual-unit mode)
-            if (selectedRoom === "Room_1" && unitNumber !== null) {
-                const unitKey = `unit_${unitNumber}`;
-                const currentTarget = currentData.units?.[unitKey]?.targetTemp || 24;
-                const newVal = currentTarget + change;
-                if (newVal < 16 || newVal > 30) return;
-                
-                db.ref(`${selectedRoom}/units/${unitKey}`).update({ targetTemp: newVal, ac_command: cmd });
-            } else {
-                // Single unit mode (legacy)
-                const currentTarget = currentData.targetTemp !== undefined ? currentData.targetTemp : 24;
-                const newVal = currentTarget + change;
-                if (newVal < 16 || newVal > 30) return;
-                
-                db.ref(`${selectedRoom}`).update({ targetTemp: newVal, ac_command: cmd });
-            }
-        }
-
-        function switchUnitTab(unit) {
-            // Update tab styling
-            document.getElementById('tab-unit-1').className = unit === 'unit_1' 
-                ? 'text-[9px] font-bold px-3 py-1.5 rounded-full bg-[#800000] text-white uppercase tracking-widest'
-                : 'text-[9px] font-bold px-3 py-1.5 rounded-full bg-gray-200 text-gray-600 uppercase tracking-widest';
-            document.getElementById('tab-unit-2').className = unit === 'unit_2'
-                ? 'text-[9px] font-bold px-3 py-1.5 rounded-full bg-[#800000] text-white uppercase tracking-widest'
-                : 'text-[9px] font-bold px-3 py-1.5 rounded-full bg-gray-200 text-gray-600 uppercase tracking-widest';
+            // Single unit mode
+            const currentTarget = currentData.targetTemp !== undefined ? currentData.targetTemp : 24;
+            const newVal = currentTarget + change;
+            if (newVal < 16 || newVal > 30) return;
             
-            // Update threshold displays and inputs based on selected unit
-            if (window.unitThresholds && window.unitThresholds[unit]) {
-                const thresholds = window.unitThresholds[unit];
-                document.getElementById('curr-min-display').innerText = thresholds.min + "°";
-                document.getElementById('curr-max-display').innerText = thresholds.max + "°";
-                
-                // Update input fields if not currently focused
-                if (document.activeElement.tagName !== 'INPUT') {
-                    document.getElementById('input-min').value = thresholds.min;
-                    document.getElementById('input-max').value = thresholds.max;
-                }
-            }
-            
-            // Show unit badges in all sections
-            const unitLabel = unit === 'unit_1' ? 'Unit 1' : 'Unit 2';
-            document.getElementById('schedule-unit-badge').classList.remove('hidden');
-            document.getElementById('schedule-unit-badge').innerText = unitLabel;
-            document.getElementById('lab-info-unit-badge').classList.remove('hidden');
-            document.getElementById('lab-info-unit-badge').innerText = unitLabel;
-            
-            // Load unit-specific schedule and lab info
-            loadUnitSchedule(unit);
-            loadUnitLabInfo(unit);
-            
-            // Store currently selected unit for saving
-            window.selectedUnit = unit;
-        }
-
-        function loadUnitSchedule(unit) {
-            if (!selectedRoom) return;
-            const unitPath = `${selectedRoom}/units/${unit}`;
-            db.ref(`${unitPath}/schedule`).once('value').then((snapshot) => {
-                const schedule = snapshot.val() || { onTime: "", offTime: "" };
-                document.getElementById('input-on-time').value = schedule.onTime || "";
-                document.getElementById('input-off-time').value = schedule.offTime || "";
-                
-                const statusBox = document.getElementById('schedule-status');
-                if(schedule.onTime && schedule.offTime) {
-                    statusBox.innerText = `Automation: Active (${schedule.onTime} - ${schedule.offTime})`;
-                    statusBox.className = "text-[9px] font-black uppercase px-3 py-1 bg-green-100 rounded text-green-600";
-                } else {
-                    statusBox.innerText = "No Active Schedule";
-                    statusBox.className = "text-[9px] font-black uppercase px-3 py-1 bg-gray-100 rounded text-gray-400";
-                }
-            });
-        }
-
-        function loadUnitLabInfo(unit) {
-            if (!selectedRoom) return;
-            const unitPath = `${selectedRoom}/units/${unit}`;
-            db.ref(`${unitPath}/specs`).once('value').then((snapshot) => {
-                const specs = snapshot.val() || {};
-                document.getElementById('input-building').value = specs.building || "";
-                document.getElementById('input-floor').value = specs.floor || "";
-                document.getElementById('input-ac-model').value = specs.acModel || "";
-                document.getElementById('input-model-indoor').value = specs.modelIndoor || "";
-                document.getElementById('input-model-outdoor').value = specs.modelOutdoor || "";
-                document.getElementById('input-unit-type').value = specs.unitType || "ceiling_suspended_split";
-                document.getElementById('input-ac-type').value = specs.acType || "non_inverter";
-                document.getElementById('input-refrigerant').value = specs.refrigerant || "";
-                document.getElementById('input-cooling-btu').value = specs.coolingBtu || "";
-                document.getElementById('input-power-input').value = specs.powerInput || "";
-                document.getElementById('input-rated-amps').value = specs.ratedAmps || "";
-                document.getElementById('input-voltage').value = specs.voltage || "";
-                document.getElementById('input-serial-no').value = specs.serialNo || "";
-                document.getElementById('input-duty-cycle').value = specs.dutyCycle || "";
-                document.getElementById('input-rating').value = specs.rating || "";
-            });
+            db.ref(`${selectedRoom}`).update({ targetTemp: newVal, ac_command: cmd });
         }
 
         function handleAutomationToggle(event) {
@@ -1191,22 +991,9 @@
             const min = parseFloat(document.getElementById('input-min').value);
             const max = parseFloat(document.getElementById('input-max').value);
             
-            // Check if this is a dual-unit room and a unit tab is selected
-            if (selectedRoom === "Room_1" && window.selectedUnit) {
-                // Save to unit-specific thresholds
-                db.ref(`${selectedRoom}/units/${window.selectedUnit}/thresholds`).update({ minTemp: min, maxTemp: max })
-                .then(() => {
-                    // Update the stored thresholds
-                    if (window.unitThresholds) {
-                        window.unitThresholds[window.selectedUnit] = { min, max };
-                    }
-                    Swal.fire({ icon: 'success', title: `Unit ${window.selectedUnit === 'unit_1' ? '1' : '2'} Thresholds Synced`, timer: 1000, showConfirmButton: false });
-                });
-            } else {
-                // Save to room-level thresholds (legacy)
-                db.ref(`${selectedRoom}/thresholds`).update({ minTemp: min, maxTemp: max })
+            // Save to room-level thresholds
+            db.ref(`${selectedRoom}/thresholds`).update({ minTemp: min, maxTemp: max })
                 .then(() => Swal.fire({ icon: 'success', title: 'Hardware Synced', timer: 1000, showConfirmButton: false }));
-            }
         }
 
         function saveLabInfo() {
@@ -1229,37 +1016,19 @@
                 rating: document.getElementById('input-rating').value
             };
             
-            // Check if this is a dual-unit room and a unit tab is selected
-            if (selectedRoom === "Room_1" && window.selectedUnit) {
-                // Save to unit-specific specs
-                db.ref(`${selectedRoom}/units/${window.selectedUnit}/specs`).update(specs);
-                
-                // Save to config/rooms for cost calculation (unit-specific)
-                const airconConfig = {
-                    aircon_type: specs.acType,
-                    rated_watts: specs.powerInput,
-                    hp_rating: null,
-                    duty_cycle: specs.dutyCycle
-                };
-                db.ref(`config/rooms/${selectedRoom}/${window.selectedUnit}`).set(airconConfig);
-                
-                const unitLabel = window.selectedUnit === 'unit_1' ? 'Unit 1' : 'Unit 2';
-                Swal.fire({ icon: 'success', title: `${unitLabel} Info Updated`, timer: 1000, showConfirmButton: false });
-            } else {
-                // Save to room-level specs (legacy)
-                db.ref(`${selectedRoom}/specs`).update(specs);
-                
-                // Save to config/rooms for cost calculation
-                const airconConfig = {
-                    aircon_type: specs.acType,
-                    rated_watts: specs.powerInput,
-                    hp_rating: null,
-                    duty_cycle: specs.dutyCycle
-                };
-                db.ref(`config/rooms/${selectedRoom}`).set(airconConfig);
-                
-                Swal.fire({ icon: 'success', title: 'Info Updated', timer: 1000, showConfirmButton: false });
-            }
+            // Save to room-level specs
+            db.ref(`${selectedRoom}/specs`).update(specs);
+            
+            // Save to config/rooms for cost calculation
+            const airconConfig = {
+                aircon_type: specs.acType,
+                rated_watts: specs.powerInput,
+                hp_rating: null,
+                duty_cycle: specs.dutyCycle
+            };
+            db.ref(`config/rooms/${selectedRoom}`).set(airconConfig);
+            
+            Swal.fire({ icon: 'success', title: 'Info Updated', timer: 1000, showConfirmButton: false });
         }
 
         document.getElementById('menu-toggle').addEventListener('click', () => {

@@ -334,6 +334,7 @@
         let pendingUpdates = {}; // Track rooms with pending AC updates
         let deviceOfflineFlags = {}; // Track offline alert state per room
         let heartbeatListeners = {}; // Track heartbeat listeners to prevent duplicates
+        let renderInProgress = false; // Prevent concurrent renderDashboard calls
         const HEARTBEAT_TIMEOUT = 15000; // 15 seconds - device offline if no heartbeat for this duration
         const CHECK_INTERVAL_MS = 10000; // 10 seconds
 
@@ -380,6 +381,10 @@
             
             db.ref().on("value", (snapshot) => {
                 const data = snapshot.val();
+                console.log('[loadRoomsFromFirebase] Firebase snapshot received');
+                console.log('[loadRoomsFromFirebase] Full data keys:', Object.keys(data || {}));
+                console.log('[loadRoomsFromFirebase] Full data:', JSON.stringify(data, null, 2));
+                
                 if (!data) {
                     console.log('[loadRoomsFromFirebase] No data received from Firebase');
                     return;
@@ -389,6 +394,9 @@
                 console.log('[loadRoomsFromFirebase] Room_1 data:', JSON.stringify(data['Room_1']));
                 console.log('[loadRoomsFromFirebase] Room_1 last_seen:', data['Room_1']?.last_seen);
                 console.log('[loadRoomsFromFirebase] Room_1 temperature:', data['Room_1']?.temperature);
+                console.log('[loadRoomsFromFirebase] Room_402 data:', JSON.stringify(data['Room_402']));
+                console.log('[loadRoomsFromFirebase] Room_402 last_seen:', data['Room_402']?.last_seen);
+                console.log('[loadRoomsFromFirebase] Room_402 temperature:', data['Room_402']?.temperature);
 
                 // Only reset arrays if this is initial load (check if labs is empty)
                 const isInitialLoad = labs.length === 0;
@@ -525,51 +533,8 @@
                         }
                         
                         // Add specific listener for target temperature changes to ensure real-time sync with settings page
-                        if (roomId === "Room_1") {
-                            // Listen for unit_1 target temperature changes
-                            db.ref(`${roomId}/units/unit_1/targetTemp`).on('value', (snapshot) => {
-                                const newTarget = snapshot.val();
-                                console.log(`[TargetTemp] ${roomId}/unit_1 targetTemp updated:`, newTarget);
-                                if (newTarget !== null && labsData[roomId]) {
-                                    const index = labKeys.indexOf(roomId);
-                                    if (index !== -1) {
-                                        if (!labsData[roomId].units) labsData[roomId].units = {};
-                                        if (!labsData[roomId].units.unit_1) labsData[roomId].units.unit_1 = {};
-                                        labsData[roomId].units.unit_1.targetTemp = newTarget;
-                                        latestData[index].units.unit_1.targetTemp = newTarget;
-                                        console.log(`[TargetTemp] Updated ${roomId}/unit_1 targetTemp to ${newTarget} - re-rendering`);
-                                        renderDashboard();
-                                    } else {
-                                        console.log(`[TargetTemp] ERROR: Could not find room index for ${roomId}`);
-                                    }
-                                } else {
-                                    console.log(`[TargetTemp] ERROR: newTarget is null or labsData[${roomId}] is missing`);
-                                }
-                            });
-                            
-                            // Listen for unit_2 target temperature changes
-                            db.ref(`${roomId}/units/unit_2/targetTemp`).on('value', (snapshot) => {
-                                const newTarget = snapshot.val();
-                                console.log(`[TargetTemp] ${roomId}/unit_2 targetTemp updated:`, newTarget);
-                                if (newTarget !== null && labsData[roomId]) {
-                                    const index = labKeys.indexOf(roomId);
-                                    if (index !== -1) {
-                                        if (!labsData[roomId].units) labsData[roomId].units = {};
-                                        if (!labsData[roomId].units.unit_2) labsData[roomId].units.unit_2 = {};
-                                        labsData[roomId].units.unit_2.targetTemp = newTarget;
-                                        latestData[index].units.unit_2.targetTemp = newTarget;
-                                        console.log(`[TargetTemp] Updated ${roomId}/unit_2 targetTemp to ${newTarget} - re-rendering`);
-                                        renderDashboard();
-                                    } else {
-                                        console.log(`[TargetTemp] ERROR: Could not find room index for ${roomId}`);
-                                    }
-                                } else {
-                                    console.log(`[TargetTemp] ERROR: newTarget is null or labsData[${roomId}] is missing`);
-                                }
-                            });
-                        } else {
-                            // Listen for single room target temperature changes
-                            db.ref(`${roomId}/targetTemp`).on('value', (snapshot) => {
+                        // Listen for single room target temperature changes
+                        db.ref(`${roomId}/targetTemp`).on('value', (snapshot) => {
                                 const newTarget = snapshot.val();
                                 console.log(`[TargetTemp] ${roomId} targetTemp updated:`, newTarget);
                                 if (newTarget !== null && labsData[roomId]) {
@@ -582,7 +547,6 @@
                                     }
                                 }
                             });
-                        }
                     });
                 }
                 
@@ -700,40 +664,16 @@
             // Set optimistic UI state to prevent immediate re-render conflicts
             pendingUpdates[roomPath] = isChecked;
             
-            // Check if this is a dual-unit room (Room_1)
-            const isDualUnit = roomPath === "Room_1";
-            
-            if (isDualUnit) {
-                // For dual-unit rooms, update both units
-                const updates = {
-                    [`units/unit_1/ac`]: isChecked,
-                    [`units/unit_1/ac_command`]: cmd,
-                    [`units/unit_1/ac_timestamp`]: timestamp,
-                    [`units/unit_2/ac`]: isChecked,
-                    [`units/unit_2/ac_command`]: cmd,
-                    [`units/unit_2/ac_timestamp`]: timestamp
-                };
-                db.ref(roomPath).update(updates)
-                    .then(() => {
-                        console.log(`[Dashboard] Dual-unit update succeeded for ${roomPath}`);
-                        delete pendingUpdates[roomPath];
-                    })
-                    .catch((error) => {
-                        console.error(`[Dashboard] Failed to update dual-unit AC for ${roomPath}:`, error);
-                        delete pendingUpdates[roomPath];
-                    });
-            } else {
-                // For single-unit rooms, update top-level ac field
-                db.ref(roomPath).update({ ac: isChecked, ac_command: cmd, ac_timestamp: timestamp })
-                    .then(() => {
-                        console.log(`[Dashboard] Update succeeded for ${roomPath}`);
-                        delete pendingUpdates[roomPath];
-                    })
-                    .catch((error) => {
-                        console.error(`[Dashboard] Failed to update AC for ${roomPath}:`, error);
-                        delete pendingUpdates[roomPath];
-                    });
-            }
+            // For single-unit rooms, update top-level ac field
+            db.ref(roomPath).update({ ac: isChecked, ac_command: cmd, ac_timestamp: timestamp })
+                .then(() => {
+                    console.log(`[Dashboard] Update succeeded for ${roomPath}`);
+                    delete pendingUpdates[roomPath];
+                })
+                .catch((error) => {
+                    console.error(`[Dashboard] Failed to update AC for ${roomPath}:`, error);
+                    delete pendingUpdates[roomPath];
+                });
             
             // Force immediate re-render to show the change
             renderDashboard();
@@ -880,44 +820,6 @@
                 });
         }
 
-        function initializeRoom1DualUnits() {
-            const roomPath = "Room_1";
-            console.log("[Init] Checking if dual-unit structure needs initialization for Room_1");
-            
-            // Only initialize if units don't already exist to avoid overwriting Firebase state
-            db.ref(`${roomPath}/units`).once('value', (snapshot) => {
-                const unitsData = snapshot.val();
-                if (!unitsData) {
-                    console.log("[Init] Units don't exist, initializing dual-unit structure for Room_1");
-                    
-                    const unit1Data = {
-                        ac: false,
-                        ac_command: "IDLE",
-                        targetTemp: 24,
-                        status: "NORMAL"
-                    };
-                    
-                    const unit2Data = {
-                        ac: false,
-                        ac_command: "IDLE",
-                        targetTemp: 24,
-                        status: "NORMAL"
-                    };
-                    
-                    // Initialize unit structure
-                    db.ref(`${roomPath}/units/unit_1`).set(unit1Data)
-                        .then(() => console.log("[Init] Unit 1 initialized"))
-                        .catch(err => console.error("[Init] Unit 1 failed:", err));
-                        
-                    db.ref(`${roomPath}/units/unit_2`).set(unit2Data)
-                        .then(() => console.log("[Init] Unit 2 initialized"))
-                        .catch(err => console.error("[Init] Unit 2 failed:", err));
-                } else {
-                    console.log("[Init] Units already exist, skipping initialization to preserve Firebase state");
-                }
-            });
-        }
-
         function showInfo(roomIndex) {
             const data = latestData[roomIndex];
             if (!data) return;
@@ -940,17 +842,38 @@
         function logout() { window.location.href = "login.html"; }
 
         function renderDashboard() {
+            if (renderInProgress) {
+                console.log('[renderDashboard] Already rendering, skipping this call');
+                return;
+            }
+            renderInProgress = true;
+            console.log('[renderDashboard] FUNCTION CALLED');
             let sumT = 0, criticalCount = 0, gridHtml = "", activeRooms = 0;
 
+            console.log('[renderDashboard] latestData length:', latestData.length);
+            console.log('[renderDashboard] labKeys length:', labKeys.length);
+            console.log('[renderDashboard] labsData keys:', Object.keys(labsData));
             console.log('[renderDashboard] latestData:', latestData);
             console.log('[renderDashboard] labKeys:', labKeys);
             console.log('[renderDashboard] labsData:', labsData);
 
+            if (labKeys.length === 0) {
+                console.log('[renderDashboard] ERROR: labKeys is empty, no rooms to render');
+                document.getElementById('lab-grid').innerHTML = '<div class="text-center py-8"><p class="text-gray-500">No rooms found. Please add a room first.</p></div>';
+                return;
+            }
+
             // Use labKeys and labsData to render all rooms, including those without sensor data
             labKeys.forEach((roomPath, i) => {
-                const d = labsData[roomPath];
-                if (!d) return;
-                activeRooms++;
+                try {
+                    console.log(`[renderDashboard] Processing room ${i}: ${roomPath}`);
+                    const d = labsData[roomPath];
+                    if (!d) {
+                        console.log(`[renderDashboard] Skipping ${roomPath} - no data in labsData`);
+                        return;
+                    }
+                    activeRooms++;
+                    console.log(`[renderDashboard] Active rooms count: ${activeRooms}`);
                 
                 const label = roomLabels[i];
                 const temp = d.temperature || 0;
@@ -978,24 +901,8 @@
                 console.log(`[Dashboard] ${roomPath} - last_seen: ${lastSeen} (${lastSeen ? new Date(lastSeen).toISOString() : 'null'}), timeSinceLastSeen: ${Math.floor(timeSinceLastSeen/1000)}s, isOnline: ${isDeviceOnline}`);
                 
                 // Firebase is authoritative for AC state - use it directly for cross-device sync
-                const isDualUnitRoom = roomPath === "Room_1" && !!d.units;
-                console.log(`[Dashboard] ${roomPath} - isDualUnitRoom: ${isDualUnitRoom}, has units: ${!!d.units}`);
-                let isPoweredOn;
-                let unit1State = false;
-                let unit2State = false;
-                
-                if (isDualUnitRoom) {
-                    // For dual-unit rooms, check if either unit is on
-                    console.log(`[Dashboard] ${roomPath} - Raw units data:`, JSON.stringify(d.units));
-                    unit1State = d.units?.unit_1?.ac === true || d.units?.unit_1?.ac === "ON" || d.units?.unit_1?.ac === 1;
-                    unit2State = d.units?.unit_2?.ac === true || d.units?.unit_2?.ac === "ON" || d.units?.unit_2?.ac === 1;
-                    isPoweredOn = unit1State || unit2State;
-                    console.log(`[Dashboard] ${roomPath} - Dual unit: unit1=${unit1State}, unit2=${unit2State}, isPoweredOn=${isPoweredOn}`);
-                } else {
-                    // Single unit rooms - use Firebase AC state directly
-                    isPoweredOn = d.ac === true || d.ac === "ON" || d.ac === 1;
-                    console.log(`[Dashboard] ${roomPath} - Using Firebase: ${d.ac}, isPoweredOn=${isPoweredOn}`);
-                }
+                const isPoweredOn = d.ac === true || d.ac === "ON" || d.ac === 1;
+                console.log(`[Dashboard] ${roomPath} - Using Firebase: ${d.ac}, isPoweredOn=${isPoweredOn}`);
                 
                 console.log(`[Dashboard] ${roomPath} - Final state: isOnline=${isDeviceOnline}, isPoweredOn=${isPoweredOn}`);
                 
@@ -1007,7 +914,13 @@
                 const searchMatch = label.toLowerCase().includes(searchQuery);
 
                 if (searchMatch && (currentFilter === 'all' || (currentFilter === 'on' && isPoweredOn) || (currentFilter === 'off' && !isPoweredOn))) {
+                    console.log(`[renderDashboard] ${roomPath} - Adding to grid (filter matched)`);
                     const progressWidth = Math.min(Math.max((temp - minT) / (maxT - minT) * 100, 0), 100);
+                    
+                    // Check if this is a dual-unit room (has units object with unit_1 and unit_2)
+                    const isDualUnitRoom = d.units && (d.units.unit_1 || d.units.unit_2);
+                    const unit1State = d.units?.unit_1?.ac === true || d.units?.unit_1?.ac === "ON" || d.units?.unit_1?.ac === 1;
+                    const unit2State = d.units?.unit_2?.ac === true || d.units?.unit_2?.ac === "ON" || d.units?.unit_2?.ac === 1;
                     
                     let statusClass = isTooHigh ? "border-status-high" : (isTooLow ? "border-status-low" : "border-status-normal");
                     const powerStyle = isPoweredOn ? statusClass : "border-gray-200 opacity-60 grayscale-[0.5]";
@@ -1029,25 +942,20 @@
                                     </button>
                                 </div>
                                 <div class="flex flex-col items-center">
-                                    ${isDualUnitRoom ? `
-                                        <span class="text-[9px] font-bold text-[#800000] bg-[#800000]/10 px-3 py-1 rounded-full uppercase">Dual Units</span>
-                                    ` : `
-                                        <label class="neumorph-switch ${powerButtonCooldown ? 'cooldown' : ''}">
-                                            <input type="checkbox" ${isPoweredOn ? 'checked' : ''} onchange="toggleAC('${roomPath}', this.checked)">
-                                            <span class="neumorph-switch-slider"></span>
-                                        </label>
-                                        <div class="flex flex-col items-center mt-1">
-                                            <span class="text-[8px] font-bold text-gray-400 uppercase">AC Power</span>
-                                            <span class="text-[10px] font-bold text-[#800000] bg-[#800000]/10 px-3 py-1 rounded-lg shadow-sm">${getDurationDisplay(roomPath)}</span>
-                                        </div>
-                                    `}
+                                    <label class="neumorph-switch ${powerButtonCooldown ? 'cooldown' : ''}">
+                                        <input type="checkbox" ${isPoweredOn ? 'checked' : ''} onchange="toggleAC('${roomPath}', this.checked)">
+                                        <span class="neumorph-switch-slider"></span>
+                                    </label>
+                                    <div class="flex flex-col items-center mt-1">
+                                        <span class="text-[8px] font-bold text-gray-400 uppercase">AC Power</span>
+                                        <span class="text-[10px] font-bold text-[#800000] bg-[#800000]/10 px-3 py-1 rounded-lg shadow-sm">${getDurationDisplay(roomPath)}</span>
+                                    </div>
                                 </div>
                             </div>
                             <div class="mb-4 flex items-center gap-2">
                                 <span class="px-3 py-1.5 rounded-full text-[9px] font-black uppercase ${!isPoweredOn ? 'bg-gray-100 text-gray-400' : (isTooHigh ? 'bg-red-100 text-red-600' : (isTooLow ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'))}">
                                     ${!isPoweredOn ? '○ Power Off' : (isTooHigh ? '● Too High' : (isTooLow ? '● Too Low' : '● Normal'))}
                                 </span>
-                                ${isDualUnitRoom ? `<span class="text-[8px] font-bold text-gray-400">(${unit1State && unit2State ? 'Both Units' : (unit1State ? 'Unit 1' : (unit2State ? 'Unit 2' : 'No Units'))} Active)</span>` : ''}
                             </div>
                             <div class="grid grid-cols-2 gap-4 mb-5">
                                 <div class="glass-card p-5 text-center">
@@ -1101,10 +1009,19 @@
                             </div>
                         </div>`;
                 }
+                } catch (error) {
+                    console.error(`[renderDashboard] Error processing room ${roomPath}:`, error);
+                }
             });
+
+            console.log('[renderDashboard] Final gridHtml length:', gridHtml.length);
+            console.log('[renderDashboard] Final gridHtml preview:', gridHtml.substring(0, 200));
+            console.log('[renderDashboard] Setting lab-grid innerHTML...');
 
             document.getElementById('total-count').innerText = activeRooms;
             document.getElementById('lab-grid').innerHTML = gridHtml || `<div class="col-span-full py-20 text-center text-gray-400 text-xs font-bold uppercase tracking-widest">No matching rooms found</div>`;
+            
+            console.log('[renderDashboard] lab-grid innerHTML set successfully');
             lucide.createIcons();
             
             // Use shared utility for summary cards
@@ -1115,6 +1032,9 @@
                 critical: 'alert-count',
                 avgTemp: 'avg-temp'
             });
+            
+            renderInProgress = false;
+            console.log('[renderDashboard] Render complete, flag reset');
         }
 
         function watchDeviceOnline(roomId) {
@@ -1232,7 +1152,6 @@
         }
 
         loadRoomsFromFirebase();
-        initializeRoom1DualUnits(); // Initialize dual-unit structure for Room_1
         requestNotificationPermission();
 
         document.getElementById('menu-toggle').addEventListener('click', () => {

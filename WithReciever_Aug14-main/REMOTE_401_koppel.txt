@@ -143,7 +143,7 @@ void handleACCommand(String cmd) {
   if (cmd == "ON") {
     Serial.println(">>> SENDING IR: ON");
     irsend.sendRaw(rawOn, 149, kFrequency);
-    Firebase.RTDB.setString(&fbdo, "/Room_1/ac_command", "IDLE"); 
+    Firebase.RTDB.setString(&fbdo, "/Room_1/ac_command", "IDLE");
   } 
   else if (cmd == "OFF") {
     Serial.println(">>> SENDING IR: OFF");
