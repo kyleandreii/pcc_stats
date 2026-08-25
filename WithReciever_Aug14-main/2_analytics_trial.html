@@ -1458,7 +1458,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
         if (trendHistory.timeline.length === 0 || trendHistory.timeline[trendHistory.timeline.length - 1] !== nowTime) {
 
-            if (trendHistory.timeline.length >= 15) {
+            if (trendHistory.timeline.length >= 720) {
 
                 trendHistory.timeline.shift();
 
@@ -1542,7 +1542,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
         if (trendHistory.timeline.length === 0 || trendHistory.timeline[trendHistory.timeline.length - 1] !== nowTime) {
 
-            if (trendHistory.timeline.length >= 15) {
+            if (trendHistory.timeline.length >= 720) {
 
                 trendHistory.timeline.shift();
 
@@ -2668,6 +2668,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
         liveListener = db.ref().on("value", (snap) => {
 
+            console.log('[Analytics Firebase Listener] ===== START =====');
+            
             if (isHistoricalView) return; // Don't process if in historical view
 
             
@@ -2681,6 +2683,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                 return;
 
             }
+
+            console.log('[Analytics Firebase Listener] Data received from Firebase');
 
             labsData = data;
 

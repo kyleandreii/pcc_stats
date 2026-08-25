@@ -437,7 +437,7 @@
                             </div>
                             
                             <div id="temp-controls-container" class="flex justify-center">
-                                        <!-- Single unit controls (for Room_402) -->
+                                        <!-- Single unit controls -->
                                         <div id="single-unit-temp-controls" class="flex items-center justify-center gap-8">
                                             <div class="circular-progress w-28 h-28 rounded-full bg-white flex flex-col items-center justify-center relative">
                                                 <svg class="absolute inset-0 w-full h-full" viewBox="0 0 100 100">
@@ -455,6 +455,46 @@
                                                 <button onclick="adjustManualTemp(-1)" class="remote-btn w-12 h-12 rounded-xl flex items-center justify-center shadow-sm">
                                                     <i data-lucide="chevron-down" class="w-6 h-6"></i>
                                                 </button>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Dual unit controls (hidden by default) -->
+                                        <div id="dual-unit-temp-controls" class="hidden flex items-center justify-center gap-6">
+                                            <div class="flex flex-col items-center">
+                                                <span class="text-[10px] font-bold text-gray-500 uppercase mb-2">Unit 1</span>
+                                                <div class="circular-progress w-24 h-24 rounded-full bg-white flex flex-col items-center justify-center relative">
+                                                    <svg class="absolute inset-0 w-full h-full" viewBox="0 0 100 100">
+                                                        <circle cx="50" cy="50" r="35" stroke="#f3f4f6" stroke-width="7" fill="none"/>
+                                                        <circle id="unit1-progress-ring" cx="50" cy="50" r="35" stroke="#800000" stroke-width="7" fill="none" class="progress-ring" stroke-linecap="round"/>
+                                                    </svg>
+                                                    <span id="unit1-temp-val" class="text-2xl font-black text-[#800000] relative z-10">--</span>
+                                                </div>
+                                                <div class="flex gap-1 mt-2">
+                                                    <button onclick="adjustUnitTemp(1, 1)" class="remote-btn w-10 h-10 rounded-lg flex items-center justify-center shadow-sm">
+                                                        <i data-lucide="chevron-up" class="w-5 h-5"></i>
+                                                    </button>
+                                                    <button onclick="adjustUnitTemp(1, -1)" class="remote-btn w-10 h-10 rounded-lg flex items-center justify-center shadow-sm">
+                                                        <i data-lucide="chevron-down" class="w-5 h-5"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div class="flex flex-col items-center">
+                                                <span class="text-[10px] font-bold text-gray-500 uppercase mb-2">Unit 2</span>
+                                                <div class="circular-progress w-24 h-24 rounded-full bg-white flex flex-col items-center justify-center relative">
+                                                    <svg class="absolute inset-0 w-full h-full" viewBox="0 0 100 100">
+                                                        <circle cx="50" cy="50" r="35" stroke="#f3f4f6" stroke-width="7" fill="none"/>
+                                                        <circle id="unit2-progress-ring" cx="50" cy="50" r="35" stroke="#800000" stroke-width="7" fill="none" class="progress-ring" stroke-linecap="round"/>
+                                                    </svg>
+                                                    <span id="unit2-temp-val" class="text-2xl font-black text-[#800000] relative z-10">--</span>
+                                                </div>
+                                                <div class="flex gap-1 mt-2">
+                                                    <button onclick="adjustUnitTemp(2, 1)" class="remote-btn w-10 h-10 rounded-lg flex items-center justify-center shadow-sm">
+                                                        <i data-lucide="chevron-up" class="w-5 h-5"></i>
+                                                    </button>
+                                                    <button onclick="adjustUnitTemp(2, -1)" class="remote-btn w-10 h-10 rounded-lg flex items-center justify-center shadow-sm">
+                                                        <i data-lucide="chevron-down" class="w-5 h-5"></i>
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
                             </div>
@@ -661,9 +701,12 @@
         }
 
         function selectLab(roomKey) {
+            console.log('[selectLab] Selected room:', roomKey, 'Previous selectedRoom:', selectedRoom);
             selectedRoom = roomKey;
+            console.log('[selectLab] New selectedRoom:', selectedRoom);
             refreshConfigUI();
             renderLabList();
+            console.log('[selectLab] UI refreshed');
         }
         
         let targetTempListeners = {}; // Track target temp listeners to prevent duplicates
@@ -703,16 +746,32 @@
             document.getElementById('curr-min-display').innerText = (thresholds.minTemp || 0) + "°";
             document.getElementById('curr-max-display').innerText = (thresholds.maxTemp || 0) + "°";
             
-            // Set up Firebase listeners for target temperature to ensure persistence
-            setupTargetTempListeners(selectedRoom);
+            // Check if this is a dual-unit room
+            const isDualUnit = data.units && (data.units.unit_1 || data.units.unit_2);
             
-            // Hide unit tabs - single-unit only
-            document.getElementById('unit-tabs').classList.add('hidden');
-            // Show single-unit controls
-            document.getElementById('single-unit-temp-controls').classList.remove('hidden');
-            
-            const displayTarget = data.targetTemp !== undefined ? data.targetTemp : 24;
-            document.getElementById('manual-temp-val').innerText = displayTarget;
+            if (isDualUnit) {
+                // Show dual-unit controls
+                document.getElementById('single-unit-temp-controls').classList.add('hidden');
+                document.getElementById('dual-unit-temp-controls').classList.remove('hidden');
+                
+                // Set unit 1 temperature
+                const unit1Target = data.units.unit_1?.targetTemp !== undefined ? data.units.unit_1.targetTemp : 24;
+                document.getElementById('unit1-temp-val').innerText = unit1Target;
+                
+                // Set unit 2 temperature
+                const unit2Target = data.units.unit_2?.targetTemp !== undefined ? data.units.unit_2.targetTemp : 24;
+                document.getElementById('unit2-temp-val').innerText = unit2Target;
+            } else {
+                // Show single-unit controls
+                document.getElementById('single-unit-temp-controls').classList.remove('hidden');
+                document.getElementById('dual-unit-temp-controls').classList.add('hidden');
+                
+                // Set up Firebase listeners for target temperature to ensure persistence
+                setupTargetTempListeners(selectedRoom);
+                
+                const displayTarget = data.targetTemp !== undefined ? data.targetTemp : 24;
+                document.getElementById('manual-temp-val').innerText = displayTarget;
+            }
 
             document.getElementById('input-on-time').value = schedule.onTime || "";
             document.getElementById('input-off-time').value = schedule.offTime || "";
@@ -864,6 +923,20 @@
             if (newVal < 16 || newVal > 30) return;
             
             db.ref(`${selectedRoom}`).update({ targetTemp: newVal, ac_command: cmd });
+        }
+
+        function adjustUnitTemp(unitNumber, change) {
+            if (!selectedRoom) return;
+            const currentData = labsData[selectedRoom];
+            const cmd = change > 0 ? "TEMP_UP" : "TEMP_DOWN";
+            
+            const unitKey = `unit_${unitNumber}`;
+            const currentTarget = currentData.units?.[unitKey]?.targetTemp !== undefined ? currentData.units[unitKey].targetTemp : 24;
+            const newVal = currentTarget + change;
+            if (newVal < 16 || newVal > 30) return;
+            
+            db.ref(`${selectedRoom}/units/${unitKey}`).update({ targetTemp: newVal });
+            db.ref(`${selectedRoom}`).update({ ac_command: cmd });
         }
 
         function handleAutomationToggle(event) {

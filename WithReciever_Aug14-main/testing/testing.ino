@@ -22,6 +22,9 @@
 // CHANGE THIS TO YOUR ROOM ID (e.g., "Room_1", "Room_402", "Room_403", etc.)
 #define ROOM_ID "Room_1"
 
+// Set to true if this room has 2 AC units (requires 2 IR LEDs)
+#define DUAL_UNIT_MODE true
+
 const uint16_t kIrLedPin = 4;
 const uint16_t kIrLedPin2 = 5;
 const uint16_t kIrRecvPin = 14;
@@ -49,7 +52,7 @@ Preferences preferences;
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 #define DHTPIN 26
-#define DHTTYPE DHT11
+#define DHTTYPE DHT22
 #define LED_PIN 27
 #define RELAY_PIN 25
 DHT dht(DHTPIN, DHTTYPE);
@@ -57,7 +60,7 @@ DHT dht(DHTPIN, DHTTYPE);
 float minTemp = 20.0;
 float maxTemp = 30.0;
 unsigned long sendDataPrevMillis = 0;
-
+ 
 bool automationEnabled = false;
 
 float MAX_HUMIDITY = 65.0;
@@ -71,7 +74,7 @@ unsigned long lastAutomationCheckMillis = 0;
 unsigned long lastIRSendMillis = 0;
 unsigned long lastSerialLogMillis = 0;
 
-void handleACCommand(String cmd);
+void handleACCommand(String cmd, int unit = 0);
 void updateOLED(float currentTemp);
 void runAutomation(float temp, float humidity);
 void handleIRReceiver();
@@ -131,6 +134,15 @@ void setup() {
   Firebase.RTDB.setJSON(&fbdo, "/" + String(ROOM_ID) + "/last_seen", &json);
   Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/online", true);
   Firebase.RTDB.setString(&fbdo, "/" + String(ROOM_ID) + "/device_room_id", ROOM_ID);
+  
+  // Initialize units structure if dual-unit mode is enabled
+  #if DUAL_UNIT_MODE
+  Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/ac", false);
+  Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/ac", false);
+  Firebase.RTDB.setString(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/ac_command", "IDLE");
+  Firebase.RTDB.setString(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/ac_command", "IDLE");
+  #endif
+  
   // Don't overwrite Firebase currentKnownTemp on startup - use Firebase as source of truth
 }
 
@@ -168,7 +180,15 @@ void loop() {
           }
         }
       } else if (path == "/ac_command" || path.endsWith("ac_command")) {
-        handleACCommand(stream.stringData());
+        // Check if this is a dual-unit command
+        if (path.indexOf("/units/unit_1/") >= 0) {
+          handleACCommand(stream.stringData(), 1);
+        } else if (path.indexOf("/units/unit_2/") >= 0) {
+          handleACCommand(stream.stringData(), 2);
+        } else {
+          // Single unit command
+          handleACCommand(stream.stringData(), 0);
+        }
       }
     }
   }
@@ -272,37 +292,44 @@ void updateOLED(float currentTemp) {
   display.display();
 }
 
-void handleACCommand(String cmd) {
-  if (cmd == "IDLE" || cmd == "") {
-    return;
-  }
-
-  Serial.println("AC Command: " + cmd);
-
+void handleACCommand(String cmd, int unit) {
+  Serial.println("AC Command: " + cmd + " for Unit " + String(unit));
+  
+  IRsend *irSender = (unit == 1) ? &irsend2 : &irsend;
+  
   if (cmd == "ON") {
-    Serial.println("AC Command: POWER ON");
+    Serial.println("AC Command: ON");
     uint16_t on_buf[149];
     memcpy_P(on_buf, rawOn, sizeof(rawOn));
-    irsend.sendRaw(on_buf, 149, kFrequency);
+    irSender->sendRaw(on_buf, 149, kFrequency);
   } else if (cmd == "OFF") {
-    Serial.println("AC Command: POWER OFF");
+    Serial.println("AC Command: OFF");
     uint16_t off_buf[149];
     memcpy_P(off_buf, rawOff, sizeof(rawOff));
-    irsend.sendRaw(off_buf, 149, kFrequency);
+    irSender->sendRaw(off_buf, 149, kFrequency);
   } else if (cmd == "TEMP_UP") {
     Serial.println("AC Command: TEMPERATURE UP");
     uint16_t up_buf[75];
     memcpy_P(up_buf, rawTempUp, sizeof(rawTempUp));
-    irsend.sendRaw(up_buf, 75, kFrequency);
+    irSender->sendRaw(up_buf, 75, kFrequency);
   } else if (cmd == "TEMP_DOWN") {
     Serial.println("AC Command: TEMPERATURE DOWN");
     uint16_t down_buf[75];
     memcpy_P(down_buf, rawTempDown, sizeof(rawTempDown));
-    irsend.sendRaw(down_buf, 75, kFrequency);
+    irSender->sendRaw(down_buf, 75, kFrequency);
   }
 
-  Firebase.RTDB.setString(&fbdo, "/" + String(ROOM_ID) + "/ac_command", "IDLE");
-  Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/ac", (cmd == "ON"));
+  // Update Firebase based on unit
+  if (unit == 0) {
+    // Single unit mode
+    Firebase.RTDB.setString(&fbdo, "/" + String(ROOM_ID) + "/ac_command", "IDLE");
+    Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/ac", (cmd == "ON"));
+  } else {
+    // Dual unit mode
+    String unitPath = "/" + String(ROOM_ID) + "/units/unit_" + String(unit);
+    Firebase.RTDB.setString(&fbdo, unitPath + "/ac_command", "IDLE");
+    Firebase.RTDB.setBool(&fbdo, unitPath + "/ac", (cmd == "ON"));
+  }
 }
 
 void handleIRReceiver() {

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup Dual-Unit Rooms</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #800000;
+            margin-bottom: 20px;
+        }
+        .room-item {
+            padding: 15px;
+            margin: 10px 0;
+            background: #f9f9f9;
+            border-left: 4px solid #800000;
+            border-radius: 4px;
+        }
+        button {
+            background: #800000;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 20px;
+        }
+        button:hover {
+            background: #600000;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        #status {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 4px;
+            display: none;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Setup Dual-Unit Rooms</h1>
+        <p>This will configure the following rooms as dual-unit rooms:</p>
+        
+        <div class="room-item">Room_403</div>
+        <div class="room-item">Room_404</div>
+        <div class="room-item">Room_406</div>
+        
+        <p style="margin-top: 20px; color: #666; font-size: 14px;">
+            This will add a <code>units</code> structure with <code>unit_1</code> and <code>unit_2</code> to each room.
+        </p>
+        
+        <button id="setupBtn" onclick="setupDualUnits()">Setup Dual-Unit Rooms</button>
+        <div id="status"></div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyAv9fvbotQfi21Nu7LNZYBuzNUJOD5Vj0E",
+            databaseURL: "https://pcc-stats-default-rtdb.asia-southeast1.firebasedatabase.app/",
+            projectId: "pcc-stats"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        async function setupDualUnits() {
+            const btn = document.getElementById('setupBtn');
+            const status = document.getElementById('status');
+            
+            btn.disabled = true;
+            btn.textContent = 'Setting up...';
+            status.style.display = 'none';
+
+            const rooms = ['Room_403', 'Room_404', 'Room_406'];
+            const unitsStructure = {
+                unit_1: { ac: false },
+                unit_2: { ac: false }
+            };
+
+            try {
+                for (const room of rooms) {
+                    await db.ref(`${room}/units`).set(unitsStructure);
+                    console.log(`Setup units for ${room}`);
+                }
+                
+                status.className = 'success';
+                status.textContent = '✓ Successfully configured Room_403, Room_404, and Room_406 as dual-unit rooms!';
+                status.style.display = 'block';
+                btn.textContent = 'Setup Complete';
+            } catch (error) {
+                console.error('Error:', error);
+                status.className = 'error';
+                status.textContent = '✗ Error: ' + error.message;
+                status.style.display = 'block';
+                btn.disabled = false;
+                btn.textContent = 'Retry Setup';
+            }
+        }
+    </script>
+</body>
+</html>
