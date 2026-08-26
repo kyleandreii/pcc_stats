@@ -930,13 +930,19 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
     function loadAirconConfig() {
 
+        console.log('[Analytics] loadAirconConfig called');
+
         db.ref("config/rooms").on("value", (snapshot) => {
 
             const data = snapshot.val();
 
+            console.log('[Analytics] config/rooms data:', data);
+
             if (data) {
 
                 airconConfig = data;
+
+                console.log('[Analytics] airconConfig loaded:', airconConfig);
 
                 if (labKeys.length > 0) {
 
@@ -3248,11 +3254,15 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
     function setMetricTab(metric) {
 
+        console.log('[Analytics] setMetricTab called with metric:', metric);
+
         if (metricTabCooldown) return;
 
         metricTabCooldown = true;
 
         currentMetric = metric;
+
+        console.log('[Analytics] currentMetric set to:', currentMetric);
 
         document.querySelectorAll('[id^="metric-"]').forEach(tab => tab.classList.remove('active'));
 
@@ -3777,6 +3787,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
     // Load analytics data based on current period and metric
 
     async function loadAnalyticsData() {
+
+        console.log('[Analytics] loadAnalyticsData called, currentPeriod:', currentPeriod, 'currentMetric:', currentMetric);
 
         if (!labKeys || labKeys.length === 0) {
 
@@ -5666,15 +5678,12 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                         if (currentMetric === 'cost') {
 
-                            roomTotal += AirconCostCalculator.computeAirconCost(
+                            console.log('[Cost Calculator] Computing cost for', { room, dateLabel, hours, ratePerKwh });
+                            console.log('[Cost Calculator] airconConfig[room]:', airconConfig[room]);
 
-                                airconConfig[room],
+                            roomTotal += AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh);
 
-                                hours,
-
-                                ratePerKwh
-
-                            );
+                            console.log('[Cost Calculator] Cost for', { room, dateLabel, hours, ratePerKwh }, 'is', roomTotal);
 
                         } else if (currentMetric === 'usage') {
 

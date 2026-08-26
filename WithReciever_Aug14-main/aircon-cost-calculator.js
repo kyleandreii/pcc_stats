@@ -68,7 +68,10 @@ const AirconCostCalculator = (function() {
      * @returns {number} Cost in currency
      */
     function computeSingleUnitCost(unitConfig, hours, ratePerKwh) {
+        console.log('[Cost Calculator] computeSingleUnitCost called:', { unitConfig, hours, ratePerKwh });
+        
         if (!unitConfig || hours <= 0 || ratePerKwh <= 0) {
+            console.log('[Cost Calculator] Returning 0 - invalid input');
             return 0;
         }
 
@@ -78,7 +81,10 @@ const AirconCostCalculator = (function() {
             watts = POWER_RATINGS[unitConfig.aircon_type]?.[unitConfig.hp_rating] || 0;
         }
 
-        if (watts <= 0) return 0;
+        if (watts <= 0) {
+            console.log('[Cost Calculator] Returning 0 - invalid watts:', watts);
+            return 0;
+        }
 
         // Get duty cycle (default to 1.0 if not specified)
         const dutyCycle = unitConfig.duty_cycle || 1.0;
@@ -91,6 +97,8 @@ const AirconCostCalculator = (function() {
 
         // Calculate cost
         const cost = energyKwh * ratePerKwh;
+
+        console.log('[Cost Calculator] Calculation result:', { watts, dutyCycle, avgPowerKw, energyKwh, cost });
 
         return parseFloat(cost.toFixed(2));
     }
