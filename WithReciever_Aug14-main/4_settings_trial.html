@@ -919,13 +919,19 @@
             const now = new Date();
             const currentTime = now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes().toString().padStart(2, '0');
             
+            console.log(`[Automation Check] Running at ${currentTime}, checking ${labKeys.length} rooms`);
+            
             labKeys.forEach(room => {
                 const roomData = labsData[room];
                 const sched = roomData?.schedule;
-                if (!sched || !sched.onTime || !sched.offTime) return;
+                if (!sched || !sched.onTime || !sched.offTime) {
+                    console.log(`[Automation Check] ${room} - No schedule configured`);
+                    return;
+                }
 
                 const actionKey = `${room}_${currentTime}`;
                 let debugMsg = `[Automation] ${room} - Current: ${currentTime}, Schedule: ${sched.onTime}-${sched.offTime}`;
+                console.log(debugMsg);
 
                 // Exact-time triggers (send commands at configured minutes)
                 if (sched.onTime === currentTime && lastAutomationAction[room] !== actionKey + "_ON") {

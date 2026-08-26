@@ -199,121 +199,132 @@ void loop() {
     lastLoopLog = millis();
   }
 
-  if (Firebase.ready() && Firebase.RTDB.readStream(&stream)) {
-    if (stream.streamAvailable()) {
-      String path = stream.dataPath();
+    if (Firebase.ready() && Firebase.RTDB.readStream(&stream)) {
+    if (stream.streamTimeout()) {
+      return;
+    }
+    if (stream.dataType() == "null") {
+      return;
+    }
+    
+    String path = stream.dataPath();
+    
+    // Only log important paths, ignore system paths like /last_seen
+    if (path != "/last_seen" && path.indexOf("last_seen") < 0) {
       Serial.println("[Firebase] Data received - Path: " + path);
-
-      if (path == "/thresholds/minTemp" || path == "/minTemp") {
-        minTemp = stream.floatData();
-        Serial.println("[Firebase] Updated minTemp: " + String(minTemp));
-      } else if (path == "/thresholds/maxTemp" || path == "/maxTemp") {
-        maxTemp = stream.floatData();
-        Serial.println("[Firebase] Updated maxTemp: " + String(maxTemp));
-      } else if (path == "/automation/enabled" || path.indexOf("automation/enabled") >= 0) {
-        bool newEnabledState = stream.boolData();
+    }
+    
+    if (path == "/thresholds/minTemp" || path == "/minTemp") {
+      minTemp = stream.floatData();
+      Serial.println("[Firebase] Updated minTemp: " + String(minTemp));
+    } else if (path == "/thresholds/maxTemp" || path == "/maxTemp") {
+      maxTemp = stream.floatData();
+      Serial.println("[Firebase] Updated maxTemp: " + String(maxTemp));
+    } else if (path == "/automation/enabled" || path.indexOf("automation/enabled") >= 0) {
+      bool newEnabledState = stream.boolData();
+      if (newEnabledState != automationEnabled) {
+        automationEnabled = newEnabledState;
+        preferences.putBool("automationEnabled", automationEnabled);
+        Serial.println("Humidity automation " + String(automationEnabled ? "ENABLED" : "DISABLED"));
+      }
+    } else if (path == "/automation" || path.indexOf("automation") >= 0) {
+      FirebaseJson &json = stream.jsonObject();
+      FirebaseJsonData jsonData;
+      if (json.get(jsonData, "enabled")) {
+        bool newEnabledState = jsonData.boolValue;
         if (newEnabledState != automationEnabled) {
           automationEnabled = newEnabledState;
           preferences.putBool("automationEnabled", automationEnabled);
           Serial.println("Humidity automation " + String(automationEnabled ? "ENABLED" : "DISABLED"));
         }
-      } else if (path == "/automation" || path.indexOf("automation") >= 0) {
-        FirebaseJson &json = stream.jsonObject();
-        FirebaseJsonData jsonData;
-        if (json.get(jsonData, "enabled")) {
-          bool newEnabledState = jsonData.boolValue;
-          if (newEnabledState != automationEnabled) {
-            automationEnabled = newEnabledState;
-            preferences.putBool("automationEnabled", automationEnabled);
-            Serial.println("Humidity automation " + String(automationEnabled ? "ENABLED" : "DISABLED"));
-          }
-        }
-        if (json.get(jsonData, "humidityOccupiedThreshold")) {
-          float newThreshold = jsonData.floatValue;
-          if (newThreshold > 0 && newThreshold != humidityOccupiedThreshold) {
-            humidityOccupiedThreshold = newThreshold;
-            MAX_HUMIDITY = newThreshold;
-            Serial.println("Humidity occupied threshold updated: " + String(humidityOccupiedThreshold) + "%");
-          }
-        }
-        if (json.get(jsonData, "humidityEmptyThreshold")) {
-          float newThreshold = jsonData.floatValue;
-          if (newThreshold > 0 && newThreshold != humidityEmptyThreshold) {
-            humidityEmptyThreshold = newThreshold;
-            MIN_HUMIDITY = newThreshold;
-            Serial.println("Humidity empty threshold updated: " + String(humidityEmptyThreshold) + "%");
-          }
-        }
-      } else if (path == "/automation/humidityOccupiedThreshold") {
-        float newThreshold = stream.floatData();
+      }
+      if (json.get(jsonData, "humidityOccupiedThreshold")) {
+        float newThreshold = jsonData.floatValue;
         if (newThreshold > 0 && newThreshold != humidityOccupiedThreshold) {
           humidityOccupiedThreshold = newThreshold;
           MAX_HUMIDITY = newThreshold;
           Serial.println("Humidity occupied threshold updated: " + String(humidityOccupiedThreshold) + "%");
         }
-      } else if (path == "/automation/humidityEmptyThreshold") {
-        float newThreshold = stream.floatData();
+      }
+      if (json.get(jsonData, "humidityEmptyThreshold")) {
+        float newThreshold = jsonData.floatValue;
         if (newThreshold > 0 && newThreshold != humidityEmptyThreshold) {
           humidityEmptyThreshold = newThreshold;
           MIN_HUMIDITY = newThreshold;
           Serial.println("Humidity empty threshold updated: " + String(humidityEmptyThreshold) + "%");
         }
-      } else if (path == "/ac_command" || path.endsWith("ac_command")) {
-        Serial.print("[Firebase] ac_command received - Path: "); Serial.print(path);
-        Serial.print(", Command: "); Serial.println(stream.stringData());
-        
-        String cmd = stream.stringData();
-        if (cmd == "IDLE") {
-          Serial.println("[Firebase] Ignoring IDLE command");
-          return;
-        }
-        
-        if (path.indexOf("/units/unit_1/") >= 0) {
-          Serial.println("[Firebase] Routing to Unit 1");
+      }
+    } else if (path == "/automation/humidityOccupiedThreshold") {
+      float newThreshold = stream.floatData();
+      if (newThreshold > 0 && newThreshold != humidityOccupiedThreshold) {
+        humidityOccupiedThreshold = newThreshold;
+        MAX_HUMIDITY = newThreshold;
+        Serial.println("Humidity occupied threshold updated: " + String(humidityOccupiedThreshold) + "%");
+      }
+    } else if (path == "/automation/humidityEmptyThreshold") {
+      float newThreshold = stream.floatData();
+      if (newThreshold > 0 && newThreshold != humidityEmptyThreshold) {
+        humidityEmptyThreshold = newThreshold;
+        MIN_HUMIDITY = newThreshold;
+        Serial.println("Humidity empty threshold updated: " + String(humidityEmptyThreshold) + "%");
+      }
+    } else if (path == "/ac_command" || path.endsWith("ac_command")) {
+      Serial.print("[Firebase] ac_command received - Path: "); Serial.print(path);
+      Serial.print(", Command: "); Serial.println(stream.stringData());
+      
+      String cmd = stream.stringData();
+      if (cmd == "IDLE") {
+        Serial.println("[Firebase] Ignoring IDLE command");
+        return;
+      }
+      
+      Serial.println("[Firebase] Processing AC command: " + cmd);
+      
+      if (path.indexOf("/units/unit_1/") >= 0) {
+        Serial.println("[Firebase] Routing to Unit 1");
+        handleACCommand(cmd, 1);
+      } else if (path.indexOf("/units/unit_2/") >= 0) {
+        Serial.println("[Firebase] Routing to Unit 2");
+        handleACCommand(cmd, 2);
+      } else {
+        Serial.println("[Firebase] Routing to Single Unit (unit 0)");
+        handleACCommand(cmd, 0);
+      }
+    } else if (path == "/units/unit_1" || path == "/units/unit_1/") {
+      Serial.println("[Firebase] Unit 1 object updated");
+      FirebaseJson &json = stream.jsonObject();
+      FirebaseJsonData jsonData;
+      if (json.get(jsonData, "ac_command")) {
+        String cmd = jsonData.stringValue;
+        Serial.println("[Firebase] Found ac_command in Unit 1: " + cmd);
+        if (cmd != "IDLE") {
           handleACCommand(cmd, 1);
-        } else if (path.indexOf("/units/unit_2/") >= 0) {
-          Serial.println("[Firebase] Routing to Unit 2");
+        } else {
+          Serial.println("[Firebase] Ignoring IDLE command");
+        }
+      }
+    } else if (path == "/units/unit_2" || path == "/units/unit_2/") {
+      Serial.println("[Firebase] Unit 2 object updated");
+      FirebaseJson &json = stream.jsonObject();
+      FirebaseJsonData jsonData;
+      if (json.get(jsonData, "ac_command")) {
+        String cmd = jsonData.stringValue;
+        Serial.println("[Firebase] Found ac_command in Unit 2: " + cmd);
+        if (cmd != "IDLE") {
           handleACCommand(cmd, 2);
         } else {
-          Serial.println("[Firebase] Routing to Single Unit (unit 0)");
-          handleACCommand(cmd, 0);
+          Serial.println("[Firebase] Ignoring IDLE command");
         }
-      } else if (path == "/units/unit_1" || path == "/units/unit_1/") {
-        Serial.println("[Firebase] Unit 1 object updated");
-        FirebaseJson &json = stream.jsonObject();
-        FirebaseJsonData jsonData;
-        if (json.get(jsonData, "ac_command")) {
-          String cmd = jsonData.stringValue;
-          Serial.println("[Firebase] Found ac_command in Unit 1: " + cmd);
-          if (cmd != "IDLE") {
-            handleACCommand(cmd, 1);
-          } else {
-            Serial.println("[Firebase] Ignoring IDLE command");
-          }
-        }
-      } else if (path == "/units/unit_2" || path == "/units/unit_2/") {
-        Serial.println("[Firebase] Unit 2 object updated");
-        FirebaseJson &json = stream.jsonObject();
-        FirebaseJsonData jsonData;
-        if (json.get(jsonData, "ac_command")) {
-          String cmd = jsonData.stringValue;
-          Serial.println("[Firebase] Found ac_command in Unit 2: " + cmd);
-          if (cmd != "IDLE") {
-            handleACCommand(cmd, 2);
-          } else {
-            Serial.println("[Firebase] Ignoring IDLE command");
-          }
-        }
-      } else if (path == "/units/unit_1/targetTemp" || path.indexOf("/units/unit_1/targetTemp") >= 0) {
-        Serial.println("[Firebase] Unit 1 targetTemp updated: " + String(stream.floatData()) + "°C");
-        // Unit target temp update is handled by the ac_command sent separately
-      } else if (path == "/units/unit_2/targetTemp" || path.indexOf("/units/unit_2/targetTemp") >= 0) {
-        Serial.println("[Firebase] Unit 2 targetTemp updated: " + String(stream.floatData()) + "°C");
-        // Unit target temp update is handled by the ac_command sent separately
-      } else if (path == "/targetTemp" || path.indexOf("targetTemp") >= 0) {
-        Serial.println("[Firebase] targetTemp updated: " + String(stream.floatData()) + "°C");
-        // Target temp update is handled by the ac_command sent separately
       }
+    } else if (path == "/units/unit_1/targetTemp" || path.indexOf("/units/unit_1/targetTemp") >= 0) {
+      Serial.println("[Firebase] Unit 1 targetTemp updated: " + String(stream.floatData()) + "°C");
+      // Unit target temp update is handled by the ac_command sent separately
+    } else if (path == "/units/unit_2/targetTemp" || path.indexOf("/units/unit_2/targetTemp") >= 0) {
+      Serial.println("[Firebase] Unit 2 targetTemp updated: " + String(stream.floatData()) + "°C");
+      // Unit target temp update is handled by the ac_command sent separately
+    } else if (path == "/targetTemp" || path.indexOf("targetTemp") >= 0) {
+      Serial.println("[Firebase] targetTemp updated: " + String(stream.floatData()) + "°C");
+      // Target temp update is handled by the ac_command sent separately
     }
   }
 
