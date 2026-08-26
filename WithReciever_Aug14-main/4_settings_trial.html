@@ -809,33 +809,44 @@
                 statusBox.className = "text-[9px] font-black uppercase px-3 py-1 bg-gray-100 rounded text-gray-400";
             }
 
-            // Load automation settings
+            // Load automation settings - only update if not currently focused
             const automation = data.automation || { enabled: false, humidityOccupiedThreshold: 60, humidityEmptyThreshold: 50 };
-            document.getElementById('automation-enabled').checked = automation.enabled || false;
-            document.getElementById('humidity-occupied-threshold').value = automation.humidityOccupiedThreshold || 60;
-            document.getElementById('humidity-empty-threshold').value = automation.humidityEmptyThreshold || 50;
+            const occupiedThresholdEl = document.getElementById('humidity-occupied-threshold');
+            const emptyThresholdEl = document.getElementById('humidity-empty-threshold');
+            if (document.activeElement !== occupiedThresholdEl) {
+                occupiedThresholdEl.value = automation.humidityOccupiedThreshold || 60;
+            }
+            if (document.activeElement !== emptyThresholdEl) {
+                emptyThresholdEl.value = automation.humidityEmptyThreshold || 50;
+            }
             
             // Don't auto-disable controls - let user control them manually
             // toggleAutomation();
 
-            if (document.activeElement.tagName !== 'INPUT') {
-                document.getElementById('input-min').value = thresholds.minTemp || "";
-                document.getElementById('input-building').value = specs.building || "";
-                document.getElementById('input-floor').value = specs.floor || "";
-                document.getElementById('input-ac-type').value = specs.acType || "non_inverter";
-                document.getElementById('input-ac-model').value = specs.acModel || "";
-                document.getElementById('input-model-indoor').value = specs.modelIndoor || "";
-                document.getElementById('input-model-outdoor').value = specs.modelOutdoor || "";
-                document.getElementById('input-unit-type').value = specs.unitType || "ceiling_suspended_split";
-                document.getElementById('input-refrigerant').value = specs.refrigerant || "";
-                document.getElementById('input-cooling-btu').value = specs.coolingBtu || "";
-                document.getElementById('input-power-input').value = specs.powerInput || "";
-                document.getElementById('input-rated-amps').value = specs.ratedAmps || "";
-                document.getElementById('input-voltage').value = specs.voltage || "";
-                document.getElementById('input-serial-no').value = specs.serialNo || "";
-                document.getElementById('input-duty-cycle').value = specs.dutyCycle || "";
-                document.getElementById('input-rating').value = specs.rating || "";
-            }
+            // Helper function to safely update input if not focused
+            const safeUpdate = (elementId, value) => {
+                const el = document.getElementById(elementId);
+                if (el && document.activeElement !== el) {
+                    el.value = value || "";
+                }
+            };
+
+            safeUpdate('input-min', thresholds.minTemp);
+            safeUpdate('input-building', specs.building);
+            safeUpdate('input-floor', specs.floor);
+            safeUpdate('input-ac-type', specs.acType || "non_inverter");
+            safeUpdate('input-ac-model', specs.acModel);
+            safeUpdate('input-model-indoor', specs.modelIndoor);
+            safeUpdate('input-model-outdoor', specs.modelOutdoor);
+            safeUpdate('input-unit-type', specs.unitType || "ceiling_suspended_split");
+            safeUpdate('input-refrigerant', specs.refrigerant);
+            safeUpdate('input-cooling-btu', specs.coolingBtu);
+            safeUpdate('input-power-input', specs.powerInput);
+            safeUpdate('input-rated-amps', specs.ratedAmps);
+            safeUpdate('input-voltage', specs.voltage);
+            safeUpdate('input-serial-no', specs.serialNo);
+            safeUpdate('input-duty-cycle', specs.dutyCycle);
+            safeUpdate('input-rating', specs.rating);
             // Update AC state display
             const acStateEl = document.getElementById('ac-state');
             if (acStateEl) {
