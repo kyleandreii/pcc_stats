@@ -380,8 +380,74 @@ void runAutomation(float temp, float humidity) {
   }
   lastAutomationCheckMillis = millis();
   
-  Serial.print("Automation Check - Humidity: "); Serial.print(humidity, 1); Serial.print("%, Min Temp: "); Serial.print(minTemp, 1); Serial.print("°C, Max Temp: "); Serial.print(maxTemp, 1); Serial.println("°C");
+  Serial.print("Automation Check - Temp: "); Serial.print(temp, 1); Serial.print("°C, Humidity: "); Serial.print(humidity, 1); Serial.print("%, Min Temp: "); Serial.print(minTemp, 1); Serial.print("°C, Max Temp: "); Serial.print(maxTemp, 1); Serial.println("°C");
 
+  // TEMPERATURE SAFETY CHECK - Priority over humidity-based automation
+  // If temperature exceeds maxTemp, send TEMP_DOWN to cool down
+  if (temp > maxTemp) {
+    Serial.println("⚠️ TEMPERATURE SAFETY: Current temp exceeds max threshold!");
+    Serial.print("Current: "); Serial.print(temp, 1); Serial.print("°C > Max: "); Serial.print(maxTemp, 1); Serial.println("°C");
+    Serial.println("Action: Sending TEMP_DOWN to cool down");
+    
+    // Check cooldown
+    unsigned long timeSinceLastIR = millis() - lastIRSendMillis;
+    if (timeSinceLastIR < IR_SEND_COOLDOWN_MS) {
+      unsigned long cooldownRemaining = (IR_SEND_COOLDOWN_MS - timeSinceLastIR) / 1000;
+      Serial.print("Cooldown active, "); Serial.print(cooldownRemaining); Serial.println(" seconds remaining");
+      return;
+    }
+    
+    // Send TEMP_DOWN command
+    uint16_t down_buf[75];
+    memcpy_P(down_buf, rawTempDown, sizeof(rawTempDown));
+    Serial.print("Sending TEMP_DOWN on pin "); Serial.println(kIrLedPin);
+    #if DUAL_UNIT_MODE
+    Serial.println("Sending to Unit 1 (pin 4)");
+    irsend.sendRaw(down_buf, 75, kFrequency);
+    delay(100);
+    Serial.println("Sending to Unit 2 (pin 5)");
+    irsend2.sendRaw(down_buf, 75, kFrequency);
+    #else
+    irsend.sendRaw(down_buf, 75, kFrequency);
+    #endif
+    Serial.println("TEMP_DOWN sent successfully");
+    lastIRSendMillis = millis();
+    return;
+  }
+  
+  // If temperature is below minTemp, send TEMP_UP to warm up
+  if (temp < minTemp) {
+    Serial.println("⚠️ TEMPERATURE SAFETY: Current temp below min threshold!");
+    Serial.print("Current: "); Serial.print(temp, 1); Serial.print("°C < Min: "); Serial.print(minTemp, 1); Serial.println("°C");
+    Serial.println("Action: Sending TEMP_UP to warm up");
+    
+    // Check cooldown
+    unsigned long timeSinceLastIR = millis() - lastIRSendMillis;
+    if (timeSinceLastIR < IR_SEND_COOLDOWN_MS) {
+      unsigned long cooldownRemaining = (IR_SEND_COOLDOWN_MS - timeSinceLastIR) / 1000;
+      Serial.print("Cooldown active, "); Serial.print(cooldownRemaining); Serial.println(" seconds remaining");
+      return;
+    }
+    
+    // Send TEMP_UP command
+    uint16_t up_buf[75];
+    memcpy_P(up_buf, rawTempUp, sizeof(rawTempUp));
+    Serial.print("Sending TEMP_UP on pin "); Serial.println(kIrLedPin);
+    #if DUAL_UNIT_MODE
+    Serial.println("Sending to Unit 1 (pin 4)");
+    irsend.sendRaw(up_buf, 75, kFrequency);
+    delay(100);
+    Serial.println("Sending to Unit 2 (pin 5)");
+    irsend2.sendRaw(up_buf, 75, kFrequency);
+    #else
+    irsend.sendRaw(up_buf, 75, kFrequency);
+    #endif
+    Serial.println("TEMP_UP sent successfully");
+    lastIRSendMillis = millis();
+    return;
+  }
+
+  // HUMIDITY-BASED AUTOMATION (only if temperature is within safe range)
   // Determine target temperature based on humidity using Firebase thresholds
   // High humidity = occupied, raise temp to max threshold
   // Low humidity = not occupied, lower temp to min threshold
@@ -389,14 +455,14 @@ void runAutomation(float temp, float humidity) {
   
   if (humidity > MAX_HUMIDITY) {
     targetTemp = maxTemp;
-    Serial.println("⚠️ OCCUPIED: Humidity is above maximum!");
-    Serial.print("Humidity: "); Serial.print(humidity, 1); Serial.print("% > "); Serial.print(MAX_HUMIDITY); Serial.print("%, raising temp to max threshold: "); Serial.println(targetTemp, 1);
+    Serial.println("📊 HUMIDITY AUTOMATION: Occupied detected");
+    Serial.print("Humidity: "); Serial.print(humidity, 1); Serial.print("% > "); Serial.print(MAX_HUMIDITY); Serial.print("%, setting target to max: "); Serial.println(targetTemp, 1);
   } else if (humidity < MIN_HUMIDITY) {
     targetTemp = minTemp;
-    Serial.println("⚠️ NOT OCCUPIED: Humidity is below minimum!");
-    Serial.print("Humidity: "); Serial.print(humidity, 1); Serial.print("% < "); Serial.print(MIN_HUMIDITY); Serial.print("%, lowering temp to min threshold: "); Serial.println(targetTemp, 1);
+    Serial.println("📊 HUMIDITY AUTOMATION: Not occupied detected");
+    Serial.print("Humidity: "); Serial.print(humidity, 1); Serial.print("% < "); Serial.print(MIN_HUMIDITY); Serial.print("%, setting target to min: "); Serial.println(targetTemp, 1);
   } else {
-    Serial.println("Humidity within normal range, no action needed");
+    Serial.println("Humidity within normal range, no humidity-based action needed");
     return;
   }
 
@@ -422,13 +488,29 @@ void runAutomation(float temp, float humidity) {
         uint16_t up_buf[75];
         memcpy_P(up_buf, rawTempUp, sizeof(rawTempUp));
         Serial.print("Step "); Serial.print(i + 1); Serial.print("/"); Serial.print(steps); Serial.print(": Sending TEMP UP on pin "); Serial.println(kIrLedPin);
+        #if DUAL_UNIT_MODE
+        Serial.println("  -> Unit 1 (pin 4)");
         irsend.sendRaw(up_buf, 75, kFrequency);
+        delay(100);
+        Serial.println("  -> Unit 2 (pin 5)");
+        irsend2.sendRaw(up_buf, 75, kFrequency);
+        #else
+        irsend.sendRaw(up_buf, 75, kFrequency);
+        #endif
         Serial.println("TEMP UP sent");
       } else {
         uint16_t down_buf[75];
         memcpy_P(down_buf, rawTempDown, sizeof(rawTempDown));
         Serial.print("Step "); Serial.print(i + 1); Serial.print("/"); Serial.print(steps); Serial.print(": Sending TEMP DOWN on pin "); Serial.println(kIrLedPin);
+        #if DUAL_UNIT_MODE
+        Serial.println("  -> Unit 1 (pin 4)");
         irsend.sendRaw(down_buf, 75, kFrequency);
+        delay(100);
+        Serial.println("  -> Unit 2 (pin 5)");
+        irsend2.sendRaw(down_buf, 75, kFrequency);
+        #else
+        irsend.sendRaw(down_buf, 75, kFrequency);
+        #endif
         Serial.println("TEMP DOWN sent");
       }
       
@@ -438,7 +520,7 @@ void runAutomation(float temp, float humidity) {
     }
     
     lastIRSendMillis = millis();
-    Serial.print("Automation complete. Target temp: "); Serial.println(targetTemp, 1);
+    Serial.print("Humidity automation complete. Target temp: "); Serial.println(targetTemp, 1);
   } else {
     Serial.println("Target temp matches current temp, no action needed");
   }
