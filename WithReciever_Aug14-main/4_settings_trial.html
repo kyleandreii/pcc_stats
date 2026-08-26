@@ -943,13 +943,15 @@
             const currentData = labsData[selectedRoom];
             const cmd = change > 0 ? "TEMP_UP" : "TEMP_DOWN";
             
+            console.log('[Settings] adjustUnitTemp called - Unit:', unitNumber, 'Change:', change, 'Command:', cmd);
+            
             const unitKey = `unit_${unitNumber}`;
             const currentTarget = currentData.units?.[unitKey]?.targetTemp !== undefined ? currentData.units[unitKey].targetTemp : 24;
             const newVal = currentTarget + change;
             if (newVal < 16 || newVal > 30) return;
             
-            db.ref(`${selectedRoom}/units/${unitKey}`).update({ targetTemp: newVal });
-            db.ref(`${selectedRoom}`).update({ ac_command: cmd });
+            console.log('[Settings] Updating Firebase - Path:', `${selectedRoom}/units/${unitKey}`, 'Data:', { targetTemp: newVal, ac_command: cmd });
+            db.ref(`${selectedRoom}/units/${unitKey}`).update({ targetTemp: newVal, ac_command: cmd });
         }
 
         function handleAutomationToggle(event) {

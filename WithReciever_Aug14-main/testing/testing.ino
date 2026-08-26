@@ -71,8 +71,10 @@ unsigned long sendDataPrevMillis = 0;
 
 bool automationEnabled = false;
 
-float MAX_HUMIDITY = 65.0;
-float MIN_HUMIDITY = 45.0;
+float MAX_HUMIDITY = 60.0;  // Default, will be updated from Firebase
+float MIN_HUMIDITY = 45.0;  // Default, will be updated from Firebase
+float humidityOccupiedThreshold = 60.0;  // From Firebase: automation/humidityOccupiedThreshold
+float humidityEmptyThreshold = 45.0;     // From Firebase: automation/humidityEmptyThreshold
 const unsigned long AUTOMATION_INTERVAL_MS = 300000; // 5 minutes between automation checks
 const unsigned long STEP_PRESS_DELAY_MS = 400;
 const unsigned long IR_SEND_COOLDOWN_MS = 60000; // 1 minute cooldown between IR sends
@@ -122,8 +124,12 @@ void setup() {
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
 
+  Serial.println("Setting up Firebase stream for: /" + String(ROOM_ID));
   if (!Firebase.RTDB.beginStream(&stream, "/" + String(ROOM_ID))) {
+    Serial.println("Firebase stream failed: " + stream.errorReason());
   } else {
+    Serial.println("Firebase stream started successfully");
+    Serial.println("Stream path: /" + String(ROOM_ID));
   }
 
   Firebase.RTDB.getBool(&fbdo, "/" + String(ROOM_ID) + "/automation/enabled");
@@ -131,6 +137,44 @@ void setup() {
     automationEnabled = fbdo.boolData();
     preferences.putBool("automationEnabled", automationEnabled);
     Serial.println("Synced automation enabled state from Firebase: " + String(automationEnabled));
+  }
+
+  Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/automation/humidityOccupiedThreshold");
+  if (fbdo.httpCode() == FIREBASE_ERROR_HTTP_CODE_OK) {
+    float threshold = fbdo.floatData();
+    if (threshold > 0) {
+      humidityOccupiedThreshold = threshold;
+      MAX_HUMIDITY = threshold;
+      Serial.println("Synced humidity occupied threshold from Firebase: " + String(humidityOccupiedThreshold) + "%");
+    }
+  }
+
+  Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/automation/humidityEmptyThreshold");
+  if (fbdo.httpCode() == FIREBASE_ERROR_HTTP_CODE_OK) {
+    float threshold = fbdo.floatData();
+    if (threshold > 0) {
+      humidityEmptyThreshold = threshold;
+      MIN_HUMIDITY = threshold;
+      Serial.println("Synced humidity empty threshold from Firebase: " + String(humidityEmptyThreshold) + "%");
+    }
+  }
+
+  Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/thresholds/minTemp");
+  if (fbdo.httpCode() == FIREBASE_ERROR_HTTP_CODE_OK) {
+    float temp = fbdo.floatData();
+    if (temp > 0) {
+      minTemp = temp;
+      Serial.println("Synced minTemp from Firebase: " + String(minTemp) + "°C");
+    }
+  }
+
+  Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/thresholds/maxTemp");
+  if (fbdo.httpCode() == FIREBASE_ERROR_HTTP_CODE_OK) {
+    float temp = fbdo.floatData();
+    if (temp > 0) {
+      maxTemp = temp;
+      Serial.println("Synced maxTemp from Firebase: " + String(maxTemp) + "°C");
+    }
   }
 
   FirebaseJson json;
@@ -157,11 +201,14 @@ void loop() {
   if (Firebase.ready() && Firebase.RTDB.readStream(&stream)) {
     if (stream.streamAvailable()) {
       String path = stream.dataPath();
+      Serial.println("[Firebase] Data received - Path: " + path);
 
       if (path == "/thresholds/minTemp" || path == "/minTemp") {
         minTemp = stream.floatData();
+        Serial.println("[Firebase] Updated minTemp: " + String(minTemp));
       } else if (path == "/thresholds/maxTemp" || path == "/maxTemp") {
         maxTemp = stream.floatData();
+        Serial.println("[Firebase] Updated maxTemp: " + String(maxTemp));
       } else if (path == "/automation/enabled" || path.indexOf("automation/enabled") >= 0) {
         bool newEnabledState = stream.boolData();
         if (newEnabledState != automationEnabled) {
@@ -180,14 +227,77 @@ void loop() {
             Serial.println("Automation " + String(automationEnabled ? "ENABLED" : "DISABLED"));
           }
         }
+        if (json.get(jsonData, "humidityOccupiedThreshold")) {
+          float newThreshold = jsonData.floatValue;
+          if (newThreshold > 0 && newThreshold != humidityOccupiedThreshold) {
+            humidityOccupiedThreshold = newThreshold;
+            MAX_HUMIDITY = newThreshold;
+            Serial.println("Humidity occupied threshold updated: " + String(humidityOccupiedThreshold) + "%");
+          }
+        }
+        if (json.get(jsonData, "humidityEmptyThreshold")) {
+          float newThreshold = jsonData.floatValue;
+          if (newThreshold > 0 && newThreshold != humidityEmptyThreshold) {
+            humidityEmptyThreshold = newThreshold;
+            MIN_HUMIDITY = newThreshold;
+            Serial.println("Humidity empty threshold updated: " + String(humidityEmptyThreshold) + "%");
+          }
+        }
+      } else if (path == "/automation/humidityOccupiedThreshold") {
+        float newThreshold = stream.floatData();
+        if (newThreshold > 0 && newThreshold != humidityOccupiedThreshold) {
+          humidityOccupiedThreshold = newThreshold;
+          MAX_HUMIDITY = newThreshold;
+          Serial.println("Humidity occupied threshold updated: " + String(humidityOccupiedThreshold) + "%");
+        }
+      } else if (path == "/automation/humidityEmptyThreshold") {
+        float newThreshold = stream.floatData();
+        if (newThreshold > 0 && newThreshold != humidityEmptyThreshold) {
+          humidityEmptyThreshold = newThreshold;
+          MIN_HUMIDITY = newThreshold;
+          Serial.println("Humidity empty threshold updated: " + String(humidityEmptyThreshold) + "%");
+        }
       } else if (path == "/ac_command" || path.endsWith("ac_command")) {
+        Serial.print("[Firebase] ac_command received - Path: "); Serial.print(path);
+        Serial.print(", Command: "); Serial.println(stream.stringData());
+        
         if (path.indexOf("/units/unit_1/") >= 0) {
+          Serial.println("[Firebase] Routing to Unit 1");
           handleACCommand(stream.stringData(), 1);
         } else if (path.indexOf("/units/unit_2/") >= 0) {
+          Serial.println("[Firebase] Routing to Unit 2");
           handleACCommand(stream.stringData(), 2);
         } else {
+          Serial.println("[Firebase] Routing to Single Unit (unit 0)");
           handleACCommand(stream.stringData(), 0);
         }
+      } else if (path == "/units/unit_1" || path == "/units/unit_1/") {
+        Serial.println("[Firebase] Unit 1 object updated");
+        FirebaseJson &json = stream.jsonObject();
+        FirebaseJsonData jsonData;
+        if (json.get(jsonData, "ac_command")) {
+          String cmd = jsonData.stringValue;
+          Serial.println("[Firebase] Found ac_command in Unit 1: " + cmd);
+          handleACCommand(cmd, 1);
+        }
+      } else if (path == "/units/unit_2" || path == "/units/unit_2/") {
+        Serial.println("[Firebase] Unit 2 object updated");
+        FirebaseJson &json = stream.jsonObject();
+        FirebaseJsonData jsonData;
+        if (json.get(jsonData, "ac_command")) {
+          String cmd = jsonData.stringValue;
+          Serial.println("[Firebase] Found ac_command in Unit 2: " + cmd);
+          handleACCommand(cmd, 2);
+        }
+      } else if (path == "/units/unit_1/targetTemp" || path.indexOf("/units/unit_1/targetTemp") >= 0) {
+        Serial.println("[Firebase] Unit 1 targetTemp updated: " + String(stream.floatData()) + "°C");
+        // Unit target temp update is handled by the ac_command sent separately
+      } else if (path == "/units/unit_2/targetTemp" || path.indexOf("/units/unit_2/targetTemp") >= 0) {
+        Serial.println("[Firebase] Unit 2 targetTemp updated: " + String(stream.floatData()) + "°C");
+        // Unit target temp update is handled by the ac_command sent separately
+      } else if (path == "/targetTemp" || path.indexOf("targetTemp") >= 0) {
+        Serial.println("[Firebase] targetTemp updated: " + String(stream.floatData()) + "°C");
+        // Target temp update is handled by the ac_command sent separately
       }
     }
   }
@@ -288,30 +398,39 @@ void handleACCommand(String cmd, int unit) {
   IRsend *irSender = (unit == 1) ? &irsend2 : &irsend;
   uint16_t pin = (unit == 1) ? kIrLedPin2 : kIrLedPin;
   
+  Serial.print("IR Sender pointer: "); Serial.println((unsigned long)irSender, HEX);
   Serial.print("Sending IR on pin "); Serial.println(pin);
   
   if (cmd == "ON") {
     Serial.println("Action: Turning AC ON");
     uint16_t on_buf[rawOnLen];
     memcpy_P(on_buf, rawOn, sizeof(rawOn));
+    Serial.println("IR data copied to buffer");
+    Serial.print("Sending raw data length: "); Serial.println(rawOnLen);
     irSender->sendRaw(on_buf, rawOnLen, kFrequency);
     Serial.println("✓ ON command sent successfully");
   } else if (cmd == "OFF") {
     Serial.println("Action: Turning AC OFF");
     uint16_t off_buf[rawOffLen];
     memcpy_P(off_buf, rawOff, sizeof(rawOff));
+    Serial.println("IR data copied to buffer");
+    Serial.print("Sending raw data length: "); Serial.println(rawOffLen);
     irSender->sendRaw(off_buf, rawOffLen, kFrequency);
     Serial.println("✓ OFF command sent successfully");
   } else if (cmd == "TEMP_UP") {
     Serial.println("Action: Increasing temperature");
     uint16_t up_buf[rawTempUpLen];
     memcpy_P(up_buf, rawTempUp, sizeof(rawTempUp));
+    Serial.println("IR data copied to buffer");
+    Serial.print("Sending raw data length: "); Serial.println(rawTempUpLen);
     irSender->sendRaw(up_buf, rawTempUpLen, kFrequency);
     Serial.println("✓ TEMP_UP command sent successfully");
   } else if (cmd == "TEMP_DOWN") {
     Serial.println("Action: Decreasing temperature");
     uint16_t down_buf[rawTempDownLen];
     memcpy_P(down_buf, rawTempDown, sizeof(rawTempDown));
+    Serial.println("IR data copied to buffer");
+    Serial.print("Giving raw data length: "); Serial.println(rawTempDownLen);
     irSender->sendRaw(down_buf, rawTempDownLen, kFrequency);
     Serial.println("✓ TEMP_DOWN command sent successfully");
   } else {
@@ -388,6 +507,7 @@ void runAutomation(float temp, float humidity) {
   lastAutomationCheckMillis = millis();
 
   Serial.print("Automation Check - Temp: "); Serial.print(temp, 1); Serial.print("°C, Humidity: "); Serial.print(humidity, 1); Serial.print("%, Min Temp: "); Serial.print(minTemp, 1); Serial.print("°C, Max Temp: "); Serial.print(maxTemp, 1); Serial.println("°C");
+  Serial.print("Humidity Thresholds - Occupied: "); Serial.print(humidityOccupiedThreshold, 1); Serial.print("%, Empty: "); Serial.print(humidityEmptyThreshold, 1); Serial.println("%");
 
   if (temp > maxTemp) {
     Serial.println("⚠️ TEMPERATURE SAFETY: Current temp exceeds max threshold!");
