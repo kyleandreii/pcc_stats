@@ -196,6 +196,7 @@ void loop() {
   static unsigned long lastLoopLog = 0;
   if (millis() - lastLoopLog > 5000) {
     Serial.println("[Loop] ESP32 is running, millis: " + String(millis()));
+    Serial.println("[Loop] Firebase ready: " + String(Firebase.ready() ? "YES" : "NO"));
     lastLoopLog = millis();
   }
 
