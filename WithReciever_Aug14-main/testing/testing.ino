@@ -315,38 +315,31 @@ void loop() {
         Serial.println("Humidity empty threshold updated: " + String(humidityEmptyThreshold) + "%");
       }
     } else if (path == "/ac_command" || path.endsWith("ac_command")) {
-      Serial.print("[Firebase] ac_command received - Path: "); Serial.print(path);
-      Serial.print(", Command: "); Serial.println(stream.stringData());
-      
       String cmd = stream.stringData();
       if (cmd == "IDLE") {
-        Serial.println("[Firebase] Ignoring IDLE command");
+        // Silently ignore IDLE commands without logging
         return;
       }
       
-      Serial.println("[Firebase] Processing AC command: " + cmd);
+      Serial.print("[Firebase] ac_command received - Path: "); Serial.print(path);
+      Serial.print(", Command: "); Serial.println(cmd);
       
-      if (path.indexOf("/units/unit_1/") >= 0) {
-        Serial.println("[Firebase] Routing to Unit 1");
-        handleACCommand(cmd, 1);
-      } else if (path.indexOf("/units/unit_2/") >= 0) {
-        Serial.println("[Firebase] Routing to Unit 2");
-        handleACCommand(cmd, 2);
-      } else {
-        Serial.println("[Firebase] Routing to Single Unit (unit 0)");
-        handleACCommand(cmd, 0);
+      // Only process if this is NOT a unit-specific path (those are handled below)
+      if (path.indexOf("/units/unit_1/") >= 0 || path.indexOf("/units/unit_2/") >= 0) {
+        Serial.println("[Firebase] Skipping - unit-specific path handled by object handler");
+        return;
       }
+      
+      Serial.println("[Firebase] Routing to Single Unit (unit 0)");
+      handleACCommand(cmd, 0);
     } else if (path == "/units/unit_1" || path == "/units/unit_1/") {
-      Serial.println("[Firebase] Unit 1 object updated");
       FirebaseJson &json = stream.jsonObject();
       FirebaseJsonData jsonData;
       if (json.get(jsonData, "ac_command")) {
         String cmd = jsonData.stringValue;
-        Serial.println("[Firebase] Found ac_command in Unit 1: " + cmd);
         if (cmd != "IDLE") {
+          Serial.println("[Firebase] Found ac_command in Unit 1: " + cmd);
           handleACCommand(cmd, 1);
-        } else {
-          Serial.println("[Firebase] Ignoring IDLE command");
         }
       }
     } else if (path == "/units/unit_2" || path == "/units/unit_2/") {

@@ -766,14 +766,16 @@
 
             </div>
 
-            <!-- Automation Status Card -->
+            <!-- Automation Performance Analysis -->
             <div class="card bg-white p-8 rounded-3xl shadow-sm border border-gray-100 mb-12">
                 <div class="flex items-center gap-4 mb-8">
-                    <h3 class="font-black text-gray-800 uppercase tracking-widest text-xs">Automation Status</h3>
+                    <h3 class="font-black text-gray-800 uppercase tracking-widest text-xs">Automation Performance Analysis</h3>
+                    <select id="automation-room-filter" class="text-[10px] bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg font-black uppercase border-none cursor-pointer">
+                        <option value="all">All Rooms</option>
+                    </select>
                 </div>
-                <div id="automation-status-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <!-- Automation status cards will be populated here -->
-                </div>
+                <div class="h-80"><canvas id="automationChart"></canvas></div>
+                <div id="timezone-label-automation" class="hidden text-[9px] text-gray-400 font-black uppercase tracking-wider mt-2 text-center">Times shown in Philippine Time (PHT, UTC+8)</div>
             </div>
 
 
@@ -936,70 +938,93 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
     }
 
-    function updateAutomationStatus() {
-        const container = document.getElementById('automation-status-container');
-        if (!container) return;
+    async function loadAutomationData() {
+        const fromDateStr = document.getElementById('export-date-from').value;
+        const toDateStr = document.getElementById('export-date-to').value;
+        const roomFilter = document.getElementById('automation-room-filter').value;
+        
+        const fromDate = new Date(fromDateStr);
+        const toDate = new Date(toDateStr);
+        toDate.setHours(23, 59, 59, 999);
+        
+        const dateArray = [];
+        let currentDate = new Date(fromDate);
+        while (currentDate <= toDate) {
+            dateArray.push(currentDate.toISOString().split('T')[0]);
+            currentDate.setDate(currentDate.getDate() + 1);
+        }
         
         const roomKeys = Object.keys(labsData || {}).filter(key => key.startsWith("Room_")).sort();
+        const filteredRooms = roomFilter === 'all' ? roomKeys : [roomFilter];
         
-        if (roomKeys.length === 0) {
-            container.innerHTML = '<p class="text-gray-400 text-sm">No rooms available</p>';
-            return;
-        }
+        const automationEvents = {};
         
-        container.innerHTML = roomKeys.map(room => {
-            const roomData = labsData[room];
-            const displayName = roomData?.customRoomName || room.replace('_', ' ');
-            const automationEnabled = roomData?.automation?.enabled || false;
-            const automationStartTime = roomData?.automation?.startTime;
+        for (const room of filteredRooms) {
+            automationEvents[room] = [];
             
-            let statusBadge = '';
-            let startTimeDisplay = '';
-            
-            if (automationEnabled) {
-                statusBadge = '<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black bg-green-100 text-green-700 uppercase"><i data-lucide="play" class="w-3 h-3"></i> Active</span>';
-                if (automationStartTime) {
-                    const startTimeDate = new Date(automationStartTime);
-                    const timeAgo = getTimeAgo(startTimeDate);
-                    startTimeDisplay = `<div class="text-[10px] text-gray-500 mt-2">Started: ${startTimeDate.toLocaleString('en-PH', { timeZone: 'Asia/Manila' })} (${timeAgo})</div>`;
-                } else {
-                    startTimeDisplay = `<div class="text-[10px] text-gray-500 mt-2">Start time not available</div>`;
+            for (const dateStr of dateArray) {
+                const path = `/history/${room}/${dateStr}`;
+                try {
+                    const snapshot = await db.ref(path).once('value');
+                    const dayData = snapshot.val();
+                    
+                    if (dayData) {
+                        Object.keys(dayData).forEach(hour => {
+                            const entry = dayData[hour];
+                            if (entry && entry.automationEnabled && entry.automationStartTime) {
+                                // Parse the timestamp from history
+                                const timestamp = parseInt(entry.automationStartTime);
+                                if (!isNaN(timestamp)) {
+                                    const eventTime = new Date(timestamp * 1000); // Convert seconds to ms
+                                    // Only include if within date range
+                                    if (eventTime >= fromDate && eventTime <= toDate) {
+                                        automationEvents[room].push({
+                                            x: eventTime.getTime(),
+                                            y: Math.random() * 9 + 0.5, // Random Y for scatter visualization
+                                            time: eventTime
+                                        });
+                                    }
+                                }
+                            }
+                        });
+                    }
+                } catch (e) {
+                    console.error(`[Automation] Error fetching ${path}:`, e);
                 }
-            } else {
-                statusBadge = '<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black bg-gray-100 text-gray-500 uppercase"><i data-lucide="pause" class="w-3 h-3"></i> Inactive</span>';
             }
-            
-            return `
-                <div class="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                    <div class="flex items-center justify-between mb-3">
-                        <h4 class="font-black text-gray-800 text-xs uppercase tracking-wider">${displayName}</h4>
-                        ${statusBadge}
-                    </div>
-                    <div class="text-[10px] text-gray-500">
-                        <div>Humidity Thresholds: ${roomData?.automation?.humidityOccupiedThreshold || 'N/A'}% / ${roomData?.automation?.humidityEmptyThreshold || 'N/A'}%</div>
-                        ${startTimeDisplay}
-                    </div>
-                </div>
-            `;
-        }).join('');
+        }
         
-        // Re-initialize Lucide icons
-        if (typeof lucide !== 'undefined') {
-            lucide.createIcons();
+        // Update chart
+        const datasets = [];
+        const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
+        let colorIndex = 0;
+        
+        for (const room of filteredRooms) {
+            const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
+            if (automationEvents[room].length > 0) {
+                datasets.push({
+                    label: displayName,
+                    data: automationEvents[room],
+                    backgroundColor: colors[colorIndex % colors.length],
+                    borderColor: colors[colorIndex % colors.length],
+                    pointRadius: 8,
+                    pointHoverRadius: 12
+                });
+                colorIndex++;
+            }
+        }
+        
+        automationChart.data.datasets = datasets;
+        automationChart.update();
+        
+        // Show timezone label if there's data
+        const timezoneLabel = document.getElementById('timezone-label-automation');
+        if (datasets.length > 0) {
+            timezoneLabel.classList.remove('hidden');
+        } else {
+            timezoneLabel.classList.add('hidden');
         }
     }
-
-    function getTimeAgo(date) {
-        const seconds = Math.floor((new Date() - date) / 1000);
-        
-        if (seconds < 60) return 'Just now';
-        if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-        if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-        if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
-        return date.toLocaleDateString();
-    }
-
-
 
     function loadAirconConfig() {
 
@@ -1265,6 +1290,43 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             options: { ...commonCfg, scales: { y: { beginAtZero: true, ticks: { stepSize: 1, font: { weight: 'bold' } } }, x: { ticks: { font: { weight: 'bold' } } } } }
 
+        });
+
+        automationChart = new Chart(document.getElementById("automationChart"), {
+            type: 'scatter',
+            data: { datasets: [] },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: true, position: 'top', labels: { font: { weight: 'bold', size: 10 }, usePointStyle: true, pointStyle: 'circle' } },
+                    tooltip: {
+                        backgroundColor: 'rgba(0,0,0,0.8)',
+                        titleFont: { weight: 'bold' },
+                        bodyFont: { size: 11 },
+                        callbacks: {
+                            label: function(context) {
+                                const room = context.dataset.label;
+                                const time = new Date(context.parsed.x).toLocaleString('en-PH', { timeZone: 'Asia/Manila' });
+                                return `${room}: Started at ${time}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'linear',
+                        position: 'bottom',
+                        title: { display: true, text: 'Time', font: { weight: 'bold', size: 11 } },
+                        ticks: { font: { weight: 'bold' } }
+                    },
+                    y: {
+                        display: false,
+                        min: 0,
+                        max: 10
+                    }
+                }
+            }
         });
 
     }
@@ -2305,6 +2367,28 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
     });
 
+    // Automation chart event listeners
+    document.getElementById('export-date-from').addEventListener('change', loadAutomationData);
+    document.getElementById('export-date-to').addEventListener('change', loadAutomationData);
+    document.getElementById('automation-room-filter').addEventListener('change', loadAutomationData);
+    
+    // Populate room filter dropdown
+    function populateAutomationRoomFilter() {
+        const select = document.getElementById('automation-room-filter');
+        const roomKeys = Object.keys(labsData || {}).filter(key => key.startsWith("Room_")).sort();
+        
+        // Clear existing options except "All Rooms"
+        select.innerHTML = '<option value="all">All Rooms</option>';
+        
+        roomKeys.forEach(room => {
+            const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
+            const option = document.createElement('option');
+            option.value = room;
+            option.textContent = displayName;
+            select.appendChild(option);
+        });
+    }
+
     
 
     // Historical Data Loading Functions
@@ -2881,8 +2965,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             labsData = data;
 
-            // Update automation status display
-            updateAutomationStatus();
+            // Populate automation room filter dropdown
+            populateAutomationRoomFilter();
 
             // Filter to only include rooms that have actual data (either in dailyAnalytics or have live data)
 
@@ -6180,6 +6264,9 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
             if (labKeys && labKeys.length > 0) {
 
                 clearInterval(checkRooms);
+
+                // Load automation data after a short delay to ensure dates are set
+                setTimeout(loadAutomationData, 500);
 
                 loadAnalyticsData();
 
