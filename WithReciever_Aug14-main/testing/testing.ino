@@ -461,13 +461,17 @@ void loop() {
       if (lastAutomationEvent.length() > 0) {
         Serial.print("[History] Logging automation event: "); Serial.println(lastAutomationEvent);
         Serial.print("[History] Event type: "); Serial.println(lastAutomationEventType);
-        time_t now = time(nullptr);
-        Serial.print("[History] Event time (epoch): "); Serial.println((unsigned long)now * 1000);
+        
+        // Use Firebase server timestamp directly in the history data
+        FirebaseJson timestampJson;
+        timestampJson.set(".sv", "timestamp");
         
         historyData.add("automationEvent", lastAutomationEvent);
         historyData.add("automationEventType", lastAutomationEventType);
-        // Use real timestamp (milliseconds since epoch) instead of millis()
-        historyData.add("automationEventTime", (unsigned long)now * 1000);
+        historyData.add("automationEventTime", timestampJson);
+        
+        Serial.println("[History] Using Firebase server timestamp for event time");
+        
         // Clear the event after logging to prevent duplicate logging
         lastAutomationEvent = "";
         lastAutomationEventType = "";
@@ -475,7 +479,13 @@ void loop() {
       } else {
         Serial.println("[History] No automation event to log");
       }
-      Firebase.RTDB.setJSON(&fbdo, historyPath.c_str(), &historyData);
+      
+      Serial.print("[History] Writing to Firebase path: "); Serial.println(historyPath.c_str());
+      bool historySuccess = Firebase.RTDB.setJSON(&fbdo, historyPath.c_str(), &historyData);
+      Serial.print("[History] Firebase write: "); Serial.println(historySuccess ? "success" : "failed");
+      if (!historySuccess) {
+        Serial.print("[History] Error: "); Serial.println(fbdo.errorReason());
+      }
     }
   }
 }
@@ -523,6 +533,7 @@ void handleACCommand(String cmd, int unit) {
   lastAutomationEvent = "AC Power automation: " + cmd + " command sent to Unit " + String(unit);
   lastAutomationEventType = "power";
   lastAutomationEventTime = millis();
+  Serial.print("[Automation] Event set: "); Serial.println(lastAutomationEvent);
   
   IRsend *irSender = (unit == 1) ? &irsend2 : &irsend;
   uint16_t pin = (unit == 1) ? kIrLedPin2 : kIrLedPin;
@@ -657,6 +668,7 @@ void runAutomation(float temp, float humidity) {
       lastAutomationEvent = "Temperature safety: TEMP_DOWN sent (temp exceeded max)";
       lastAutomationEventType = "temperature";
       lastAutomationEventTime = millis();
+      Serial.print("[Automation] Event set: "); Serial.println(lastAutomationEvent);
       return;
     }
 
@@ -690,6 +702,7 @@ void runAutomation(float temp, float humidity) {
       lastAutomationEvent = "Temperature safety: TEMP_UP sent (temp below min)";
       lastAutomationEventType = "temperature";
       lastAutomationEventTime = millis();
+      Serial.print("[Automation] Event set: "); Serial.println(lastAutomationEvent);
       return;
     }
   }
@@ -716,6 +729,7 @@ void runAutomation(float temp, float humidity) {
     lastAutomationEvent = "Humidity automation: Occupied detected, setting target to max temp";
     lastAutomationEventType = "humidity";
     lastAutomationEventTime = millis();
+    Serial.print("[Automation] Event set: "); Serial.println(lastAutomationEvent);
   } else if (humidity < MIN_HUMIDITY) {
     targetTemp = minTemp;
     Serial.println("📊 HUMIDITY AUTOMATION: Not occupied detected");
@@ -723,6 +737,7 @@ void runAutomation(float temp, float humidity) {
     lastAutomationEvent = "Humidity automation: Not occupied detected, setting target to min temp";
     lastAutomationEventType = "humidity";
     lastAutomationEventTime = millis();
+    Serial.print("[Automation] Event set: "); Serial.println(lastAutomationEvent);
   } else {
     Serial.println("Humidity within normal range, no humidity-based action needed");
     return;

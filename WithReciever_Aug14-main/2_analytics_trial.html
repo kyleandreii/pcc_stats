@@ -6342,6 +6342,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
         
         document.getElementById('export-date-from').value = sevenDaysAgo.toISOString().split('T')[0];
         document.getElementById('export-date-to').value = today.toISOString().split('T')[0];
+        
+        console.log(`[Date Init] Set date range: ${sevenDaysAgo.toISOString().split('T')[0]} to ${today.toISOString().split('T')[0]}`);
 
         
 
