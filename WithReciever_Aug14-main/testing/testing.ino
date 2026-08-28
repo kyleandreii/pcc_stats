@@ -440,6 +440,14 @@ void loop() {
       strftime(hourStr, sizeof(hourStr), "%H", timeinfo);
 
       String historyPath = "/history/" + String(ROOM_ID) + "/" + String(dateStr) + "/" + String(hourStr);
+      
+      // Read existing data first to preserve automation events
+      Firebase.RTDB.getJSON(&fbdo, historyPath.c_str());
+      FirebaseJson existingData;
+      if (fbdo.jsonString() != "") {
+        existingData.setJsonData(fbdo.jsonString());
+      }
+      
       FirebaseJson historyData;
       historyData.add("temperature", t);
       historyData.add("humidity", h);
@@ -457,6 +465,16 @@ void loop() {
       historyData.add("automationEnabled", automationEnabled);
       if (automationEnabled && automationStartTime > 0) {
         historyData.add("automationStartTime", automationStartTime / 1000); // Store as seconds since boot
+      }
+      
+      // Preserve existing automation event data if it exists
+      String existingEvent = existingData.getString("automationEvent");
+      String existingEventType = existingData.getString("automationEventType");
+      String existingEventTime = existingData.getString("automationEventTime");
+      if (existingEvent.length() > 0) {
+        historyData.add("automationEvent", existingEvent);
+        historyData.add("automationEventType", existingEventType);
+        historyData.add("automationEventTime", existingEventTime);
       }
       
       Serial.print("[History] Writing to Firebase path: "); Serial.println(historyPath.c_str());
