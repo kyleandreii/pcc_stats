@@ -980,16 +980,27 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                                 if (entry.automationEvent && entry.automationEventType && entry.automationEventTime) {
                                     const timestamp = parseInt(entry.automationEventTime);
                                     if (!isNaN(timestamp)) {
-                                        const eventTime = new Date(timestamp); // Already in ms
-                                        if (eventTime >= fromDate && eventTime <= toDate) {
-                                            const eventType = entry.automationEventType;
-                                            if (automationEvents[room][eventType]) {
-                                                automationEvents[room][eventType].push({
-                                                    x: eventTime.getTime(),
-                                                    y: Math.random() * 9 + 0.5,
-                                                    time: eventTime,
-                                                    description: entry.automationEvent
-                                                });
+                                        // Detect if timestamp is in millis() format (old data) or epoch format (new data)
+                                        // millis() values are typically < 10 digits (days since boot)
+                                        // Epoch values in ms are 13+ digits (since 1970)
+                                        let eventTime;
+                                        if (timestamp < 10000000000) {
+                                            // Old format: millis() - skip this entry
+                                            console.log(`[Automation] Skipping old millis() timestamp: ${timestamp}`);
+                                        } else {
+                                            // New format: epoch time in milliseconds
+                                            eventTime = new Date(timestamp);
+                                            
+                                            if (eventTime >= fromDate && eventTime <= toDate) {
+                                                const eventType = entry.automationEventType;
+                                                if (automationEvents[room][eventType]) {
+                                                    automationEvents[room][eventType].push({
+                                                        x: eventTime.getTime(),
+                                                        y: Math.random() * 9 + 0.5,
+                                                        time: eventTime,
+                                                        description: entry.automationEvent
+                                                    });
+                                                }
                                             }
                                         }
                                     }

@@ -437,7 +437,13 @@ void loop() {
       if (lastAutomationEvent.length() > 0) {
         historyData.add("automationEvent", lastAutomationEvent);
         historyData.add("automationEventType", lastAutomationEventType);
-        historyData.add("automationEventTime", lastAutomationEventTime);
+        // Use real timestamp (milliseconds since epoch) instead of millis()
+        time_t now = time(nullptr);
+        historyData.add("automationEventTime", (unsigned long)now * 1000);
+        // Clear the event after logging to prevent duplicate logging
+        lastAutomationEvent = "";
+        lastAutomationEventType = "";
+        lastAutomationEventTime = 0;
       }
       Firebase.RTDB.setJSON(&fbdo, historyPath.c_str(), &historyData);
     }
