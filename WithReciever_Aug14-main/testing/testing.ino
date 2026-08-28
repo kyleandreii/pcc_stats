@@ -468,9 +468,19 @@ void loop() {
       }
       
       // Preserve existing automation event data if it exists
-      String existingEvent = existingData.getString("automationEvent");
-      String existingEventType = existingData.getString("automationEventType");
-      String existingEventTime = existingData.getString("automationEventTime");
+      FirebaseJsonData eventData;
+      String existingEvent = "";
+      String existingEventType = "";
+      String existingEventTime = "";
+      if (existingData.get(eventData, "automationEvent")) {
+        existingEvent = eventData.to<String>();
+      }
+      if (existingData.get(eventData, "automationEventType")) {
+        existingEventType = eventData.to<String>();
+      }
+      if (existingData.get(eventData, "automationEventTime")) {
+        existingEventTime = eventData.to<String>();
+      }
       if (existingEvent.length() > 0) {
         historyData.add("automationEvent", existingEvent);
         historyData.add("automationEventType", existingEventType);
