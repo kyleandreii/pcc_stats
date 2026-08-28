@@ -6342,13 +6342,23 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
         // Initialize date inputs with default values (last 7 days to today)
         const today = new Date();
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(today.getDate() - 7);
+        // Use local date components to avoid timezone issues
+        const localToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const sevenDaysAgo = new Date(localToday);
+        sevenDaysAgo.setDate(localToday.getDate() - 7);
         
-        document.getElementById('export-date-from').value = sevenDaysAgo.toISOString().split('T')[0];
-        document.getElementById('export-date-to').value = today.toISOString().split('T')[0];
+        // Format dates as YYYY-MM-DD using local timezone
+        const formatDate = (date) => {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
         
-        console.log(`[Date Init] Set date range: ${sevenDaysAgo.toISOString().split('T')[0]} to ${today.toISOString().split('T')[0]}`);
+        document.getElementById('export-date-from').value = formatDate(sevenDaysAgo);
+        document.getElementById('export-date-to').value = formatDate(localToday);
+        
+        console.log(`[Date Init] Set date range: ${formatDate(sevenDaysAgo)} to ${formatDate(localToday)}`);
 
         
 
