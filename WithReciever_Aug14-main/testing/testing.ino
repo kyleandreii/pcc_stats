@@ -462,15 +462,18 @@ void loop() {
         Serial.print("[History] Logging automation event: "); Serial.println(lastAutomationEvent);
         Serial.print("[History] Event type: "); Serial.println(lastAutomationEventType);
         
-        // Use Firebase server timestamp directly in the history data
-        FirebaseJson timestampJson;
-        timestampJson.set(".sv", "timestamp");
+        // Use local epoch time (NTP may not work, but we'll use what we have)
+        time_t now = time(nullptr);
+        unsigned long eventTime = (unsigned long)now * 1000;
+        
+        Serial.print("[History] Event time (epoch ms): "); Serial.println(eventTime);
+        Serial.print("[History] Current time (epoch s): "); Serial.println(now);
         
         historyData.add("automationEvent", lastAutomationEvent);
         historyData.add("automationEventType", lastAutomationEventType);
-        historyData.add("automationEventTime", timestampJson);
+        historyData.add("automationEventTime", eventTime);
         
-        Serial.println("[History] Using Firebase server timestamp for event time");
+        Serial.println("[History] Using local epoch time for event time");
         
         // Clear the event after logging to prevent duplicate logging
         lastAutomationEvent = "";
