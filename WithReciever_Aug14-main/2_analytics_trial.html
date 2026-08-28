@@ -960,7 +960,11 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
         const automationEvents = {};
         
         for (const room of filteredRooms) {
-            automationEvents[room] = [];
+            automationEvents[room] = {
+                power: [],
+                humidity: [],
+                temperature: []
+            };
             
             for (const dateStr of dateArray) {
                 const path = `/history/${room}/${dateStr}`;
@@ -971,18 +975,38 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                     if (dayData) {
                         Object.keys(dayData).forEach(hour => {
                             const entry = dayData[hour];
-                            if (entry && entry.automationEnabled && entry.automationStartTime) {
-                                // Parse the timestamp from history
-                                const timestamp = parseInt(entry.automationStartTime);
-                                if (!isNaN(timestamp)) {
-                                    const eventTime = new Date(timestamp * 1000); // Convert seconds to ms
-                                    // Only include if within date range
-                                    if (eventTime >= fromDate && eventTime <= toDate) {
-                                        automationEvents[room].push({
-                                            x: eventTime.getTime(),
-                                            y: Math.random() * 9 + 0.5, // Random Y for scatter visualization
-                                            time: eventTime
-                                        });
+                            if (entry) {
+                                // Check for automation events
+                                if (entry.automationEvent && entry.automationEventType && entry.automationEventTime) {
+                                    const timestamp = parseInt(entry.automationEventTime);
+                                    if (!isNaN(timestamp)) {
+                                        const eventTime = new Date(timestamp); // Already in ms
+                                        if (eventTime >= fromDate && eventTime <= toDate) {
+                                            const eventType = entry.automationEventType;
+                                            if (automationEvents[room][eventType]) {
+                                                automationEvents[room][eventType].push({
+                                                    x: eventTime.getTime(),
+                                                    y: Math.random() * 9 + 0.5,
+                                                    time: eventTime,
+                                                    description: entry.automationEvent
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+                                // Also check for automation start time (legacy)
+                                if (entry.automationEnabled && entry.automationStartTime && !entry.automationEvent) {
+                                    const timestamp = parseInt(entry.automationStartTime);
+                                    if (!isNaN(timestamp)) {
+                                        const eventTime = new Date(timestamp * 1000);
+                                        if (eventTime >= fromDate && eventTime <= toDate) {
+                                            automationEvents[room].humidity.push({
+                                                x: eventTime.getTime(),
+                                                y: Math.random() * 9 + 0.5,
+                                                time: eventTime,
+                                                description: "Automation enabled (legacy)"
+                                            });
+                                        }
                                     }
                                 }
                             }
@@ -994,23 +1018,29 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
             }
         }
         
-        // Update chart
+        // Update chart with different datasets for each automation type
         const datasets = [];
-        const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
-        let colorIndex = 0;
+        const typeColors = {
+            power: { bg: '#EF4444', border: '#DC2626' },      // Red
+            humidity: { bg: '#10B981', border: '#059669' },   // Green
+            temperature: { bg: '#F59E0B', border: '#D97706' }  // Orange
+        };
         
         for (const room of filteredRooms) {
             const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
-            if (automationEvents[room].length > 0) {
-                datasets.push({
-                    label: displayName,
-                    data: automationEvents[room],
-                    backgroundColor: colors[colorIndex % colors.length],
-                    borderColor: colors[colorIndex % colors.length],
-                    pointRadius: 8,
-                    pointHoverRadius: 12
-                });
-                colorIndex++;
+            
+            // Add datasets for each automation type
+            for (const type of ['power', 'humidity', 'temperature']) {
+                if (automationEvents[room][type].length > 0) {
+                    datasets.push({
+                        label: `${displayName} (${type.charAt(0).toUpperCase() + type.slice(1)})`,
+                        data: automationEvents[room][type],
+                        backgroundColor: typeColors[type].bg,
+                        borderColor: typeColors[type].border,
+                        pointRadius: 8,
+                        pointHoverRadius: 12
+                    });
+                }
             }
         }
         
@@ -1307,8 +1337,16 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                         callbacks: {
                             label: function(context) {
                                 const room = context.dataset.label;
-                                const time = new Date(context.parsed.x).toLocaleString('en-PH', { timeZone: 'Asia/Manila' });
-                                return `${room}: Started at ${time}`;
+                                const time = new Date(context.parsed.x).toLocaleString('en-PH', { 
+                                    timeZone: 'Asia/Manila',
+                                    hour: 'numeric',
+                                    minute: '2-digit',
+                                    hour12: true,
+                                    month: 'short',
+                                    day: 'numeric'
+                                });
+                                const description = context.raw.description || '';
+                                return `${room}: ${time}\n${description}`;
                             }
                         }
                     }
@@ -1318,7 +1356,18 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                         type: 'linear',
                         position: 'bottom',
                         title: { display: true, text: 'Time', font: { weight: 'bold', size: 11 } },
-                        ticks: { font: { weight: 'bold' } }
+                        ticks: {
+                            font: { weight: 'bold' },
+                            callback: function(value) {
+                                const date = new Date(value);
+                                return date.toLocaleTimeString('en-PH', { 
+                                    timeZone: 'Asia/Manila',
+                                    hour: 'numeric',
+                                    minute: '2-digit',
+                                    hour12: true
+                                });
+                            }
+                        }
                     },
                     y: {
                         display: false,

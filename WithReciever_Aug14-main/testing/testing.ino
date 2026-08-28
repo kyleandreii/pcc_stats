@@ -72,6 +72,9 @@ unsigned long sendDataPrevMillis = 0;
 bool automationEnabled = false;  // Controls humidity-based automation
 bool temperatureAutomationEnabled = true;  // Temperature safety always enabled
 unsigned long automationStartTime = 0;  // Timestamp when automation was last enabled
+String lastAutomationEvent = "";  // Description of last automation action
+String lastAutomationEventType = "";  // Type: "humidity", "temperature", "power"
+unsigned long lastAutomationEventTime = 0;  // Timestamp of last automation action
 
 float MAX_HUMIDITY = 60.0;  // Default, will be updated from Firebase
 float MIN_HUMIDITY = 45.0;  // Default, will be updated from Firebase
@@ -105,6 +108,7 @@ void setup() {
   irsend2.begin();
   irrecv.enableIRIn();
   Serial.println("[IR Receiver] IR receiver enabled on pin " + String(kIrRecvPin));
+  Serial.println("[IR Sender] IR senders initialized - Unit 0 on pin " + String(kIrLedPin) + ", Unit 1 on pin " + String(kIrLedPin2));
 
   pinMode(LED_PIN, OUTPUT);
   pinMode(RELAY_PIN, OUTPUT);
@@ -429,6 +433,12 @@ void loop() {
       if (automationEnabled && automationStartTime > 0) {
         historyData.add("automationStartTime", automationStartTime / 1000); // Store as seconds since boot
       }
+      // Log automation events (will be populated when automation actions occur)
+      if (lastAutomationEvent.length() > 0) {
+        historyData.add("automationEvent", lastAutomationEvent);
+        historyData.add("automationEventType", lastAutomationEventType);
+        historyData.add("automationEventTime", lastAutomationEventTime);
+      }
       Firebase.RTDB.setJSON(&fbdo, historyPath.c_str(), &historyData);
     }
   }
@@ -472,6 +482,11 @@ void updateOLED(float currentTemp) {
 
 void handleACCommand(String cmd, int unit) {
   Serial.println("🎮 AC Command: " + cmd + " (Unit " + String(unit) + ")");
+  
+  // Log AC power automation event
+  lastAutomationEvent = "AC Power automation: " + cmd + " command sent to Unit " + String(unit);
+  lastAutomationEventType = "power";
+  lastAutomationEventTime = millis();
   
   IRsend *irSender = (unit == 1) ? &irsend2 : &irsend;
   uint16_t pin = (unit == 1) ? kIrLedPin2 : kIrLedPin;
@@ -596,6 +611,10 @@ void runAutomation(float temp, float humidity) {
       #endif
       Serial.println("TEMP_DOWN sent successfully");
       lastIRSendMillis = millis();
+      // Log automation event
+      lastAutomationEvent = "Temperature safety: TEMP_DOWN sent (temp exceeded max)";
+      lastAutomationEventType = "temperature";
+      lastAutomationEventTime = millis();
       return;
     }
 
@@ -625,6 +644,10 @@ void runAutomation(float temp, float humidity) {
       #endif
       Serial.println("TEMP_UP sent successfully");
       lastIRSendMillis = millis();
+      // Log automation event
+      lastAutomationEvent = "Temperature safety: TEMP_UP sent (temp below min)";
+      lastAutomationEventType = "temperature";
+      lastAutomationEventTime = millis();
       return;
     }
   }
@@ -648,10 +671,16 @@ void runAutomation(float temp, float humidity) {
     targetTemp = maxTemp;
     Serial.println("📊 HUMIDITY AUTOMATION: Occupied detected");
     Serial.print("Humidity: "); Serial.print(humidity, 1); Serial.print("% > "); Serial.print(MAX_HUMIDITY); Serial.print("%, setting target to max: "); Serial.println(targetTemp, 1);
+    lastAutomationEvent = "Humidity automation: Occupied detected, setting target to max temp";
+    lastAutomationEventType = "humidity";
+    lastAutomationEventTime = millis();
   } else if (humidity < MIN_HUMIDITY) {
     targetTemp = minTemp;
     Serial.println("📊 HUMIDITY AUTOMATION: Not occupied detected");
     Serial.print("Humidity: "); Serial.print(humidity, 1); Serial.print("% < "); Serial.print(MIN_HUMIDITY); Serial.print("%, setting target to min: "); Serial.println(targetTemp, 1);
+    lastAutomationEvent = "Humidity automation: Not occupied detected, setting target to min temp";
+    lastAutomationEventType = "humidity";
+    lastAutomationEventTime = millis();
   } else {
     Serial.println("Humidity within normal range, no humidity-based action needed");
     return;
