@@ -71,6 +71,7 @@ unsigned long sendDataPrevMillis = 0;
 
 bool automationEnabled = false;  // Controls humidity-based automation
 bool temperatureAutomationEnabled = true;  // Temperature safety always enabled
+unsigned long automationStartTime = 0;  // Timestamp when automation was last enabled
 
 float MAX_HUMIDITY = 60.0;  // Default, will be updated from Firebase
 float MIN_HUMIDITY = 45.0;  // Default, will be updated from Firebase
@@ -248,7 +249,18 @@ void loop() {
       if (newEnabledState != automationEnabled) {
         automationEnabled = newEnabledState;
         preferences.putBool("automationEnabled", automationEnabled);
-        Serial.println("Humidity automation " + String(automationEnabled ? "ENABLED" : "DISABLED"));
+        if (automationEnabled) {
+          automationStartTime = millis();
+          Serial.println("Humidity automation ENABLED at " + String(automationStartTime / 1000) + " seconds");
+          // Log start time to Firebase for real-time display
+          FirebaseJson json;
+          json.set(".sv", "timestamp");
+          Firebase.RTDB.setJSON(&fbdo, "/" + String(ROOM_ID) + "/automation/startTime", &json);
+        } else {
+          Serial.println("Humidity automation DISABLED");
+          // Clear start time when disabled
+          Firebase.RTDB.set(&fbdo, "/" + String(ROOM_ID) + "/automation/startTime", nullptr);
+        }
       }
     } else if (path == "/automation" || path.indexOf("automation") >= 0) {
       FirebaseJson &json = stream.jsonObject();
@@ -258,7 +270,18 @@ void loop() {
         if (newEnabledState != automationEnabled) {
           automationEnabled = newEnabledState;
           preferences.putBool("automationEnabled", automationEnabled);
-          Serial.println("Humidity automation " + String(automationEnabled ? "ENABLED" : "DISABLED"));
+          if (automationEnabled) {
+            automationStartTime = millis();
+            Serial.println("Humidity automation ENABLED at " + String(automationStartTime / 1000) + " seconds");
+            // Log start time to Firebase for real-time display
+            FirebaseJson startTimeJson;
+            startTimeJson.set(".sv", "timestamp");
+            Firebase.RTDB.setJSON(&fbdo, "/" + String(ROOM_ID) + "/automation/startTime", &startTimeJson);
+          } else {
+            Serial.println("Humidity automation DISABLED");
+            // Clear start time when disabled
+            Firebase.RTDB.set(&fbdo, "/" + String(ROOM_ID) + "/automation/startTime", nullptr);
+          }
         }
       }
       if (json.get(jsonData, "humidityOccupiedThreshold")) {
@@ -408,6 +431,11 @@ void loop() {
       float targetTemp = Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/targetTemp");
       historyData.add("targetTemp", targetTemp);
       #endif
+      // Log automation state and start time
+      historyData.add("automationEnabled", automationEnabled);
+      if (automationEnabled && automationStartTime > 0) {
+        historyData.add("automationStartTime", automationStartTime / 1000); // Store as seconds since boot
+      }
       Firebase.RTDB.setJSON(&fbdo, historyPath.c_str(), &historyData);
     }
   }

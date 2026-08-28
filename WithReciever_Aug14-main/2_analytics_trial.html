@@ -766,6 +766,16 @@
 
             </div>
 
+            <!-- Automation Status Card -->
+            <div class="card bg-white p-8 rounded-3xl shadow-sm border border-gray-100 mb-12">
+                <div class="flex items-center gap-4 mb-8">
+                    <h3 class="font-black text-gray-800 uppercase tracking-widest text-xs">Automation Status</h3>
+                </div>
+                <div id="automation-status-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- Automation status cards will be populated here -->
+                </div>
+            </div>
+
 
 
 
@@ -924,6 +934,69 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
         }
 
+    }
+
+    function updateAutomationStatus() {
+        const container = document.getElementById('automation-status-container');
+        if (!container) return;
+        
+        const roomKeys = Object.keys(labsData || {}).filter(key => key.startsWith("Room_")).sort();
+        
+        if (roomKeys.length === 0) {
+            container.innerHTML = '<p class="text-gray-400 text-sm">No rooms available</p>';
+            return;
+        }
+        
+        container.innerHTML = roomKeys.map(room => {
+            const roomData = labsData[room];
+            const displayName = roomData?.customRoomName || room.replace('_', ' ');
+            const automationEnabled = roomData?.automation?.enabled || false;
+            const automationStartTime = roomData?.automation?.startTime;
+            
+            let statusBadge = '';
+            let startTimeDisplay = '';
+            
+            if (automationEnabled) {
+                statusBadge = '<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black bg-green-100 text-green-700 uppercase"><i data-lucide="play" class="w-3 h-3"></i> Active</span>';
+                if (automationStartTime) {
+                    const startTimeDate = new Date(automationStartTime);
+                    const timeAgo = getTimeAgo(startTimeDate);
+                    startTimeDisplay = `<div class="text-[10px] text-gray-500 mt-2">Started: ${startTimeDate.toLocaleString('en-PH', { timeZone: 'Asia/Manila' })} (${timeAgo})</div>`;
+                } else {
+                    startTimeDisplay = `<div class="text-[10px] text-gray-500 mt-2">Start time not available</div>`;
+                }
+            } else {
+                statusBadge = '<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black bg-gray-100 text-gray-500 uppercase"><i data-lucide="pause" class="w-3 h-3"></i> Inactive</span>';
+            }
+            
+            return `
+                <div class="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                    <div class="flex items-center justify-between mb-3">
+                        <h4 class="font-black text-gray-800 text-xs uppercase tracking-wider">${displayName}</h4>
+                        ${statusBadge}
+                    </div>
+                    <div class="text-[10px] text-gray-500">
+                        <div>Humidity Thresholds: ${roomData?.automation?.humidityOccupiedThreshold || 'N/A'}% / ${roomData?.automation?.humidityEmptyThreshold || 'N/A'}%</div>
+                        ${startTimeDisplay}
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        // Re-initialize Lucide icons
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        }
+    }
+
+    function getTimeAgo(date) {
+        const seconds = Math.floor((new Date() - date) / 1000);
+        
+        if (seconds < 60) return 'Just now';
+        if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+        if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+        if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
+        return date.toLocaleDateString();
     }
 
 
@@ -2807,6 +2880,9 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
             console.log('[Analytics Firebase Listener] Data received from Firebase');
 
             labsData = data;
+
+            // Update automation status display
+            updateAutomationStatus();
 
             // Filter to only include rooms that have actual data (either in dailyAnalytics or have live data)
 
