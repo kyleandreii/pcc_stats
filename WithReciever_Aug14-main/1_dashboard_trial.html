@@ -891,6 +891,8 @@
                     console.log(`[renderDashboard] Active rooms count: ${activeRooms}`);
                 
                 const label = roomLabels[i];
+                const temp = d.temperature || 0;
+                const hum = d.humidity || 0;
                 const minT = d.thresholds?.minTemp || 20;
                 const maxT = d.thresholds?.maxTemp || 30;
                 
@@ -911,11 +913,7 @@
                 // Device is online only if we have a recent last_seen timestamp (within HEARTBEAT_TIMEOUT)
                 const isDeviceOnline = lastSeen > 0 && timeSinceLastSeen < HEARTBEAT_TIMEOUT;
                 
-                // Set temperature and humidity to 0 for offline devices
-                const temp = isDeviceOnline ? (d.temperature || 0) : 0;
-                const hum = isDeviceOnline ? (d.humidity || 0) : 0;
-                
-                console.log(`[Dashboard] ${roomPath} - last_seen: ${lastSeen} (${lastSeen ? new Date(lastSeen).toISOString() : 'null'}), timeSinceLastSeen: ${Math.floor(timeSinceLastSeen/1000)}s, isOnline: ${isDeviceOnline}, temp: ${temp}, hum: ${hum}`);
+                console.log(`[Dashboard] ${roomPath} - last_seen: ${lastSeen} (${lastSeen ? new Date(lastSeen).toISOString() : 'null'}), timeSinceLastSeen: ${Math.floor(timeSinceLastSeen/1000)}s, isOnline: ${isDeviceOnline}`);
                 
                 // Firebase is authoritative for AC state - use it directly for cross-device sync
                 const isPoweredOn = d.ac === true || d.ac === "ON" || d.ac === 1;

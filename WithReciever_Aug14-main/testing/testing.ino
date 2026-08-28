@@ -215,8 +215,8 @@ void loop() {
     
     String path = stream.dataPath();
     
-    // Log important paths, ignore system paths like /last_seen
-    if (path != "/last_seen" && path.indexOf("last_seen") < 0) {
+    // Log important paths, ignore system paths like /last_seen and ac_command spam
+    if (path != "/last_seen" && path.indexOf("last_seen") < 0 && !path.endsWith("ac_command")) {
       Serial.println("[Firebase] Path: " + path + ", Type: " + stream.dataType());
     }
     
@@ -491,24 +491,30 @@ void handleACCommand(String cmd, int unit) {
   IRsend *irSender = (unit == 1) ? &irsend2 : &irsend;
   uint16_t pin = (unit == 1) ? kIrLedPin2 : kIrLedPin;
   
+  Serial.println("🎮 Using IRsend instance on pin " + String(pin));
+  
   if (cmd == "ON") {
     uint16_t on_buf[rawOnLen];
     memcpy_P(on_buf, rawOn, sizeof(rawOn));
+    Serial.println("🎮 Sending ON signal...");
     irSender->sendRaw(on_buf, rawOnLen, kFrequency);
     Serial.println("✓ ON sent on pin " + String(pin));
   } else if (cmd == "OFF") {
     uint16_t off_buf[rawOffLen];
     memcpy_P(off_buf, rawOff, sizeof(rawOff));
+    Serial.println("🎮 Sending OFF signal...");
     irSender->sendRaw(off_buf, rawOffLen, kFrequency);
     Serial.println("✓ OFF sent on pin " + String(pin));
   } else if (cmd == "TEMP_UP") {
     uint16_t up_buf[rawTempUpLen];
     memcpy_P(up_buf, rawTempUp, sizeof(rawTempUp));
+    Serial.println("🎮 Sending TEMP_UP signal...");
     irSender->sendRaw(up_buf, rawTempUpLen, kFrequency);
     Serial.println("✓ TEMP_UP sent on pin " + String(pin));
   } else if (cmd == "TEMP_DOWN") {
     uint16_t down_buf[rawTempDownLen];
     memcpy_P(down_buf, rawTempDown, sizeof(rawTempDown));
+    Serial.println("🎮 Sending TEMP_DOWN signal...");
     irSender->sendRaw(down_buf, rawTempDownLen, kFrequency);
     Serial.println("✓ TEMP_DOWN sent on pin " + String(pin));
   } else {
