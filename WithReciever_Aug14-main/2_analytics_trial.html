@@ -995,32 +995,34 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                                     const timestamp = parseInt(entry.automationEventTime);
                                     console.log(`[Automation] Raw timestamp from Firebase: ${entry.automationEventTime} (parsed: ${timestamp})`);
                                     if (!isNaN(timestamp)) {
-                                        // Detect if timestamp is in millis() format (old data) or epoch format (new data)
-                                        // millis() values are typically < 10 digits (days since boot)
-                                        // Epoch values in ms are 13+ digits (since 1970)
+                                        // Detect if timestamp is in seconds (new data) or milliseconds (old data)
+                                        // Epoch in seconds: ~10 digits (e.g., 1787946607 for 2026)
+                                        // Epoch in ms: ~13 digits (e.g., 1787946607000)
                                         let eventTime;
                                         if (timestamp < 10000000000) {
-                                            // Old format: millis() - skip this entry
-                                            console.log(`[Automation] Skipping old millis() timestamp: ${timestamp}`);
+                                            // New format: seconds - convert to ms for Date
+                                            eventTime = new Date(timestamp * 1000);
+                                            console.log(`[Automation] Timestamp in seconds, converted to ms`);
                                         } else {
-                                            // New format: epoch time in milliseconds
+                                            // Old format: milliseconds
                                             eventTime = new Date(timestamp);
-                                            console.log(`[Automation] Valid event time: ${eventTime.toISOString()} (local: ${eventTime.toLocaleString()})`);
-                                            
-                                            if (eventTime >= fromDate && eventTime <= toDate) {
-                                                const eventType = entry.automationEventType;
-                                                if (automationEvents[room][eventType]) {
-                                                    automationEvents[room][eventType].push({
-                                                        x: eventTime.getTime(),
-                                                        y: Math.random() * 9 + 0.5,
-                                                        time: eventTime,
-                                                        description: entry.automationEvent
-                                                    });
-                                                    console.log(`[Automation] Added ${eventType} event for ${room}`);
-                                                }
-                                            } else {
-                                                console.log(`[Automation] Event time ${eventTime.toISOString()} outside date range ${fromDate.toISOString()} to ${toDate.toISOString()}`);
+                                            console.log(`[Automation] Timestamp in milliseconds`);
+                                        }
+                                        console.log(`[Automation] Valid event time: ${eventTime.toISOString()} (local: ${eventTime.toLocaleString()})`);
+                                        
+                                        if (eventTime >= fromDate && eventTime <= toDate) {
+                                            const eventType = entry.automationEventType;
+                                            if (automationEvents[room][eventType]) {
+                                                automationEvents[room][eventType].push({
+                                                    x: eventTime.getTime(),
+                                                    y: Math.random() * 9 + 0.5,
+                                                    time: eventTime,
+                                                    description: entry.automationEvent
+                                                });
+                                                console.log(`[Automation] Added ${eventType} event for ${room}`);
                                             }
+                                        } else {
+                                            console.log(`[Automation] Event time ${eventTime.toISOString()} outside date range ${fromDate.toISOString()} to ${toDate.toISOString()}`);
                                         }
                                     }
                                 }

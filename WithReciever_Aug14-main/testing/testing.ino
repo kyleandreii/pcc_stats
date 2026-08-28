@@ -462,18 +462,16 @@ void loop() {
         Serial.print("[History] Logging automation event: "); Serial.println(lastAutomationEvent);
         Serial.print("[History] Event type: "); Serial.println(lastAutomationEventType);
         
-        // Use local epoch time (NTP may not work, but we'll use what we have)
+        // Use local epoch time in seconds (to avoid 32-bit overflow with milliseconds)
         time_t now = time(nullptr);
-        unsigned long eventTime = (unsigned long)now * 1000;
         
-        Serial.print("[History] Event time (epoch ms): "); Serial.println(eventTime);
-        Serial.print("[History] Current time (epoch s): "); Serial.println(now);
+        Serial.print("[History] Event time (epoch s): "); Serial.println(now);
         
         historyData.add("automationEvent", lastAutomationEvent);
         historyData.add("automationEventType", lastAutomationEventType);
-        historyData.add("automationEventTime", eventTime);
+        historyData.add("automationEventTime", now);
         
-        Serial.println("[History] Using local epoch time for event time");
+        Serial.println("[History] Using local epoch time (seconds) for event time");
         
         // Clear the event after logging to prevent duplicate logging
         lastAutomationEvent = "";
