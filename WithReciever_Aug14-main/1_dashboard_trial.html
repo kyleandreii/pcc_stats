@@ -829,7 +829,22 @@
             document.getElementById('modalType').innerText = specs.acType || "N/A";
             document.getElementById('modalModel').innerText = specs.acModel || "N/A";
             document.getElementById('modalCooling').innerText = specs.coolingBtu ? specs.coolingBtu.toLocaleString() + " BTU" : "N/A";
-            document.getElementById('modalPower').innerText = specs.powerInput ? specs.powerInput.toLocaleString() + " W" : "N/A";
+            
+            // Use temperature-based wattage interpolation if available
+            let powerDisplay = "N/A";
+            if (data.targetTemp !== undefined && data.targetTemp !== null) {
+                const unitConfig = {
+                    specs: specs,
+                    rated_watts: specs.powerInput,
+                    hp_rating: specs.hpRating,
+                    aircon_type: specs.acType
+                };
+                const effectiveWatts = AirconCostCalculator.getEffectiveWatts(unitConfig, data.targetTemp);
+                powerDisplay = Math.round(effectiveWatts).toLocaleString() + " W";
+            } else if (specs.powerInput) {
+                powerDisplay = specs.powerInput.toLocaleString() + " W";
+            }
+            document.getElementById('modalPower').innerText = powerDisplay;
             document.getElementById('modalRating').innerText = specs.rating || "--";
             document.getElementById('infoModal').style.display = 'flex';
         }

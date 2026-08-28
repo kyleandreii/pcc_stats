@@ -5,6 +5,12 @@
 
 const AirconCostCalculator = (function() {
     
+    // Default temperature calibration points (from measured data: 16°C = 3795W, 30°C = 253W)
+    const DEFAULT_TEMP_CALIBRATION = [
+        { temp: 16, amps: 16.5, watts: 3795 },
+        { temp: 30, amps: 1.1, watts: 253 }
+    ];
+
     // Default power ratings (watts) by HP rating for different AC types
     const POWER_RATINGS = {
         inverter: {
@@ -26,13 +32,93 @@ const AirconCostCalculator = (function() {
     };
 
     /**
+     * Get effective wattage based on target temperature using linear interpolation
+     * @param {Object} unitConfig - Unit configuration { specs: { tempCalibration: [...] }, rated_watts, hp_rating, aircon_type }
+     * @param {number} targetTemp - Target temperature in Celsius
+     * @returns {number} Effective wattage
+     */
+    function getEffectiveWatts(unitConfig, targetTemp) {
+        console.log('[Cost Calculator] getEffectiveWatts called:', { unitConfig, targetTemp });
+        
+        if (!unitConfig || targetTemp === undefined || targetTemp === null) {
+            console.log('[Cost Calculator] getEffectiveWatts - missing input, falling back to rated_watts');
+            return getRatedWatts(unitConfig);
+        }
+
+        // Get calibration data from specs or use default
+        const calibration = unitConfig.specs?.tempCalibration || DEFAULT_TEMP_CALIBRATION;
+        
+        if (!calibration || calibration.length < 2) {
+            console.log('[Cost Calculator] getEffectiveWatts - no calibration data, falling back to rated_watts');
+            return getRatedWatts(unitConfig);
+        }
+
+        // Sort calibration by temperature
+        const sortedCal = [...calibration].sort((a, b) => a.temp - b.temp);
+
+        // Clamp to calibration range
+        if (targetTemp <= sortedCal[0].temp) {
+            console.log('[Cost Calculator] getEffectiveWatts - temp below calibration range, using minimum:', sortedCal[0].watts);
+            return sortedCal[0].watts;
+        }
+        if (targetTemp >= sortedCal[sortedCal.length - 1].temp) {
+            console.log('[Cost Calculator] getEffectiveWatts - temp above calibration range, using maximum:', sortedCal[sortedCal.length - 1].watts);
+            return sortedCal[sortedCal.length - 1].watts;
+        }
+
+        // Find surrounding calibration points for interpolation
+        let lower = null, upper = null;
+        for (let i = 0; i < sortedCal.length - 1; i++) {
+            if (targetTemp >= sortedCal[i].temp && targetTemp <= sortedCal[i + 1].temp) {
+                lower = sortedCal[i];
+                upper = sortedCal[i + 1];
+                break;
+            }
+        }
+
+        if (!lower || !upper) {
+            console.log('[Cost Calculator] getEffectiveWatts - could not find interpolation points, falling back to rated_watts');
+            return getRatedWatts(unitConfig);
+        }
+
+        // Linear interpolation
+        const tempRange = upper.temp - lower.temp;
+        const wattsRange = upper.watts - lower.watts;
+        const tempFraction = (targetTemp - lower.temp) / tempRange;
+        const effectiveWatts = lower.watts + (wattsRange * tempFraction);
+
+        console.log('[Cost Calculator] getEffectiveWatts - interpolated:', { 
+            lower: lower.watts, 
+            upper: upper.watts, 
+            tempFraction, 
+            effectiveWatts 
+        });
+
+        return effectiveWatts;
+    }
+
+    /**
+     * Get rated watts from unit config (fallback for when calibration is unavailable)
+     * @param {Object} unitConfig - Unit configuration
+     * @returns {number} Rated watts
+     */
+    function getRatedWatts(unitConfig) {
+        let watts = unitConfig.rated_watts;
+        if (!watts && unitConfig.hp_rating) {
+            watts = POWER_RATINGS[unitConfig.aircon_type]?.[unitConfig.hp_rating] || 0;
+        }
+        return watts || 0;
+    }
+
+    /**
      * Compute aircon electricity cost for a given room and usage
      * @param {Object} roomConfig - Room configuration { aircon_type, hp_rating, rated_watts, duty_cycle, units: { unit_1: {...}, unit_2: {...} } }
      * @param {number} hours - Usage hours (or object with unit-specific hours for dual-unit rooms)
      * @param {number} ratePerKwh - Electricity rate per kWh
+     * @param {number} targetTemp - Target temperature in Celsius (optional, for temperature-based wattage)
      * @returns {number} Cost in currency
      */
-    function computeAirconCost(roomConfig, hours, ratePerKwh) {
+    function computeAirconCost(roomConfig, hours, ratePerKwh, targetTemp) {
         if (!roomConfig || ratePerKwh <= 0) {
             return 0;
         }
@@ -44,12 +130,14 @@ const AirconCostCalculator = (function() {
             // Calculate cost for each unit independently
             if (roomConfig.units.unit_1) {
                 const unit1Hours = (typeof hours === 'object' && hours.unit_1 !== undefined) ? hours.unit_1 : hours;
-                totalCost += computeSingleUnitCost(roomConfig.units.unit_1, unit1Hours, ratePerKwh);
+                const unit1TargetTemp = (typeof targetTemp === 'object' && targetTemp.unit_1 !== undefined) ? targetTemp.unit_1 : targetTemp;
+                totalCost += computeSingleUnitCost(roomConfig.units.unit_1, unit1Hours, ratePerKwh, unit1TargetTemp);
             }
             
             if (roomConfig.units.unit_2) {
                 const unit2Hours = (typeof hours === 'object' && hours.unit_2 !== undefined) ? hours.unit_2 : hours;
-                totalCost += computeSingleUnitCost(roomConfig.units.unit_2, unit2Hours, ratePerKwh);
+                const unit2TargetTemp = (typeof targetTemp === 'object' && targetTemp.unit_2 !== undefined) ? targetTemp.unit_2 : targetTemp;
+                totalCost += computeSingleUnitCost(roomConfig.units.unit_2, unit2Hours, ratePerKwh, unit2TargetTemp);
             }
             
             return parseFloat(totalCost.toFixed(2));
@@ -57,7 +145,7 @@ const AirconCostCalculator = (function() {
 
         // Single unit calculation (legacy)
         if (hours <= 0) return 0;
-        return computeSingleUnitCost(roomConfig, hours, ratePerKwh);
+        return computeSingleUnitCost(roomConfig, hours, ratePerKwh, targetTemp);
     }
 
     /**
@@ -65,20 +153,23 @@ const AirconCostCalculator = (function() {
      * @param {Object} unitConfig - Unit configuration { aircon_type, hp_rating, rated_watts, duty_cycle }
      * @param {number} hours - Usage hours
      * @param {number} ratePerKwh - Electricity rate per kWh
+     * @param {number} targetTemp - Target temperature in Celsius (optional, for temperature-based wattage)
      * @returns {number} Cost in currency
      */
-    function computeSingleUnitCost(unitConfig, hours, ratePerKwh) {
-        console.log('[Cost Calculator] computeSingleUnitCost called:', { unitConfig, hours, ratePerKwh });
+    function computeSingleUnitCost(unitConfig, hours, ratePerKwh, targetTemp) {
+        console.log('[Cost Calculator] computeSingleUnitCost called:', { unitConfig, hours, ratePerKwh, targetTemp });
         
         if (!unitConfig || hours <= 0 || ratePerKwh <= 0) {
             console.log('[Cost Calculator] Returning 0 - invalid input');
             return 0;
         }
 
-        // Get power rating in watts
-        let watts = unitConfig.rated_watts;
-        if (!watts && unitConfig.hp_rating) {
-            watts = POWER_RATINGS[unitConfig.aircon_type]?.[unitConfig.hp_rating] || 0;
+        // Get effective wattage based on target temperature, or fall back to rated watts
+        let watts;
+        if (targetTemp !== undefined && targetTemp !== null) {
+            watts = getEffectiveWatts(unitConfig, targetTemp);
+        } else {
+            watts = getRatedWatts(unitConfig);
         }
 
         if (watts <= 0) {
@@ -165,6 +256,7 @@ const AirconCostCalculator = (function() {
         computeAirconCost,
         computeDailyTotals,
         getDefaultRoomConfig,
+        getEffectiveWatts,
         POWER_RATINGS
     };
 

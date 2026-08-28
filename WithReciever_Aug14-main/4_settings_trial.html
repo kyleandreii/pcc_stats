@@ -641,6 +641,8 @@
         let labKeys = [];
         let labsData = {};
         let selectedRoom = null;
+        let roomAutoSelected = false; // Track if room has been auto-selected
+        let lastSelectedRoomData = null; // Track previous data for selected room to avoid unnecessary refreshes
         let lastAutomationAction = {}; 
 
         function getRoomLabel(key) {
@@ -665,8 +667,8 @@
                         return numA - numB;
                     });
                 
-                // Auto-select device room if not already selected
-                if (!selectedRoom && labKeys.length > 0) {
+                // Auto-select device room only once on first load
+                if (!roomAutoSelected && !selectedRoom && labKeys.length > 0) {
                     // Try to find the device's room from device_room_id
                     for (const key of labKeys) {
                         if (labsData[key] && labsData[key].device_room_id) {
@@ -678,11 +680,26 @@
                     // Fallback to first room if no device_room_id found
                     if (!selectedRoom) {
                         selectedRoom = labKeys[0];
+                        console.log(`[Settings] Auto-selected first room: ${selectedRoom}`);
+                    }
+                    roomAutoSelected = true; // Mark as auto-selected, never change again
+                }
+                
+                // Only refresh config UI if selected room's data actually changed
+                if (selectedRoom) {
+                    const currentRoomData = labsData[selectedRoom];
+                    const currentRoomDataStr = JSON.stringify(currentRoomData);
+                    const lastRoomDataStr = JSON.stringify(lastSelectedRoomData);
+                    
+                    if (currentRoomDataStr !== lastRoomDataStr) {
+                        console.log(`[Settings] Room data changed for ${selectedRoom}, refreshing UI`);
+                        lastSelectedRoomData = currentRoomData;
+                        refreshConfigUI();
                     }
                 }
+                
                 updateGlobalUI();
                 renderLabList();
-                if (selectedRoom) refreshConfigUI();
             });
         }
 
@@ -936,16 +953,36 @@
                 // Exact-time triggers (send commands at configured minutes)
                 if (sched.onTime === currentTime && lastAutomationAction[room] !== actionKey + "_ON") {
                     console.log(debugMsg + " → TRIGGER ON");
-                    db.ref(`${room}`).update({ ac_command: "ON", ac: true })
-                        .then(() => console.log(`[Automation] ${room} turned ON successfully`));
+                    
+                    // Check if room has dual units configured
+                    if (roomData?.units?.unit_1 && roomData?.units?.unit_2) {
+                        console.log(`[Automation] ${room} - Dual unit mode detected`);
+                        db.ref(`${room}/units/unit_1`).update({ ac_command: "ON", ac: true });
+                        db.ref(`${room}/units/unit_2`).update({ ac_command: "ON", ac: true });
+                    } else {
+                        console.log(`[Automation] ${room} - Single unit mode detected`);
+                        db.ref(`${room}`).update({ ac_command: "ON", ac: true });
+                    }
+                    
+                    console.log(`[Automation] ${room} turned ON successfully`);
                     lastAutomationAction[room] = actionKey + "_ON";
                     return;
                 }
 
                 if (sched.offTime === currentTime && lastAutomationAction[room] !== actionKey + "_OFF") {
                     console.log(debugMsg + " → TRIGGER OFF");
-                    db.ref(`${room}`).update({ ac_command: "OFF", ac: false })
-                        .then(() => console.log(`[Automation] ${room} turned OFF successfully`));
+                    
+                    // Check if room has dual units configured
+                    if (roomData?.units?.unit_1 && roomData?.units?.unit_2) {
+                        console.log(`[Automation] ${room} - Dual unit mode detected`);
+                        db.ref(`${room}/units/unit_1`).update({ ac_command: "OFF", ac: false });
+                        db.ref(`${room}/units/unit_2`).update({ ac_command: "OFF", ac: false });
+                    } else {
+                        console.log(`[Automation] ${room} - Single unit mode detected`);
+                        db.ref(`${room}`).update({ ac_command: "OFF", ac: false });
+                    }
+                    
+                    console.log(`[Automation] ${room} turned OFF successfully`);
                     lastAutomationAction[room] = actionKey + "_OFF";
                     return;
                 }
@@ -1106,6 +1143,29 @@
             if (!selectedRoom) return;
             const min = parseFloat(document.getElementById('input-min').value);
             const max = parseFloat(document.getElementById('input-max').value);
+            
+            // Validate min/max values
+            if (isNaN(min) || isNaN(max)) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Invalid Input',
+                    text: 'Please enter valid numbers for minimum and maximum temperature thresholds.',
+                    timer: 2000,
+                    showConfirmButton: false
+                });
+                return;
+            }
+            
+            if (min >= max) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Invalid Range',
+                    text: 'Minimum temperature must be less than maximum temperature.',
+                    timer: 2000,
+                    showConfirmButton: false
+                });
+                return;
+            }
             
             // Save to room-level thresholds
             db.ref(`${selectedRoom}/thresholds`).update({ minTemp: min, maxTemp: max })

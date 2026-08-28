@@ -194,7 +194,7 @@ void setup() {
 
 void loop() {
   static unsigned long lastLoopLog = 0;
-  if (millis() - lastLoopLog > 5000) {
+  if (millis() - lastLoopLog > 60000) {
     Serial.println("[Loop] ESP32 is running, millis: " + String(millis()));
     Serial.println("[Loop] Firebase ready: " + String(Firebase.ready() ? "YES" : "NO"));
     lastLoopLog = millis();
@@ -210,9 +210,31 @@ void loop() {
     
     String path = stream.dataPath();
     
-    // Only log important paths, ignore system paths like /last_seen
+    // Log important paths, ignore system paths like /last_seen
     if (path != "/last_seen" && path.indexOf("last_seen") < 0) {
-      Serial.println("[Firebase] Data received - Path: " + path);
+      Serial.println("[Firebase] Path: " + path + ", Type: " + stream.dataType());
+    }
+    
+    // Handle root path updates (entire room object)
+    if (path == "/" && stream.dataType() == "json") {
+      FirebaseJson &json = stream.jsonObject();
+      FirebaseJsonData jsonData;
+      if (json.get(jsonData, "ac_command")) {
+        String cmd = jsonData.stringValue;
+        Serial.println("[Firebase] Found ac_command in root object: " + cmd);
+        if (cmd != "IDLE") {
+          #if DUAL_UNIT_MODE
+          Serial.println("[Firebase] Dual unit mode - sending to both units");
+          handleACCommand(cmd, 1);
+          handleACCommand(cmd, 2);
+          #else
+          Serial.println("[Firebase] Single unit mode - sending to unit 0");
+          handleACCommand(cmd, 0);
+          #endif
+        } else {
+          Serial.println("[Firebase] Ignoring IDLE command");
+        }
+      }
     }
     
     if (path == "/thresholds/minTemp" || path == "/minTemp") {
@@ -376,6 +398,16 @@ void loop() {
       FirebaseJson historyData;
       historyData.add("temperature", t);
       historyData.add("humidity", h);
+      // Log targetTemp for accurate historical cost calculations
+      #if DUAL_UNIT_MODE
+      float targetTemp1 = Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/targetTemp");
+      float targetTemp2 = Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/targetTemp");
+      historyData.add("targetTemp1", targetTemp1);
+      historyData.add("targetTemp2", targetTemp2);
+      #else
+      float targetTemp = Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/targetTemp");
+      historyData.add("targetTemp", targetTemp);
+      #endif
       Firebase.RTDB.setJSON(&fbdo, historyPath.c_str(), &historyData);
     }
   }
@@ -418,73 +450,48 @@ void updateOLED(float currentTemp) {
 }
 
 void handleACCommand(String cmd, int unit) {
-  Serial.println("🎮 MANUAL CONTROL: AC Command received");
-  Serial.print("Command: "); Serial.println(cmd);
-  Serial.print("Unit: "); Serial.println(unit == 0 ? "Single Unit" : "Unit " + String(unit));
+  Serial.println("🎮 AC Command: " + cmd + " (Unit " + String(unit) + ")");
   
   IRsend *irSender = (unit == 1) ? &irsend2 : &irsend;
   uint16_t pin = (unit == 1) ? kIrLedPin2 : kIrLedPin;
   
-  Serial.print("IR Sender pointer: "); Serial.println((unsigned long)irSender, HEX);
-  Serial.print("Sending IR on pin "); Serial.println(pin);
-  
   if (cmd == "ON") {
-    Serial.println("Action: Turning AC ON");
     uint16_t on_buf[rawOnLen];
     memcpy_P(on_buf, rawOn, sizeof(rawOn));
-    Serial.println("IR data copied to buffer");
-    Serial.print("Sending raw data length: "); Serial.println(rawOnLen);
     irSender->sendRaw(on_buf, rawOnLen, kFrequency);
-    Serial.println("✓ ON command sent successfully");
+    Serial.println("✓ ON sent on pin " + String(pin));
   } else if (cmd == "OFF") {
-    Serial.println("Action: Turning AC OFF");
     uint16_t off_buf[rawOffLen];
     memcpy_P(off_buf, rawOff, sizeof(rawOff));
-    Serial.println("IR data copied to buffer");
-    Serial.print("Sending raw data length: "); Serial.println(rawOffLen);
     irSender->sendRaw(off_buf, rawOffLen, kFrequency);
-    Serial.println("✓ OFF command sent successfully");
+    Serial.println("✓ OFF sent on pin " + String(pin));
   } else if (cmd == "TEMP_UP") {
-    Serial.println("Action: Increasing temperature");
     uint16_t up_buf[rawTempUpLen];
     memcpy_P(up_buf, rawTempUp, sizeof(rawTempUp));
-    Serial.println("IR data copied to buffer");
-    Serial.print("Sending raw data length: "); Serial.println(rawTempUpLen);
     irSender->sendRaw(up_buf, rawTempUpLen, kFrequency);
-    Serial.println("✓ TEMP_UP command sent successfully");
+    Serial.println("✓ TEMP_UP sent on pin " + String(pin));
   } else if (cmd == "TEMP_DOWN") {
-    Serial.println("Action: Decreasing temperature");
     uint16_t down_buf[rawTempDownLen];
     memcpy_P(down_buf, rawTempDown, sizeof(rawTempDown));
-    Serial.println("IR data copied to buffer");
-    Serial.print("Giving raw data length: "); Serial.println(rawTempDownLen);
     irSender->sendRaw(down_buf, rawTempDownLen, kFrequency);
-    Serial.println("✓ TEMP_DOWN command sent successfully");
+    Serial.println("✓ TEMP_DOWN sent on pin " + String(pin));
   } else {
-    Serial.println("⚠️ Unknown command, ignoring");
+    Serial.println("⚠️ Unknown command: " + cmd);
     return;
   }
 
   // Update Firebase based on unit
-  Serial.println("Updating Firebase state...");
   if (unit == 0) {
     // Single unit mode
-    Serial.print("Path: /"); Serial.print(ROOM_ID); Serial.println("/ac_command -> IDLE");
-    bool success1 = Firebase.RTDB.setString(&fbdo, "/" + String(ROOM_ID) + "/ac_command", "IDLE");
-    Serial.print("Path: /"); Serial.print(ROOM_ID); Serial.print("/ac -> "); Serial.println((cmd == "ON") ? "true" : "false");
-    bool success2 = Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/ac", (cmd == "ON"));
-    Serial.print("Firebase update: "); Serial.println((success1 && success2) ? "✓ Success" : "✗ Failed");
+    Firebase.RTDB.setString(&fbdo, "/" + String(ROOM_ID) + "/ac_command", "IDLE");
+    Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/ac", (cmd == "ON"));
   } else {
     // Dual unit mode
     String unitPath = "/" + String(ROOM_ID) + "/units/unit_" + String(unit);
-    Serial.print("Path: "); Serial.print(unitPath); Serial.println("/ac_command -> IDLE");
-    bool success1 = Firebase.RTDB.setString(&fbdo, unitPath + "/ac_command", "IDLE");
-    Serial.print("Path: "); Serial.print(unitPath); Serial.print("/ac -> "); Serial.println((cmd == "ON") ? "true" : "false");
-    bool success2 = Firebase.RTDB.setBool(&fbdo, unitPath + "/ac", (cmd == "ON"));
-    Serial.print("Firebase update: "); Serial.println((success1 && success2) ? "✓ Success" : "✗ Failed");
+    Firebase.RTDB.setString(&fbdo, unitPath + "/ac_command", "IDLE");
+    Firebase.RTDB.setBool(&fbdo, unitPath + "/ac", (cmd == "ON"));
   }
-  
-  Serial.println("Manual control complete");
+  Serial.println("✓ Firebase updated");
 }
 
 void handleIRReceiver() {

@@ -1323,6 +1323,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
 
     // Reconstruct usage hours from history data for dates where AC state is available
+    // Also extracts average targetTemp for accurate historical cost calculations
 
     async function reconstructUsageFromHistory(room, dateKey) {
 
@@ -1342,7 +1343,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                 console.log(`[ReconstructUsage] No history data found for ${room} on ${dateKey}`);
 
-                return 0;
+                return { hours: 0, targetTemp: null };
 
             }
 
@@ -1357,6 +1358,12 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
             let acOnCount = 0;
 
             let entriesWithAcState = 0;
+
+            let targetTemps = [];
+
+            let targetTempUnit1 = [];
+
+            let targetTempUnit2 = [];
 
             
 
@@ -1384,6 +1391,17 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                     }
 
+                    // Extract targetTemp for cost calculation
+                    if (entry.targetTemp !== undefined && entry.targetTemp !== null) {
+                        targetTemps.push(entry.targetTemp);
+                    }
+                    if (entry.targetTemp1 !== undefined && entry.targetTemp1 !== null) {
+                        targetTempUnit1.push(entry.targetTemp1);
+                    }
+                    if (entry.targetTemp2 !== undefined && entry.targetTemp2 !== null) {
+                        targetTempUnit2.push(entry.targetTemp2);
+                    }
+
                 }
 
             });
@@ -1398,19 +1416,41 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                 console.log(`[ReconstructUsage] No entries with AC state found for ${room} on ${dateKey} - cannot reconstruct`);
 
-                return 0;
+                return { hours: 0, targetTemp: null };
 
             }
 
+            // Calculate average targetTemp from historical data
+            let avgTargetTemp = null;
+            let avgTargetTempUnit1 = null;
+            let avgTargetTempUnit2 = null;
             
+            if (targetTemps.length > 0) {
+                avgTargetTemp = targetTemps.reduce((a, b) => a + b, 0) / targetTemps.length;
+            }
+            if (targetTempUnit1.length > 0) {
+                avgTargetTempUnit1 = targetTempUnit1.reduce((a, b) => a + b, 0) / targetTempUnit1.length;
+            }
+            if (targetTempUnit2.length > 0) {
+                avgTargetTempUnit2 = targetTempUnit2.reduce((a, b) => a + b, 0) / targetTempUnit2.length;
+            }
 
-            return acOnCount; // Each hour entry represents 1 hour
+            // Return object with hours and targetTemp data
+            const result = {
+                hours: acOnCount,
+                targetTemp: avgTargetTemp,
+                targetTemp1: avgTargetTempUnit1,
+                targetTemp2: avgTargetTempUnit2
+            };
+
+            console.log(`[ReconstructUsage] ${room} on ${dateKey}: Returning ${result.hours} hours, avg targetTemp: ${result.targetTemp}`);
+            return result;
 
         } catch (error) {
 
             console.error(`[ReconstructUsage] Error reconstructing usage for ${room} on ${dateKey}:`, error);
 
-            return 0;
+            return { hours: 0, targetTemp: null };
 
         }
 
@@ -1800,6 +1840,17 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                 const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
 
+                // Get target temperature for cost calculation
+                let targetTemp;
+                if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
+                    targetTemp = {
+                        unit_1: labsData[room]?.units?.unit_1?.targetTemp,
+                        unit_2: labsData[room]?.units?.unit_2?.targetTemp
+                    };
+                } else {
+                    targetTemp = labsData[room]?.targetTemp;
+                }
+
                 
 
                 let temps = [], hums = [], totalHours = 0;
@@ -1846,7 +1897,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                 const maxHum = hums.length > 0 ? Math.max(...hums) : 'N/A';
 
-                const cost = AirconCostCalculator.computeAirconCost(roomConfig, totalHours, ratePerKwh);
+                const cost = AirconCostCalculator.computeAirconCost(roomConfig, totalHours, ratePerKwh, targetTemp);
 
                 
 
@@ -1890,6 +1941,17 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                     const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
 
+                    // Get target temperature for cost calculation
+                    let targetTemp;
+                    if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
+                        targetTemp = {
+                            unit_1: labsData[room]?.units?.unit_1?.targetTemp,
+                            unit_2: labsData[room]?.units?.unit_2?.targetTemp
+                        };
+                    } else {
+                        targetTemp = labsData[room]?.targetTemp;
+                    }
+
                     
 
                     const dayData = historicalData[room][dateStr];
@@ -1920,7 +1982,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                     const hours = getUsageHoursForDate(room, dateStr);
 
-                    const cost = AirconCostCalculator.computeAirconCost(roomConfig, hours, ratePerKwh);
+                    const cost = AirconCostCalculator.computeAirconCost(roomConfig, hours, ratePerKwh, targetTemp);
 
                     
 
@@ -3900,6 +3962,17 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             let hours = 0;
 
+            // Get target temperature for cost calculation
+            const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
+            let targetTemp;
+            if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
+                targetTemp = {
+                    unit_1: labsData[room]?.units?.unit_1?.targetTemp,
+                    unit_2: labsData[room]?.units?.unit_2?.targetTemp
+                };
+            } else {
+                targetTemp = labsData[room]?.targetTemp;
+            }
 
 
             // Use the same data source as Daily Usage Report
@@ -3924,9 +3997,22 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                     const dateKey = currentDate.toISOString().split('T')[0];
 
-                    hours = await reconstructUsageFromHistory(room, dateKey);
+                    const reconstruction = await reconstructUsageFromHistory(room, dateKey);
+                    hours = reconstruction.hours;
+                    
+                    // Use historical targetTemp if available, otherwise fall back to current
+                    if (reconstruction.targetTemp !== null && reconstruction.targetTemp !== undefined) {
+                        if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
+                            targetTemp = {
+                                unit_1: reconstruction.targetTemp1 || targetTemp.unit_1,
+                                unit_2: reconstruction.targetTemp2 || targetTemp.unit_2
+                            };
+                        } else {
+                            targetTemp = reconstruction.targetTemp;
+                        }
+                    }
 
-                    console.log(`[loadDayView] ${room} (today): reconstructed ${hours} hours from history`);
+                    console.log(`[loadDayView] ${room} (today): reconstructed ${hours} hours from history, targetTemp: ${targetTemp}`);
 
                 } else {
 
@@ -3952,9 +4038,22 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                     const dateKey = currentDate.toISOString().split('T')[0];
 
-                    hours = await reconstructUsageFromHistory(room, dateKey);
+                    const reconstruction = await reconstructUsageFromHistory(room, dateKey);
+                    hours = reconstruction.hours;
+                    
+                    // Use historical targetTemp if available, otherwise fall back to current
+                    if (reconstruction.targetTemp !== null && reconstruction.targetTemp !== undefined) {
+                        if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
+                            targetTemp = {
+                                unit_1: reconstruction.targetTemp1 || targetTemp.unit_1,
+                                unit_2: reconstruction.targetTemp2 || targetTemp.unit_2
+                            };
+                        } else {
+                            targetTemp = reconstruction.targetTemp;
+                        }
+                    }
 
-                    console.log(`[loadDayView] ${room} on ${dateLabel}: reconstructed ${hours} hours from history`);
+                    console.log(`[loadDayView] ${room} on ${dateLabel}: reconstructed ${hours} hours from history, targetTemp: ${targetTemp}`);
 
                 } else {
 
@@ -3974,7 +4073,9 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                     hours,
 
-                    ratePerKwh
+                    ratePerKwh,
+
+                    targetTemp
 
                 );
 
@@ -4054,7 +4155,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                 const prevHours = dailyAnalytics.data[room]?.[prevDateLabel] || 0;
 
-                prevValue = AirconCostCalculator.computeAirconCost(airconConfig[room], prevHours, ratePerKwh);
+                prevValue = AirconCostCalculator.computeAirconCost(airconConfig[room], prevHours, ratePerKwh, targetTemp);
 
             } else if (currentMetric === 'usage') {
 
@@ -4221,8 +4322,17 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                 if (currentMetric === 'cost') {
 
                     const hours = dailyAnalytics.data[room]?.[prevDateLabel] || 0;
-
-                    previousValue += AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh);
+                    const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
+                    let targetTemp;
+                    if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
+                        targetTemp = {
+                            unit_1: labsData[room]?.units?.unit_1?.targetTemp,
+                            unit_2: labsData[room]?.units?.unit_2?.targetTemp
+                        };
+                    } else {
+                        targetTemp = labsData[room]?.targetTemp;
+                    }
+                    previousValue += AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh, targetTemp);
 
                 } else if (currentMetric === 'usage') {
 
@@ -4295,8 +4405,17 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                     if (currentMetric === 'cost') {
 
                         const hours = dailyAnalytics.data[room]?.[dateLabel] || 0;
-
-                        previousValue += AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh);
+                        const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
+                        let targetTemp;
+                        if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
+                            targetTemp = {
+                                unit_1: labsData[room]?.units?.unit_1?.targetTemp,
+                                unit_2: labsData[room]?.units?.unit_2?.targetTemp
+                            };
+                        } else {
+                            targetTemp = labsData[room]?.targetTemp;
+                        }
+                        previousValue += AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh, targetTemp);
 
                     } else if (currentMetric === 'usage') {
 
@@ -4369,8 +4488,17 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                     if (currentMetric === 'cost') {
 
                         const hours = dailyAnalytics.data[room]?.[dateLabel] || 0;
-
-                        previousValue += AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh);
+                        const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
+                        let targetTemp;
+                        if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
+                            targetTemp = {
+                                unit_1: labsData[room]?.units?.unit_1?.targetTemp,
+                                unit_2: labsData[room]?.units?.unit_2?.targetTemp
+                            };
+                        } else {
+                            targetTemp = labsData[room]?.targetTemp;
+                        }
+                        previousValue += AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh, targetTemp);
 
                     } else if (currentMetric === 'usage') {
 
@@ -4443,8 +4571,17 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                         if (currentMetric === 'cost') {
 
                             const hours = dailyAnalytics.data[room]?.[dateLabel] || 0;
-
-                            previousValue += AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh);
+                            const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
+                            let targetTemp;
+                            if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
+                                targetTemp = {
+                                    unit_1: labsData[room]?.units?.unit_1?.targetTemp,
+                                    unit_2: labsData[room]?.units?.unit_2?.targetTemp
+                                };
+                            } else {
+                                targetTemp = labsData[room]?.targetTemp;
+                            }
+                            previousValue += AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh, targetTemp);
 
                         } else if (currentMetric === 'usage') {
 
@@ -4759,15 +4896,21 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                 let value = 0;
 
                 if (currentMetric === 'cost') {
-
+                    const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
+                    let targetTemp;
+                    if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
+                        targetTemp = {
+                            unit_1: labsData[room]?.units?.unit_1?.targetTemp,
+                            unit_2: labsData[room]?.units?.unit_2?.targetTemp
+                        };
+                    } else {
+                        targetTemp = labsData[room]?.targetTemp;
+                    }
                     value = AirconCostCalculator.computeAirconCost(
-
                         airconConfig[room],
-
                         hours,
-
-                        ratePerKwh
-
+                        ratePerKwh,
+                        targetTemp
                     );
 
                 } else if (currentMetric === 'usage') {
@@ -4867,10 +5010,18 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                 let value = 0;
 
                 if (currentMetric === 'cost') {
-
                     const hours = dailyAnalytics.data[room]?.[dateLabel] || 0;
-
-                    value = AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh);
+                    const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
+                    let targetTemp;
+                    if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
+                        targetTemp = {
+                            unit_1: labsData[room]?.units?.unit_1?.targetTemp,
+                            unit_2: labsData[room]?.units?.unit_2?.targetTemp
+                        };
+                    } else {
+                        targetTemp = labsData[room]?.targetTemp;
+                    }
+                    value = AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh, targetTemp);
 
                 } else if (currentMetric === 'usage') {
 
@@ -5069,15 +5220,21 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                 let value = 0;
 
                 if (currentMetric === 'cost') {
-
+                    const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
+                    let targetTemp;
+                    if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
+                        targetTemp = {
+                            unit_1: labsData[room]?.units?.unit_1?.targetTemp,
+                            unit_2: labsData[room]?.units?.unit_2?.targetTemp
+                        };
+                    } else {
+                        targetTemp = labsData[room]?.targetTemp;
+                    }
                     value = AirconCostCalculator.computeAirconCost(
-
                         airconConfig[room],
-
                         hours,
-
-                        ratePerKwh
-
+                        ratePerKwh,
+                        targetTemp
                     );
 
                 } else if (currentMetric === 'usage') {
@@ -5179,10 +5336,18 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                 let value = 0;
 
                 if (currentMetric === 'cost') {
-
                     const hours = dailyAnalytics.data[room]?.[dateLabel] || 0;
-
-                    value = AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh);
+                    const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
+                    let targetTemp;
+                    if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
+                        targetTemp = {
+                            unit_1: labsData[room]?.units?.unit_1?.targetTemp,
+                            unit_2: labsData[room]?.units?.unit_2?.targetTemp
+                        };
+                    } else {
+                        targetTemp = labsData[room]?.targetTemp;
+                    }
+                    value = AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh, targetTemp);
 
                 } else if (currentMetric === 'usage') {
 
@@ -5381,15 +5546,21 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
 
                     if (currentMetric === 'cost') {
-
+                        const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
+                        let targetTemp;
+                        if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
+                            targetTemp = {
+                                unit_1: labsData[room]?.units?.unit_1?.targetTemp,
+                                unit_2: labsData[room]?.units?.unit_2?.targetTemp
+                            };
+                        } else {
+                            targetTemp = labsData[room]?.targetTemp;
+                        }
                         monthTotal += AirconCostCalculator.computeAirconCost(
-
                             airconConfig[room],
-
                             hours,
-
-                            ratePerKwh
-
+                            ratePerKwh,
+                            targetTemp
                         );
 
                     } else if (currentMetric === 'usage') {
@@ -5499,10 +5670,18 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                     let value = 0;
 
                     if (currentMetric === 'cost') {
-
+                        const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
+                        let targetTemp;
+                        if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
+                            targetTemp = {
+                                unit_1: labsData[room]?.units?.unit_1?.targetTemp,
+                                unit_2: labsData[room]?.units?.unit_2?.targetTemp
+                            };
+                        } else {
+                            targetTemp = labsData[room]?.targetTemp;
+                        }
                         const hours = dailyAnalytics.data[room]?.[dateLabel] || 0;
-
-                        value = AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh);
+                        value = AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh, targetTemp);
 
                     } else if (currentMetric === 'usage') {
 
@@ -5677,11 +5856,20 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                         
 
                         if (currentMetric === 'cost') {
-
+                            const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
+                            let targetTemp;
+                            if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
+                                targetTemp = {
+                                    unit_1: labsData[room]?.units?.unit_1?.targetTemp,
+                                    unit_2: labsData[room]?.units?.unit_2?.targetTemp
+                                };
+                            } else {
+                                targetTemp = labsData[room]?.targetTemp;
+                            }
                             console.log('[Cost Calculator] Computing cost for', { room, dateLabel, hours, ratePerKwh });
                             console.log('[Cost Calculator] airconConfig[room]:', airconConfig[room]);
 
-                            roomTotal += AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh);
+                            roomTotal += AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh, targetTemp);
 
                             console.log('[Cost Calculator] Cost for', { room, dateLabel, hours, ratePerKwh }, 'is', roomTotal);
 
