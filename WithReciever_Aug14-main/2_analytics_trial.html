@@ -980,6 +980,14 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                 console.log(`[Automation] Fetching: ${path}`);
                 try {
                     const snapshot = await db.ref(path).once('value');
+                    console.log(`[Automation] Fetching: ${path}`);
+                    if (snapshot.exists()) {
+                        console.log(`[Automation] ${path} - Data exists: true`);
+                        console.log(`[Automation] ${path} - Hours in data:`, Object.keys(snapshot.val() || {}));
+                    } else {
+                        console.log(`[Automation] ${path} - Data exists: false`);
+                    }
+                    
                     const dayData = snapshot.val();
                     
                     console.log(`[Automation] ${path} - Data exists: ${!!dayData}`);
