@@ -122,8 +122,32 @@ void setup() {
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
   }
+  Serial.println("WiFi connected");
 
+  // Configure NTP time
   configTime(8 * 3600, 0, "pool.ntp.org", "time.nist.gov");
+  Serial.println("Waiting for NTP time sync...");
+  
+  // Wait for time to be set (with timeout)
+  int timeout = 0;
+  while (time(nullptr) < 1000000000 && timeout < 20) {
+    Serial.print(".");
+    delay(1000);
+    timeout++;
+  }
+  Serial.println();
+  
+  time_t now = time(nullptr);
+  Serial.print("Current time (epoch): ");
+  Serial.println(now);
+  
+  if (now < 1000000000) {
+    Serial.println("WARNING: NTP time sync failed! Time may be incorrect.");
+  } else {
+    struct tm* timeinfo = localtime(&now);
+    Serial.print("NTP time synced: ");
+    Serial.print(asctime(timeinfo));
+  }
 
   config.signer.tokens.legacy_token = DATABASE_SECRET;
   config.database_url = DATABASE_URL;
