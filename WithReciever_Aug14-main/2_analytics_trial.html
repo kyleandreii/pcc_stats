@@ -1821,16 +1821,37 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
             console.log('[Export] Historical data fetched:', historicalData);
 
             
-
+            // EXPORT METADATA HEADER
+            csv += '====================================\n';
+            csv += 'PCC STATS ANALYTICS DATA EXPORT\n';
+            csv += '====================================\n';
+            csv += `Export Date: ${new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' })}\n`;
+            csv += `Date Range: ${fromDateStr} to ${toDateStr}\n`;
+            csv += `Electricity Rate: ₱${ratePerKwh.toFixed(4)}/kWh\n`;
+            csv += `Total Rooms: ${labKeys.length}\n`;
+            csv += '\n';
+            
+            // COST CALCULATION EXPLANATION
+            csv += '====================================\n';
+            csv += 'COST CALCULATION METHODOLOGY\n';
+            csv += '====================================\n';
+            csv += 'Cost = (Effective Watts / 1000) × AC Hours × Electricity Rate\n';
+            csv += '\n';
+            csv += 'Effective Watts are calculated using temperature-based interpolation:\n';
+            csv += '- Uses calibration points (default: 16°C = 3795W, 30°C = 253W)\n';
+            csv += '- Interpolates power based on AC target temperature\n';
+            csv += '- Lower target temp = Higher power consumption\n';
+            csv += '- Higher target temp = Lower power consumption\n';
+            csv += '\n';
+            csv += 'Example: At 23°C target, effective watts ≈ 2,202W\n';
+            csv += 'Example: At 25°C target, effective watts ≈ 1,646W\n';
+            csv += '\n';
+            
             // PER-ROOM SUMMARY STATISTICS
-
             csv += '====================================\n';
-
             csv += 'PER-ROOM SUMMARY STATISTICS\n';
-
             csv += '====================================\n';
-
-            csv += 'Room,Min Temp (°C),Max Temp (°C),Min Humidity (%),Max Humidity (%),Total AC Hours,Total Cost (PHP)\n';
+            csv += 'Room,Avg Temp (°C),Min Temp (°C),Max Temp (°C),Avg Humidity (%),Min Humidity (%),Max Humidity (%),Avg Target Temp (°C),Avg Effective Watts,Total AC Hours,Total Cost (PHP)\n';
 
             
 
@@ -1852,11 +1873,9 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                 }
 
                 
-
-                let temps = [], hums = [], totalHours = 0;
+                let temps = [], hums = [], targetTemps = [], effectiveWatts = [], totalHours = 0;
 
                 
-
                 for (const dateStr of dateArray) {
 
                     const dayData = historicalData[room][dateStr];
@@ -1872,6 +1891,17 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                                 temps.push(parseFloat(entry.temperature) || 0);
 
                                 hums.push(parseFloat(entry.humidity) || 0);
+                                
+                                // Extract targetTemp from history if available
+                                if (entry.targetTemp !== undefined && entry.targetTemp !== null) {
+                                    targetTemps.push(parseFloat(entry.targetTemp));
+                                }
+                                // Calculate effective watts for this entry
+                                if (entry.targetTemp !== undefined && entry.targetTemp !== null) {
+                                    const entryTargetTemp = parseFloat(entry.targetTemp);
+                                    const entryEffectiveWatts = AirconCostCalculator.getEffectiveWatts(roomConfig, entryTargetTemp);
+                                    effectiveWatts.push(entryEffectiveWatts);
+                                }
 
                             }
 
@@ -1888,30 +1918,28 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                 }
 
                 
-
+                const avgTemp = temps.length > 0 ? (temps.reduce((a, b) => a + b, 0) / temps.length) : 'N/A';
                 const minTemp = temps.length > 0 ? Math.min(...temps) : 'N/A';
-
                 const maxTemp = temps.length > 0 ? Math.max(...temps) : 'N/A';
-
+                const avgHum = hums.length > 0 ? (hums.reduce((a, b) => a + b, 0) / hums.length) : 'N/A';
                 const minHum = hums.length > 0 ? Math.min(...hums) : 'N/A';
-
                 const maxHum = hums.length > 0 ? Math.max(...hums) : 'N/A';
+                const avgTargetTemp = targetTemps.length > 0 ? (targetTemps.reduce((a, b) => a + b, 0) / targetTemps.length) : (targetTemp || 'N/A');
+                const avgEffectiveWatts = effectiveWatts.length > 0 ? (effectiveWatts.reduce((a, b) => a + b, 0) / effectiveWatts.length) : 'N/A';
 
                 const cost = AirconCostCalculator.computeAirconCost(roomConfig, totalHours, ratePerKwh, targetTemp);
 
                 
-
+                const avgTempStr = typeof avgTemp === 'number' ? avgTemp.toFixed(1) : avgTemp;
                 const minTempStr = typeof minTemp === 'number' ? minTemp.toFixed(1) : minTemp;
-
                 const maxTempStr = typeof maxTemp === 'number' ? maxTemp.toFixed(1) : maxTemp;
-
+                const avgHumStr = typeof avgHum === 'number' ? Math.round(avgHum) : avgHum;
                 const minHumStr = typeof minHum === 'number' ? Math.round(minHum) : minHum;
-
                 const maxHumStr = typeof maxHum === 'number' ? Math.round(maxHum) : maxHum;
-
+                const avgTargetTempStr = typeof avgTargetTemp === 'number' ? avgTargetTemp.toFixed(1) : avgTargetTemp;
+                const avgEffectiveWattsStr = typeof avgEffectiveWatts === 'number' ? Math.round(avgEffectiveWatts) : avgEffectiveWatts;
                 
-
-                csv += `${displayName},${minTempStr},${maxTempStr},${minHumStr},${maxHumStr},${totalHours.toFixed(2)},${cost.toFixed(2)}\n`;
+                csv += `${displayName},${avgTempStr},${minTempStr},${maxTempStr},${avgHumStr},${minHumStr},${maxHumStr},${avgTargetTempStr},${avgEffectiveWattsStr},${totalHours.toFixed(2)},${cost.toFixed(2)}\n`;
 
             }
 
@@ -1925,7 +1953,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             csv += '====================================\n';
 
-            csv += 'Date,Room,AC Hours,Cost (PHP)\n';
+            csv += 'Date,Room,Avg Temp (°C),Avg Humidity (%),Avg Target Temp (°C),Avg Effective Watts,AC Hours,Cost (PHP)\n';
 
             
 
@@ -1956,10 +1984,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                     const dayData = historicalData[room][dateStr];
 
-                    let temps = [], hums = [];
-
+                    let temps = [], hums = [], targetTemps = [], effectiveWatts = [];
                     
-
                     if (dayData) {
 
                         Object.keys(dayData).forEach(hour => {
@@ -1971,22 +1997,39 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                                 temps.push(parseFloat(entry.temperature) || 0);
 
                                 hums.push(parseFloat(entry.humidity) || 0);
+                                
+                                // Extract targetTemp from history if available
+                                if (entry.targetTemp !== undefined && entry.targetTemp !== null) {
+                                    targetTemps.push(parseFloat(entry.targetTemp));
+                                }
+                                // Calculate effective watts for this entry
+                                if (entry.targetTemp !== undefined && entry.targetTemp !== null) {
+                                    const entryTargetTemp = parseFloat(entry.targetTemp);
+                                    const entryEffectiveWatts = AirconCostCalculator.getEffectiveWatts(roomConfig, entryTargetTemp);
+                                    effectiveWatts.push(entryEffectiveWatts);
+                                }
 
                             }
 
                         });
 
                     }
-
                     
+                    const avgTemp = temps.length > 0 ? (temps.reduce((a, b) => a + b, 0) / temps.length) : 'N/A';
+                    const avgHum = hums.length > 0 ? (hums.reduce((a, b) => a + b, 0) / hums.length) : 'N/A';
+                    const avgTargetTemp = targetTemps.length > 0 ? (targetTemps.reduce((a, b) => a + b, 0) / targetTemps.length) : (targetTemp || 'N/A');
+                    const avgEffectiveWatts = effectiveWatts.length > 0 ? (effectiveWatts.reduce((a, b) => a + b, 0) / effectiveWatts.length) : 'N/A';
 
                     const hours = getUsageHoursForDate(room, dateStr);
 
                     const cost = AirconCostCalculator.computeAirconCost(roomConfig, hours, ratePerKwh, targetTemp);
-
                     
+                    const avgTempStr = typeof avgTemp === 'number' ? avgTemp.toFixed(1) : avgTemp;
+                    const avgHumStr = typeof avgHum === 'number' ? Math.round(avgHum) : avgHum;
+                    const avgTargetTempStr = typeof avgTargetTemp === 'number' ? avgTargetTemp.toFixed(1) : avgTargetTemp;
+                    const avgEffectiveWattsStr = typeof avgEffectiveWatts === 'number' ? Math.round(avgEffectiveWatts) : avgEffectiveWatts;
 
-                    csv += `${dateDisplay},${displayName},${hours.toFixed(2)},${cost.toFixed(2)}\n`;
+                    csv += `${dateDisplay},${displayName},${avgTempStr},${avgHumStr},${avgTargetTempStr},${avgEffectiveWattsStr},${hours.toFixed(2)},${cost.toFixed(2)}\n`;
 
                 }
 
@@ -2006,10 +2049,13 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             csv += 'Data only available from implementation date onward.\n';
 
-            csv += 'Dates with no data are noted as "NO DATA".\n\n';
+            csv += 'Dates with no data are noted as "NO DATA".\n';
+
+            csv += 'Target Temp: AC target temperature setting\n';
+
+            csv += 'Effective Watts: Temperature-based power consumption (interpolated)\n\n';
 
             
-
             for (let i = 0; i < dateArray.length; i++) {
 
                 const dateStr = dateArray[i];
@@ -2018,7 +2064,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                 csv += `--- ${dateDisplay} ---\n`;
 
-                csv += 'Room,Time,Temperature (°C),Humidity (%),Status\n';
+                csv += 'Room,Time,Temperature (°C),Humidity (%),Target Temp (°C),Effective Watts,Status\n';
 
                 
 
@@ -2045,12 +2091,18 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                                 const hum = parseFloat(entry.humidity) || 0;
 
                                 const status = entry.status || 'NORMAL';
+                                
+                                const targetTemp = entry.targetTemp !== undefined && entry.targetTemp !== null ? parseFloat(entry.targetTemp) : 'N/A';
+                                let effectiveWatts = 'N/A';
+                                if (targetTemp !== 'N/A') {
+                                    effectiveWatts = Math.round(AirconCostCalculator.getEffectiveWatts(roomConfig, targetTemp));
+                                }
 
                                 // Format time as full date + 12-hour time with AM/PM
 
                                 const formattedTime = formatDateTimeForTooltip(dateStr, hour);
 
-                                csv += `${displayName},${formattedTime},${temp.toFixed(1)},${hum.toFixed(1)},${status}\n`;
+                                csv += `${displayName},${formattedTime},${temp.toFixed(1)},${hum.toFixed(1)},${targetTemp !== 'N/A' ? targetTemp.toFixed(1) : 'N/A'},${effectiveWatts !== 'N/A' ? effectiveWatts : 'N/A'},${status}\n`;
 
                                 hasData = true;
 
