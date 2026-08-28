@@ -435,15 +435,21 @@ void loop() {
       }
       // Log automation events (will be populated when automation actions occur)
       if (lastAutomationEvent.length() > 0) {
+        Serial.print("[History] Logging automation event: "); Serial.println(lastAutomationEvent);
+        Serial.print("[History] Event type: "); Serial.println(lastAutomationEventType);
+        time_t now = time(nullptr);
+        Serial.print("[History] Event time (epoch): "); Serial.println((unsigned long)now * 1000);
+        
         historyData.add("automationEvent", lastAutomationEvent);
         historyData.add("automationEventType", lastAutomationEventType);
         // Use real timestamp (milliseconds since epoch) instead of millis()
-        time_t now = time(nullptr);
         historyData.add("automationEventTime", (unsigned long)now * 1000);
         // Clear the event after logging to prevent duplicate logging
         lastAutomationEvent = "";
         lastAutomationEventType = "";
         lastAutomationEventTime = 0;
+      } else {
+        Serial.println("[History] No automation event to log");
       }
       Firebase.RTDB.setJSON(&fbdo, historyPath.c_str(), &historyData);
     }

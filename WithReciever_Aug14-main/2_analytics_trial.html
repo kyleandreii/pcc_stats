@@ -939,9 +939,13 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
     }
 
     async function loadAutomationData() {
+        console.log('[Automation] Loading automation data...');
         const fromDateStr = document.getElementById('export-date-from').value;
         const toDateStr = document.getElementById('export-date-to').value;
         const roomFilter = document.getElementById('automation-room-filter').value;
+        
+        console.log(`[Automation] Date range: ${fromDateStr} to ${toDateStr}`);
+        console.log(`[Automation] Room filter: ${roomFilter}`);
         
         const fromDate = new Date(fromDateStr);
         const toDate = new Date(toDateStr);
@@ -954,8 +958,13 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
             currentDate.setDate(currentDate.getDate() + 1);
         }
         
+        console.log(`[Automation] Date array:`, dateArray);
+        
         const roomKeys = Object.keys(labsData || {}).filter(key => key.startsWith("Room_")).sort();
         const filteredRooms = roomFilter === 'all' ? roomKeys : [roomFilter];
+        
+        console.log(`[Automation] Available rooms:`, roomKeys);
+        console.log(`[Automation] Filtered rooms:`, filteredRooms);
         
         const automationEvents = {};
         
@@ -968,14 +977,19 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
             
             for (const dateStr of dateArray) {
                 const path = `/history/${room}/${dateStr}`;
+                console.log(`[Automation] Fetching: ${path}`);
                 try {
                     const snapshot = await db.ref(path).once('value');
                     const dayData = snapshot.val();
+                    
+                    console.log(`[Automation] ${path} - Data exists: ${!!dayData}`);
                     
                     if (dayData) {
                         Object.keys(dayData).forEach(hour => {
                             const entry = dayData[hour];
                             if (entry) {
+                                console.log(`[Automation] ${path}/${hour} - Has automationEvent: ${!!entry.automationEvent}, automationEventType: ${entry.automationEventType}, automationEventTime: ${entry.automationEventTime}`);
+                                
                                 // Check for automation events
                                 if (entry.automationEvent && entry.automationEventType && entry.automationEventTime) {
                                     const timestamp = parseInt(entry.automationEventTime);
@@ -990,6 +1004,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                                         } else {
                                             // New format: epoch time in milliseconds
                                             eventTime = new Date(timestamp);
+                                            console.log(`[Automation] Valid event time: ${eventTime.toISOString()}`);
                                             
                                             if (eventTime >= fromDate && eventTime <= toDate) {
                                                 const eventType = entry.automationEventType;
@@ -1000,6 +1015,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                                                         time: eventTime,
                                                         description: entry.automationEvent
                                                     });
+                                                    console.log(`[Automation] Added ${eventType} event for ${room}`);
                                                 }
                                             }
                                         }
@@ -1017,6 +1033,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                                                 time: eventTime,
                                                 description: "Automation enabled (legacy)"
                                             });
+                                            console.log(`[Automation] Added legacy automation event for ${room}`);
                                         }
                                     }
                                 }
@@ -1028,6 +1045,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                 }
             }
         }
+        
+        console.log('[Automation] Final automation events:', automationEvents);
         
         // Update chart with different datasets for each automation type
         const datasets = [];
@@ -1055,6 +1074,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
             }
         }
         
+        console.log(`[Automation] Total datasets: ${datasets.length}`);
         automationChart.data.datasets = datasets;
         automationChart.update();
         
