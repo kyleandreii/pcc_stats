@@ -90,6 +90,7 @@ unsigned long lastIRSendMillis = 0;
 unsigned long lastSerialLogMillis = 0;
 
 void handleACCommand(String cmd, int unit = 0);
+void logAutomationEventToHistory();
 void updateOLED(float currentTemp);
 void runAutomation(float temp, float humidity);
 void handleIRReceiver();
@@ -457,29 +458,6 @@ void loop() {
       if (automationEnabled && automationStartTime > 0) {
         historyData.add("automationStartTime", automationStartTime / 1000); // Store as seconds since boot
       }
-      // Log automation events (will be populated when automation actions occur)
-      if (lastAutomationEvent.length() > 0) {
-        Serial.print("[History] Logging automation event: "); Serial.println(lastAutomationEvent);
-        Serial.print("[History] Event type: "); Serial.println(lastAutomationEventType);
-        
-        // Use local epoch time in seconds (to avoid 32-bit overflow with milliseconds)
-        time_t now = time(nullptr);
-        
-        Serial.print("[History] Event time (epoch s): "); Serial.println(now);
-        
-        historyData.add("automationEvent", lastAutomationEvent);
-        historyData.add("automationEventType", lastAutomationEventType);
-        historyData.add("automationEventTime", now);
-        
-        Serial.println("[History] Using local epoch time (seconds) for event time");
-        
-        // Clear the event after logging to prevent duplicate logging
-        lastAutomationEvent = "";
-        lastAutomationEventType = "";
-        lastAutomationEventTime = 0;
-      } else {
-        Serial.println("[History] No automation event to log");
-      }
       
       Serial.print("[History] Writing to Firebase path: "); Serial.println(historyPath.c_str());
       bool historySuccess = Firebase.RTDB.setJSON(&fbdo, historyPath.c_str(), &historyData);
@@ -567,9 +545,11 @@ void handleACCommand(String cmd, int unit) {
     Serial.println("✓ TEMP_DOWN sent on pin " + String(pin));
   } else {
     Serial.println("⚠️ Unknown command: " + cmd);
-    return;
   }
-
+  
+  // Log automation event immediately to Firebase history
+  logAutomationEventToHistory();
+  
   // Update Firebase based on unit
   if (unit == 0) {
     // Single unit mode
@@ -581,7 +561,48 @@ void handleACCommand(String cmd, int unit) {
     Firebase.RTDB.setString(&fbdo, unitPath + "/ac_command", "IDLE");
     Firebase.RTDB.setBool(&fbdo, unitPath + "/ac", (cmd == "ON"));
   }
+  
   Serial.println("✓ Firebase updated");
+}
+
+// Function to log automation event to Firebase history immediately
+void logAutomationEventToHistory() {
+  if (lastAutomationEvent.length() > 0) {
+    Serial.print("[History] Logging automation event: "); Serial.println(lastAutomationEvent);
+    Serial.print("[History] Event type: "); Serial.println(lastAutomationEventType);
+    
+    // Use local epoch time in seconds (to avoid 32-bit overflow with milliseconds)
+    time_t now = time(nullptr);
+    
+    Serial.print("[History] Event time (epoch s): "); Serial.println(now);
+    
+    // Get current hour for Firebase path
+    struct tm timeinfo;
+    localtime_r(&now, &timeinfo);
+    char dateStr[11];
+    char hourStr[3];
+    strftime(dateStr, sizeof(dateStr), "%Y-%m-%d", &timeinfo);
+    strftime(hourStr, sizeof(hourStr), "%H", &timeinfo);
+    
+    String historyPath = "/history/" + String(ROOM_ID) + "/" + String(dateStr) + "/" + String(hourStr);
+    
+    FirebaseJson historyData;
+    historyData.add("automationEvent", lastAutomationEvent);
+    historyData.add("automationEventType", lastAutomationEventType);
+    historyData.add("automationEventTime", now);
+    
+    Serial.print("[History] Writing to Firebase path: "); Serial.println(historyPath.c_str());
+    bool historySuccess = Firebase.RTDB.setJSON(&fbdo, historyPath.c_str(), &historyData);
+    Serial.print("[History] Firebase write: "); Serial.println(historySuccess ? "success" : "failed");
+    if (!historySuccess) {
+      Serial.print("[History] Error: "); Serial.println(fbdo.errorReason());
+    }
+    
+    // Clear the event after logging
+    lastAutomationEvent = "";
+    lastAutomationEventType = "";
+    lastAutomationEventTime = 0;
+  }
 }
 
 void handleIRReceiver() {
