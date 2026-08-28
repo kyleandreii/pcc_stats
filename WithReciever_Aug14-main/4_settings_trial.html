@@ -754,7 +754,11 @@
                 const newTarget = snapshot.val();
                 console.log(`[Settings] ${roomId} targetTemp updated:`, newTarget);
                 if (newTarget !== null) {
-                    document.getElementById('manual-temp-val').innerText = newTarget;
+                    const el = document.getElementById('manual-temp-val');
+                    // Only update if not currently being edited by user
+                    if (el && document.activeElement !== el) {
+                        el.innerText = newTarget;
+                    }
                 }
             });
             targetTempListeners[roomId][singlePath] = true;
@@ -844,11 +848,20 @@
             const safeUpdate = (elementId, value) => {
                 const el = document.getElementById(elementId);
                 if (el && document.activeElement !== el) {
-                    el.value = value || "";
+                    // Only update if value is not null/undefined
+                    if (value !== null && value !== undefined) {
+                        el.value = value;
+                    }
                 }
             };
 
-            safeUpdate('input-min', thresholds.minTemp);
+            // Load threshold values from Firebase
+            if (thresholds && thresholds.minTemp !== undefined) {
+                safeUpdate('input-min', thresholds.minTemp);
+            }
+            if (thresholds && thresholds.maxTemp !== undefined) {
+                safeUpdate('input-max', thresholds.maxTemp);
+            }
             safeUpdate('input-building', specs.building);
             safeUpdate('input-floor', specs.floor);
             safeUpdate('input-ac-type', specs.acType || "non_inverter");
