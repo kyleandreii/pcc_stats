@@ -1105,28 +1105,40 @@
                     if (selectedRoom) {
                         const firebasePath = `${selectedRoom}/automation/enabled`;
                         console.log(`[Automation Toggle] Updating Firebase path: ${firebasePath} to ${newState}`);
-                        db.ref(firebasePath).set(newState)
-                            .then(() => {
-                                console.log(`[Automation Toggle] Success: Automation ${newState ? 'enabled' : 'disabled'} for ${selectedRoom}`);
-                                Swal.fire({
-                                    icon: 'success',
-                                    title: newState ? 'Automation Enabled' : 'Automation Disabled',
-                                    text: `Smart automation has been ${newState ? 'enabled' : 'disabled'} for ${selectedRoom}`,
-                                    timer: 2000,
-                                    showConfirmButton: false
-                                });
-                            })
-                            .catch((error) => {
-                                console.error('[Automation Toggle] Error updating automation state:', error);
-                                Swal.fire({
-                                    icon: 'error',
-                                    title: 'Update Failed',
-                                    text: 'Failed to update automation state in Firebase. Error: ' + error.message
-                                });
-                                // Revert checkbox state on error
-                                checkbox.checked = currentState;
-                                toggleAutomation();
+                        console.log(`[Automation Toggle] Firebase db object:`, db);
+                        console.log(`[Automation Toggle] Firebase ref object:`, db.ref(firebasePath));
+
+                        // Add timeout to detect hanging operations
+                        const timeoutPromise = new Promise((_, reject) => {
+                            setTimeout(() => reject(new Error('Firebase operation timeout after 10 seconds')), 10000);
+                        });
+
+                        Promise.race([
+                            db.ref(firebasePath).set(newState),
+                            timeoutPromise
+                        ])
+                        .then(() => {
+                            console.log(`[Automation Toggle] Success: Automation ${newState ? 'enabled' : 'disabled'} for ${selectedRoom}`);
+                            Swal.fire({
+                                icon: 'success',
+                                title: newState ? 'Automation Enabled' : 'Automation Disabled',
+                                text: `Smart automation has been ${newState ? 'enabled' : 'disabled'} for ${selectedRoom}`,
+                                timer: 2000,
+                                showConfirmButton: false
                             });
+                        })
+                        .catch((error) => {
+                            console.error('[Automation Toggle] Error updating automation state:', error);
+                            console.error('[Automation Toggle] Error details:', error.message, error.code);
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Update Failed',
+                                text: 'Failed to update automation state in Firebase. Error: ' + error.message
+                            });
+                            // Revert checkbox state on error
+                            checkbox.checked = currentState;
+                            toggleAutomation();
+                        });
                     } else {
                         console.error('[Automation Toggle] No room selected!');
                         Swal.fire({
