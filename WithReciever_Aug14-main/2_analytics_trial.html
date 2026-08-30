@@ -1033,7 +1033,9 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                                                     x: eventTime.getTime(),
                                                     y: Math.random() * 9 + 0.5,
                                                     time: eventTime,
-                                                    description: entry.automationEvent
+                                                    description: entry.automationEvent,
+                                                    pastTemp: entry.automationEventPastTemp,
+                                                    updatedTemp: entry.automationEventUpdatedTemp
                                                 });
                                                 console.log(`[Automation] Added ${eventType} event for ${room}`);
                                             }
@@ -1384,12 +1386,21 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                     legend: { display: true, position: 'top', labels: { font: { weight: 'bold', size: 10 }, usePointStyle: true, pointStyle: 'circle' } },
                     tooltip: {
                         backgroundColor: 'rgba(0,0,0,0.8)',
-                        titleFont: { weight: 'bold' },
+                        titleFont: { weight: 'bold', size: 12 },
                         bodyFont: { size: 11 },
+                        padding: 12,
+                        cornerRadius: 8,
+                        displayColors: true,
                         callbacks: {
+                            title: function(context) {
+                                const dataPoint = context[0].raw;
+                                const roomName = context[0].dataset.label.split('(')[0].trim();
+                                const eventType = context[0].dataset.label.split('(')[1].replace(')', '').trim();
+                                return `${roomName} - ${eventType} Automation`;
+                            },
                             label: function(context) {
-                                const room = context.dataset.label;
-                                const time = new Date(context.parsed.x).toLocaleString('en-PH', { 
+                                const dataPoint = context.raw;
+                                const time = new Date(context.parsed.x).toLocaleString('en-PH', {
                                     timeZone: 'Asia/Manila',
                                     hour: 'numeric',
                                     minute: '2-digit',
@@ -1398,7 +1409,17 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                                     day: 'numeric'
                                 });
                                 const description = context.raw.description || '';
-                                return `${room}: ${time}\n${description}`;
+                                let tooltipLines = [`Time: ${time}`, `Description: ${description}`];
+
+                                // Add temperature data if available
+                                if (dataPoint.pastTemp !== undefined && dataPoint.pastTemp !== null) {
+                                    tooltipLines.push(`Past Temp: ${dataPoint.pastTemp.toFixed(1)}°C`);
+                                }
+                                if (dataPoint.updatedTemp !== undefined && dataPoint.updatedTemp !== null) {
+                                    tooltipLines.push(`Updated Temp: ${dataPoint.updatedTemp.toFixed(1)}°C`);
+                                }
+
+                                return tooltipLines;
                             }
                         }
                     }

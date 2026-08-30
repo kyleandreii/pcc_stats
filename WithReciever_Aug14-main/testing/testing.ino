@@ -75,6 +75,8 @@ unsigned long automationStartTime = 0;  // Timestamp when automation was last en
 String lastAutomationEvent = "";  // Description of last automation action
 String lastAutomationEventType = "";  // Type: "humidity", "temperature", "power"
 unsigned long lastAutomationEventTime = 0;  // Timestamp of last automation action
+float lastAutomationEventPastTemp = 0.0;  // Temperature before automation
+float lastAutomationEventUpdatedTemp = 0.0;  // Temperature after automation
 
 float MAX_HUMIDITY = 60.0;  // Default, will be updated from Firebase
 float MIN_HUMIDITY = 45.0;  // Default, will be updated from Firebase
@@ -98,7 +100,7 @@ unsigned long scheduleNonCompliantMinutes = 0; // Minutes AC ran outside schedul
 unsigned long totalScheduledMinutes = 0; // Total minutes in scheduled ON period
 unsigned long lastScheduleCheckMillis = 0; // Last time schedule adherence was checked
 
-void handleACCommand(String cmd, int unit = 0);
+void handleACCommand(String cmd, int unit = 0, bool isAutomation = false);
 void logAutomationEventToHistory();
 void updateOLED(float currentTemp);
 void runAutomation(float temp, float humidity);
@@ -181,6 +183,13 @@ void setup() {
     automationEnabled = fbdo.boolData();
     preferences.putBool("automationEnabled", automationEnabled);
     Serial.println("Synced automation enabled state from Firebase: " + String(automationEnabled));
+    if (automationEnabled) {
+      Serial.println("✅ [Setup] Humidity automation is ENABLED");
+    } else {
+      Serial.println("❌ [Setup] Humidity automation is DISABLED");
+    }
+  } else {
+    Serial.println("⚠️ [Setup] Failed to read automation enabled state from Firebase. HTTP code: " + String(fbdo.httpCode()));
   }
 
   Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/automation/humidityOccupiedThreshold");
@@ -223,6 +232,10 @@ void setup() {
 
   // Load schedule configuration from Firebase
   loadScheduleFromFirebase();
+
+  Serial.println("[Setup] Temperature Safety Automation: ENABLED");
+  Serial.println("[Setup] Automation Interval: " + String(AUTOMATION_INTERVAL_MS / 1000) + " seconds");
+  Serial.println("[Setup] IR Send Cooldown: " + String(IR_SEND_COOLDOWN_MS / 1000) + " seconds");
 
   FirebaseJson json;
   json.set(".sv", "timestamp");
@@ -271,11 +284,11 @@ void loop() {
         if (cmd != "IDLE") {
           #if DUAL_UNIT_MODE
           Serial.println("[Firebase] Dual unit mode - sending to both units");
-          handleACCommand(cmd, 1);
-          handleACCommand(cmd, 2);
+          handleACCommand(cmd, 1, false); // Manual command
+          handleACCommand(cmd, 2, false); // Manual command
           #else
           Serial.println("[Firebase] Single unit mode - sending to unit 0");
-          handleACCommand(cmd, 0);
+          handleACCommand(cmd, 0, false); // Manual command
           #endif
         } else {
           Serial.println("[Firebase] Ignoring IDLE command");
@@ -290,22 +303,26 @@ void loop() {
       maxTemp = stream.floatData();
       Serial.println("[Firebase] Updated maxTemp: " + String(maxTemp));
     } else if (path == "/automation/enabled" || path.indexOf("automation/enabled") >= 0) {
+      Serial.println("[Firebase Stream] automation/enabled path detected");
       bool newEnabledState = stream.boolData();
+      Serial.println("[Firebase Stream] New enabled state: " + String(newEnabledState) + ", Current state: " + String(automationEnabled));
       if (newEnabledState != automationEnabled) {
         automationEnabled = newEnabledState;
         preferences.putBool("automationEnabled", automationEnabled);
         if (automationEnabled) {
           automationStartTime = millis();
-          Serial.println("Humidity automation ENABLED at " + String(automationStartTime / 1000) + " seconds");
+          Serial.println("✅ [Firebase Stream] Humidity automation ENABLED at " + String(automationStartTime / 1000) + " seconds");
           // Log start time to Firebase for real-time display
           FirebaseJson json;
           json.set(".sv", "timestamp");
           Firebase.RTDB.setJSON(&fbdo, "/" + String(ROOM_ID) + "/automation/startTime", &json);
         } else {
-          Serial.println("Humidity automation DISABLED");
+          Serial.println("❌ [Firebase Stream] Humidity automation DISABLED");
           // Clear start time when disabled
           Firebase.RTDB.set(&fbdo, "/" + String(ROOM_ID) + "/automation/startTime", nullptr);
         }
+      } else {
+        Serial.println("[Firebase Stream] Automation state unchanged, no action needed");
       }
     } else if (path == "/automation" || path.indexOf("automation") >= 0) {
       FirebaseJson &json = stream.jsonObject();
@@ -374,9 +391,9 @@ void loop() {
         Serial.println("[Firebase] Skipping - unit-specific path handled by object handler");
         return;
       }
-      
+
       Serial.println("[Firebase] Routing to Single Unit (unit 0)");
-      handleACCommand(cmd, 0);
+      handleACCommand(cmd, 0, false); // Manual command
     } else if (path == "/units/unit_1" || path == "/units/unit_1/") {
       FirebaseJson &json = stream.jsonObject();
       FirebaseJsonData jsonData;
@@ -384,7 +401,7 @@ void loop() {
         String cmd = jsonData.stringValue;
         if (cmd != "IDLE") {
           Serial.println("[Firebase] Found ac_command in Unit 1: " + cmd);
-          handleACCommand(cmd, 1);
+          handleACCommand(cmd, 1, false); // Manual command
         }
       }
     } else if (path == "/units/unit_2" || path == "/units/unit_2/") {
@@ -395,7 +412,7 @@ void loop() {
         String cmd = jsonData.stringValue;
         Serial.println("[Firebase] Found ac_command in Unit 2: " + cmd);
         if (cmd != "IDLE") {
-          handleACCommand(cmd, 2);
+          handleACCommand(cmd, 2, false); // Manual command
         } else {
           Serial.println("[Firebase] Ignoring IDLE command");
         }
@@ -414,6 +431,29 @@ void loop() {
 
   float t = dht.readTemperature();
   float h = dht.readHumidity();
+
+  // Sensor validation - filter out unrealistic readings
+  static float lastValidTemp = 25.0; // Initialize with reasonable default
+  static float lastValidHum = 60.0;
+  
+  if (!isnan(t) && !isnan(h)) {
+    // Validate temperature range (DHT22 typically reads -40 to 80°C, but realistic indoor range is 15-35°C)
+    if (t < -10 || t > 50 || h < 0 || h > 100) {
+      Serial.print("[Sensor] Invalid reading filtered - Temp: "); Serial.print(t, 1);
+      Serial.print("°C, Humidity: "); Serial.print(h, 1); Serial.println("%");
+      // Use last valid values
+      t = lastValidTemp;
+      h = lastValidHum;
+    } else {
+      // Update last valid values
+      lastValidTemp = t;
+      lastValidHum = h;
+    }
+  } else {
+    // Sensor read failed, use last valid values
+    t = lastValidTemp;
+    h = lastValidHum;
+  }
 
   static unsigned long lastSensorLogMillis = 0;
   if (!isnan(t) && !isnan(h) && millis() - lastSensorLogMillis > 5000) {
@@ -564,14 +604,18 @@ void updateOLED(float currentTemp) {
   display.display();
 }
 
-void handleACCommand(String cmd, int unit) {
-  Serial.println("🎮 AC Command: " + cmd + " (Unit " + String(unit) + ")");
-  
-  // Log AC power automation event
-  lastAutomationEvent = "AC Power automation: " + cmd + " command sent to Unit " + String(unit);
-  lastAutomationEventType = "power";
-  lastAutomationEventTime = millis();
-  Serial.print("[Automation] Event set: "); Serial.println(lastAutomationEvent);
+void handleACCommand(String cmd, int unit, bool isAutomation) {
+  Serial.println("🎮 AC Command: " + cmd + " (Unit " + String(unit) + ") " + (isAutomation ? "[Automation]" : "[Manual]"));
+
+  // Only log automation events if this is an automated command
+  if (isAutomation) {
+    lastAutomationEvent = "AC Power automation: " + cmd + " command sent to Unit " + String(unit);
+    lastAutomationEventType = "power";
+    lastAutomationEventTime = millis();
+    Serial.print("[Automation] Event set: "); Serial.println(lastAutomationEvent);
+  } else {
+    Serial.println("[Manual] Manual command - not logging as automation event");
+  }
   
   IRsend *irSender = (unit == 1) ? &irsend2 : &irsend;
   uint16_t pin = (unit == 1) ? kIrLedPin2 : kIrLedPin;
@@ -605,10 +649,12 @@ void handleACCommand(String cmd, int unit) {
   } else {
     Serial.println("⚠️ Unknown command: " + cmd);
   }
-  
-  // Log automation event immediately to Firebase history
-  logAutomationEventToHistory();
-  
+
+  // Only log automation event if this is an automated command
+  if (isAutomation) {
+    logAutomationEventToHistory();
+  }
+
   // Update Firebase based on unit
   if (unit == 0) {
     // Single unit mode
@@ -649,18 +695,22 @@ void logAutomationEventToHistory() {
     historyData.add("automationEvent", lastAutomationEvent);
     historyData.add("automationEventType", lastAutomationEventType);
     historyData.add("automationEventTime", now);
-    
+    historyData.add("automationEventPastTemp", lastAutomationEventPastTemp);
+    historyData.add("automationEventUpdatedTemp", lastAutomationEventUpdatedTemp);
+
     Serial.print("[History] Writing to Firebase path: "); Serial.println(historyPath.c_str());
     bool historySuccess = Firebase.RTDB.setJSON(&fbdo, historyPath.c_str(), &historyData);
     Serial.print("[History] Firebase write: "); Serial.println(historySuccess ? "success" : "failed");
     if (!historySuccess) {
       Serial.print("[History] Error: "); Serial.println(fbdo.errorReason());
     }
-    
+
     // Clear the event after logging
     lastAutomationEvent = "";
     lastAutomationEventType = "";
     lastAutomationEventTime = 0;
+    lastAutomationEventPastTemp = 0.0;
+    lastAutomationEventUpdatedTemp = 0.0;
   }
 }
 
@@ -717,7 +767,8 @@ void runAutomation(float temp, float humidity) {
     }
     lastAutomationCheckMillis = millis();
 
-    Serial.print("Temperature Safety Check - Temp: "); Serial.print(temp, 1); Serial.print("°C, Min: "); Serial.print(minTemp, 1); Serial.print("°C, Max: "); Serial.print(maxTemp, 1); Serial.println("°C");
+    Serial.println("🚨 [Temperature Automation] Running safety check...");
+    Serial.print("🌡️ [Temperature Automation] Current: "); Serial.print(temp, 1); Serial.print("°C | Min: "); Serial.print(minTemp, 1); Serial.print("°C | Max: "); Serial.print(maxTemp, 1); Serial.println("°C");
 
     if (temp > maxTemp) {
       Serial.println("⚠️ TEMPERATURE SAFETY: Current temp exceeds max threshold!");
@@ -745,11 +796,16 @@ void runAutomation(float temp, float humidity) {
       #endif
       Serial.println("TEMP_DOWN sent successfully");
       lastIRSendMillis = millis();
-      // Log automation event
+      // Log automation event with temperature data
       lastAutomationEvent = "Temperature safety: TEMP_DOWN sent (temp exceeded max)";
       lastAutomationEventType = "temperature";
       lastAutomationEventTime = millis();
+      lastAutomationEventPastTemp = temp;
+      lastAutomationEventUpdatedTemp = temp - 1.0; // Assuming TEMP_DOWN reduces by 1 degree
       Serial.print("[Automation] Event set: "); Serial.println(lastAutomationEvent);
+      Serial.print("[Automation] Past temp: "); Serial.print(lastAutomationEventPastTemp, 1); Serial.print("°C, Updated temp: "); Serial.print(lastAutomationEventUpdatedTemp, 1); Serial.println("°C");
+      // Log to Firebase history
+      logAutomationEventToHistory();
       return;
     }
 
@@ -779,11 +835,16 @@ void runAutomation(float temp, float humidity) {
       #endif
       Serial.println("TEMP_UP sent successfully");
       lastIRSendMillis = millis();
-      // Log automation event
+      // Log automation event with temperature data
       lastAutomationEvent = "Temperature safety: TEMP_UP sent (temp below min)";
       lastAutomationEventType = "temperature";
       lastAutomationEventTime = millis();
+      lastAutomationEventPastTemp = temp;
+      lastAutomationEventUpdatedTemp = temp + 1.0; // Assuming TEMP_UP increases by 1 degree
       Serial.print("[Automation] Event set: "); Serial.println(lastAutomationEvent);
+      Serial.print("[Automation] Past temp: "); Serial.print(lastAutomationEventPastTemp, 1); Serial.print("°C, Updated temp: "); Serial.print(lastAutomationEventUpdatedTemp, 1); Serial.println("°C");
+      // Log to Firebase history
+      logAutomationEventToHistory();
       return;
     }
   }
@@ -810,7 +871,10 @@ void runAutomation(float temp, float humidity) {
     lastAutomationEvent = "Humidity automation: Occupied detected, setting target to max temp";
     lastAutomationEventType = "humidity";
     lastAutomationEventTime = millis();
+    lastAutomationEventPastTemp = temp;
+    lastAutomationEventUpdatedTemp = targetTemp;
     Serial.print("[Automation] Event set: "); Serial.println(lastAutomationEvent);
+    Serial.print("[Automation] Past temp: "); Serial.print(lastAutomationEventPastTemp, 1); Serial.print("°C, Updated temp: "); Serial.print(lastAutomationEventUpdatedTemp, 1); Serial.println("°C");
   } else if (humidity < MIN_HUMIDITY) {
     targetTemp = minTemp;
     Serial.println("📊 HUMIDITY AUTOMATION: Not occupied detected");
@@ -818,7 +882,10 @@ void runAutomation(float temp, float humidity) {
     lastAutomationEvent = "Humidity automation: Not occupied detected, setting target to min temp";
     lastAutomationEventType = "humidity";
     lastAutomationEventTime = millis();
+    lastAutomationEventPastTemp = temp;
+    lastAutomationEventUpdatedTemp = targetTemp;
     Serial.print("[Automation] Event set: "); Serial.println(lastAutomationEvent);
+    Serial.print("[Automation] Past temp: "); Serial.print(lastAutomationEventPastTemp, 1); Serial.print("°C, Updated temp: "); Serial.print(lastAutomationEventUpdatedTemp, 1); Serial.println("°C");
   } else {
     Serial.println("Humidity within normal range, no humidity-based action needed");
     return;
@@ -877,6 +944,8 @@ void runAutomation(float temp, float humidity) {
 
     lastIRSendMillis = millis();
     Serial.print("Humidity automation complete. Target temp: "); Serial.println(targetTemp, 1);
+    // Log humidity automation event to Firebase history
+    logAutomationEventToHistory();
   } else {
     Serial.println("Target temp matches current temp, no action needed");
   }
