@@ -776,13 +776,27 @@
 
             <!-- Automation Performance Analysis -->
             <div class="card bg-white p-8 rounded-3xl shadow-sm border border-gray-100 mb-12">
-                <div class="flex items-center gap-4 mb-8">
+                <div class="flex flex-wrap items-center gap-4 mb-6">
                     <h3 class="font-black text-gray-800 uppercase tracking-widest text-xs">Automation Performance Analysis</h3>
                     <select id="automation-room-filter" class="text-[10px] bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg font-black uppercase border-none cursor-pointer">
                         <option value="all">All Rooms</option>
                     </select>
+                    <select id="automation-type-filter" class="text-[10px] bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg font-black uppercase border-none cursor-pointer">
+                        <option value="all">All Types</option>
+                        <option value="power">Power</option>
+                        <option value="humidity">Humidity</option>
+                        <option value="temperature">Temperature</option>
+                    </select>
                 </div>
+                <div id="automation-stats" class="flex flex-wrap gap-4 mb-4 text-[10px] font-black uppercase tracking-wider"></div>
                 <div class="h-80"><canvas id="automationChart"></canvas></div>
+                <div class="flex items-center justify-between mt-4">
+                    <div id="time-range-indicator" class="text-[9px] text-gray-400 font-black uppercase tracking-wider"></div>
+                    <div class="flex gap-2">
+                        <button id="export-csv" class="text-[9px] bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg font-black uppercase border-none cursor-pointer hover:bg-gray-200 transition-colors">Export CSV</button>
+                        <button id="export-image" class="text-[9px] bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg font-black uppercase border-none cursor-pointer hover:bg-gray-200 transition-colors">Export Image</button>
+                    </div>
+                </div>
                 <div id="timezone-label-automation" class="hidden text-[9px] text-gray-400 font-black uppercase tracking-wider mt-2 text-center">Times shown in Philippine Time (PHT, UTC+8)</div>
             </div>
 
@@ -954,26 +968,28 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
         
         console.log(`[Automation] Date range: ${fromDateStr} to ${toDateStr}`);
         console.log(`[Automation] Room filter: ${roomFilter}`);
-        
+        const typeFilter = document.getElementById('automation-type-filter').value;
+        console.log(`[Automation] Type filter: ${typeFilter}`);
+
         const fromDate = new Date(fromDateStr);
         const toDate = new Date(toDateStr);
         toDate.setHours(23, 59, 59, 999);
-        
+
         const dateArray = [];
         let currentDate = new Date(fromDate);
         while (currentDate <= toDate) {
             dateArray.push(currentDate.toISOString().split('T')[0]);
             currentDate.setDate(currentDate.getDate() + 1);
         }
-        
+
         console.log(`[Automation] Date array:`, dateArray);
-        
+
         const roomKeys = Object.keys(labsData || {}).filter(key => key.startsWith("Room_")).sort();
         const filteredRooms = roomFilter === 'all' ? roomKeys : [roomFilter];
-        
+
         console.log(`[Automation] Available rooms:`, roomKeys);
         console.log(`[Automation] Filtered rooms:`, filteredRooms);
-        
+
         const automationEvents = {};
         
         for (const room of filteredRooms) {
@@ -1081,34 +1097,61 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
         
         for (const room of filteredRooms) {
             const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
-            
-            // Add datasets for each automation type
+
+            // Add datasets for each automation type (filtered by typeFilter)
             for (const type of ['power', 'humidity', 'temperature']) {
-                if (automationEvents[room][type].length > 0) {
-                    // Sort data by time for line graph
-                    const sortedData = [...automationEvents[room][type]].sort((a, b) => a.x - b.x);
-                    datasets.push({
-                        label: `${displayName} (${type.charAt(0).toUpperCase() + type.slice(1)})`,
-                        data: sortedData,
-                        backgroundColor: typeColors[type].bg,
-                        borderColor: typeColors[type].border,
-                        borderWidth: 2,
-                        pointRadius: 6,
-                        pointHoverRadius: 10,
-                        pointBackgroundColor: typeColors[type].border,
-                        pointBorderColor: '#fff',
-                        pointBorderWidth: 2,
-                        tension: 0.3,
-                        fill: false
-                    });
+                if (typeFilter === 'all' || typeFilter === type) {
+                    if (automationEvents[room][type].length > 0) {
+                        // Sort data by time for line graph
+                        const sortedData = [...automationEvents[room][type]].sort((a, b) => a.x - b.x);
+                        datasets.push({
+                            label: `${displayName} (${type.charAt(0).toUpperCase() + type.slice(1)})`,
+                            data: sortedData,
+                            backgroundColor: typeColors[type].bg,
+                            borderColor: typeColors[type].border,
+                            borderWidth: 2,
+                            pointRadius: 6,
+                            pointHoverRadius: 10,
+                            pointBackgroundColor: typeColors[type].border,
+                            pointBorderColor: '#fff',
+                            pointBorderWidth: 2,
+                            tension: 0.3,
+                            fill: false
+                        });
+                    }
                 }
             }
         }
         
         console.log(`[Automation] Total datasets: ${datasets.length}`);
         automationChart.data.datasets = datasets;
-        automationChart.update();
-        
+        automationChart.update('active'); // Add animation
+
+        // Update time range indicator
+        const timeRangeIndicator = document.getElementById('time-range-indicator');
+        timeRangeIndicator.textContent = `Time Range: ${fromDateStr} to ${toDateStr}`;
+
+        // Update data point counts
+        const statsContainer = document.getElementById('automation-stats');
+        let totalEvents = 0;
+        let powerCount = 0;
+        let humidityCount = 0;
+        let temperatureCount = 0;
+
+        for (const room of filteredRooms) {
+            powerCount += automationEvents[room].power.length;
+            humidityCount += automationEvents[room].humidity.length;
+            temperatureCount += automationEvents[room].temperature.length;
+        }
+        totalEvents = powerCount + humidityCount + temperatureCount;
+
+        statsContainer.innerHTML = `
+            <span class="text-gray-600">Total Events: ${totalEvents}</span>
+            <span class="text-red-600">Power: ${powerCount}</span>
+            <span class="text-green-600">Humidity: ${humidityCount}</span>
+            <span class="text-orange-600">Temperature: ${temperatureCount}</span>
+        `;
+
         // Show timezone label if there's data
         const timezoneLabel = document.getElementById('timezone-label-automation');
         if (datasets.length > 0) {
@@ -1391,7 +1434,31 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { display: true, position: 'top', labels: { font: { weight: 'bold', size: 10 }, usePointStyle: true, pointStyle: 'circle' } },
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            font: { weight: 'bold', size: 11 },
+                            usePointStyle: true,
+                            pointStyle: 'circle',
+                            padding: 20,
+                            color: '#374151',
+                            generateLabels: function(chart) {
+                                const data = chart.data;
+                                if (data.labels.length && data.datasets.length) {
+                                    return data.datasets.map((dataset, i) => ({
+                                        text: dataset.label,
+                                        fillStyle: dataset.borderColor,
+                                        strokeStyle: dataset.borderColor,
+                                        lineWidth: 2,
+                                        hidden: !chart.isDatasetVisible(i),
+                                        datasetIndex: i
+                                    }));
+                                }
+                                return [];
+                            }
+                        }
+                    },
                     tooltip: {
                         backgroundColor: 'rgba(0,0,0,0.8)',
                         titleFont: { weight: 'bold', size: 12 },
@@ -1461,6 +1528,63 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
     }
 
+    // Export automation data to CSV
+    function exportAutomationCSV() {
+        const datasets = automationChart.data.datasets;
+        if (datasets.length === 0) {
+            alert('No data to export');
+            return;
+        }
+
+        let csvContent = 'data:text/csv;charset=utf-8,';
+        csvContent += 'Room,Type,Time,Description,Past Temp,Updated Temp\n';
+
+        datasets.forEach(dataset => {
+            const roomName = dataset.label.split('(')[0].trim();
+            const type = dataset.label.split('(')[1].replace(')', '').trim();
+
+            dataset.data.forEach(point => {
+                const time = new Date(point.x).toLocaleString('en-PH', {
+                    timeZone: 'Asia/Manila',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true,
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric'
+                });
+                const description = point.description || '';
+                const pastTemp = point.pastTemp !== undefined ? point.pastTemp.toFixed(1) : '';
+                const updatedTemp = point.updatedTemp !== undefined ? point.updatedTemp.toFixed(1) : '';
+
+                csvContent += `"${roomName}","${type}","${time}","${description}","${pastTemp}","${updatedTemp}"\n`;
+            });
+        });
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement('a');
+        link.setAttribute('href', encodedUri);
+        link.setAttribute('download', 'automation_performance.csv');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    // Export automation chart as image
+    function exportAutomationImage() {
+        const canvas = document.getElementById('automationChart');
+        if (!canvas) return;
+
+        const link = document.createElement('a');
+        link.download = 'automation_performance.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    }
+
+    // Add event listeners for export buttons
+    document.getElementById('export-csv').addEventListener('click', exportAutomationCSV);
+    document.getElementById('export-image').addEventListener('click', exportAutomationImage);
+    document.getElementById('automation-type-filter').addEventListener('change', loadAutomationData);
 
 
     // Initialize charts with existing trendHistory data
