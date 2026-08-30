@@ -3400,23 +3400,32 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                     acOn = true;
 
+                } else if (d.units) {
+                    // Check dual-unit rooms
+                    const unit1On = (d.units?.unit_1?.ac === true || d.units?.unit_1?.ac === "ON" || d.units?.unit_1?.ac === 1);
+                    const unit2On = (d.units?.unit_2?.ac === true || d.units?.unit_2?.ac === "ON" || d.units?.unit_2?.ac === 1);
+                    acOn = unit1On || unit2On;
                 }
 
-                
+                console.log(`[Analytics Usage] ${room} - acOn: ${acOn}, isActive: ${roomUsage[room]?.isActive}`);
 
-                if (acOn && !roomUsage[room].isActive) { 
+                if (acOn && !roomUsage[room].isActive) {
 
-                    roomUsage[room].lastStart = now; 
+                    roomUsage[room].lastStart = now;
 
-                    roomUsage[room].isActive = true; 
+                    roomUsage[room].isActive = true;
+
+                    console.log(`[Analytics Usage] ${room} - Started tracking usage`);
 
                 }
 
-                else if (!acOn && roomUsage[room].isActive) { 
+                else if (!acOn && roomUsage[room].isActive) {
 
-                    roomUsage[room].totalMs += (now - roomUsage[room].lastStart); 
+                    roomUsage[room].totalMs += (now - roomUsage[room].lastStart);
 
-                    roomUsage[room].isActive = false; 
+                    roomUsage[room].isActive = false;
+
+                    console.log(`[Analytics Usage] ${room} - Stopped tracking usage, totalMs: ${roomUsage[room].totalMs}`);
 
                 }
 

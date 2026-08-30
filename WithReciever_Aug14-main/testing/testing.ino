@@ -804,12 +804,16 @@ void runAutomation(float temp, float humidity) {
           #endif
           Serial.println("TEMP_DOWN sent successfully");
           lastIRSendMillis = millis();
+          // Update Firebase targetTemp
+          float newTargetTemp = temp - 1.0;
+          Firebase.setFloat(firebaseData, String(ROOM_ID) + "/targetTemp", newTargetTemp);
+          Serial.print("[Automation] Updated Firebase targetTemp to: "); Serial.println(newTargetTemp, 1);
           // Log automation event with temperature data
           lastAutomationEvent = "Temperature safety: TEMP_DOWN sent (temp exceeded max)";
           lastAutomationEventType = "temperature";
           lastAutomationEventTime = millis();
           lastAutomationEventPastTemp = temp;
-          lastAutomationEventUpdatedTemp = temp - 1.0; // Assuming TEMP_DOWN reduces by 1 degree
+          lastAutomationEventUpdatedTemp = newTargetTemp;
           Serial.print("[Automation] Event set: "); Serial.println(lastAutomationEvent);
           Serial.print("[Automation] Past temp: "); Serial.print(lastAutomationEventPastTemp, 1); Serial.print("°C, Updated temp: "); Serial.print(lastAutomationEventUpdatedTemp, 1); Serial.println("°C");
           // Log to Firebase history
@@ -841,12 +845,16 @@ void runAutomation(float temp, float humidity) {
           #endif
           Serial.println("TEMP_UP sent successfully");
           lastIRSendMillis = millis();
+          // Update Firebase targetTemp
+          float newTargetTemp = temp + 1.0;
+          Firebase.setFloat(firebaseData, String(ROOM_ID) + "/targetTemp", newTargetTemp);
+          Serial.print("[Automation] Updated Firebase targetTemp to: "); Serial.println(newTargetTemp, 1);
           // Log automation event with temperature data
           lastAutomationEvent = "Temperature safety: TEMP_UP sent (temp below min)";
           lastAutomationEventType = "temperature";
           lastAutomationEventTime = millis();
           lastAutomationEventPastTemp = temp;
-          lastAutomationEventUpdatedTemp = temp + 1.0; // Assuming TEMP_UP increases by 1 degree
+          lastAutomationEventUpdatedTemp = newTargetTemp;
           Serial.print("[Automation] Event set: "); Serial.println(lastAutomationEvent);
           Serial.print("[Automation] Past temp: "); Serial.print(lastAutomationEventPastTemp, 1); Serial.print("°C, Updated temp: "); Serial.print(lastAutomationEventUpdatedTemp, 1); Serial.println("°C");
           // Log to Firebase history
@@ -887,6 +895,9 @@ void runAutomation(float temp, float humidity) {
     targetTemp = maxTemp;
     Serial.println("📊 HUMIDITY AUTOMATION: Occupied detected");
     Serial.print("Humidity: "); Serial.print(humidity, 1); Serial.print("% > "); Serial.print(MAX_HUMIDITY); Serial.print("%, setting target to max: "); Serial.println(targetTemp, 1);
+    // Update Firebase targetTemp
+    Firebase.setFloat(firebaseData, String(ROOM_ID) + "/targetTemp", targetTemp);
+    Serial.print("[Automation] Updated Firebase targetTemp to: "); Serial.println(targetTemp, 1);
     lastAutomationEvent = "Humidity automation: Occupied detected, setting target to max temp";
     lastAutomationEventType = "humidity";
     lastAutomationEventTime = millis();
@@ -898,6 +909,9 @@ void runAutomation(float temp, float humidity) {
     targetTemp = minTemp;
     Serial.println("📊 HUMIDITY AUTOMATION: Not occupied detected");
     Serial.print("Humidity: "); Serial.print(humidity, 1); Serial.print("% < "); Serial.print(MIN_HUMIDITY); Serial.print("%, setting target to min: "); Serial.println(targetTemp, 1);
+    // Update Firebase targetTemp
+    Firebase.setFloat(firebaseData, String(ROOM_ID) + "/targetTemp", targetTemp);
+    Serial.print("[Automation] Updated Firebase targetTemp to: "); Serial.println(targetTemp, 1);
     lastAutomationEvent = "Humidity automation: Not occupied detected, setting target to min temp";
     lastAutomationEventType = "humidity";
     lastAutomationEventTime = millis();
@@ -1034,12 +1048,12 @@ bool isWithinSchedule() {
 
 void checkScheduleAdherence() {
   const unsigned long SCHEDULE_CHECK_INTERVAL_MS = 60000; // Check every minute
-  
+
   if (millis() - lastScheduleCheckMillis < SCHEDULE_CHECK_INTERVAL_MS) {
     return;
   }
   lastScheduleCheckMillis = millis();
-  
+
   // Reset counters at midnight
   time_t now = time(nullptr);
   if (now >= 1000000000) {
@@ -1048,11 +1062,11 @@ void checkScheduleAdherence() {
       resetDailyScheduleCounters();
     }
   }
-  
+
   if (!scheduleEnabled) {
     return; // No schedule to track
   }
-  
+
   // Get current AC state from Firebase
   bool acIsOn = false;
   #if DUAL_UNIT_MODE
@@ -1066,9 +1080,34 @@ void checkScheduleAdherence() {
     acIsOn = fbdo.boolData();
   }
   #endif
-  
+
   bool withinSchedule = isWithinSchedule();
-  
+
+  // Schedule-based AC control
+  static bool lastWithinSchedule = false;
+  if (withinSchedule != lastWithinSchedule) {
+    if (withinSchedule && !acIsOn) {
+      // Schedule started, turn AC on
+      Serial.println("[Schedule] Schedule started - Turning AC ON");
+      handleACCommand("POWER_ON", 0, true);
+      Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/ac", true);
+      #if DUAL_UNIT_MODE
+      Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/ac", true);
+      Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/ac", true);
+      #endif
+    } else if (!withinSchedule && acIsOn) {
+      // Schedule ended, turn AC off
+      Serial.println("[Schedule] Schedule ended - Turning AC OFF");
+      handleACCommand("POWER_OFF", 0, true);
+      Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/ac", false);
+      #if DUAL_UNIT_MODE
+      Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/ac", false);
+      Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/ac", false);
+      #endif
+    }
+    lastWithinSchedule = withinSchedule;
+  }
+
   if (acIsOn) {
     if (withinSchedule) {
       scheduleCompliantMinutes++;
@@ -1078,17 +1117,17 @@ void checkScheduleAdherence() {
       Serial.println("[Schedule] AC running outside schedule - Non-compliant minutes: " + String(scheduleNonCompliantMinutes));
     }
   }
-  
+
   // Calculate total scheduled minutes for today
   if (scheduleOnTime.length() >= 5 && scheduleOffTime.length() >= 5) {
     int onHour = scheduleOnTime.substring(0, 2).toInt();
     int onMinute = scheduleOnTime.substring(3, 5).toInt();
     int offHour = scheduleOffTime.substring(0, 2).toInt();
     int offMinute = scheduleOffTime.substring(3, 5).toInt();
-    
+
     int onTotal = onHour * 60 + onMinute;
     int offTotal = offHour * 60 + offMinute;
-    
+
     if (onTotal <= offTotal) {
       totalScheduledMinutes = offTotal - onTotal;
     } else {
@@ -1096,18 +1135,18 @@ void checkScheduleAdherence() {
       totalScheduledMinutes = (24 * 60 - onTotal) + offTotal;
     }
   }
-  
+
   // Update schedule efficiency metrics in Firebase
   FirebaseJson scheduleData;
   scheduleData.add("compliantMinutes", scheduleCompliantMinutes);
   scheduleData.add("nonCompliantMinutes", scheduleNonCompliantMinutes);
   scheduleData.add("totalScheduledMinutes", totalScheduledMinutes);
-  
+
   if (totalScheduledMinutes > 0) {
     float efficiency = ((float)scheduleCompliantMinutes / (float)totalScheduledMinutes) * 100.0;
     scheduleData.add("efficiencyPercentage", efficiency);
   }
-  
+
   Firebase.RTDB.setJSON(&fbdo, "/" + String(ROOM_ID) + "/schedule/efficiency", &scheduleData);
 }
 
