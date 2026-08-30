@@ -335,6 +335,28 @@
                         <button onclick="saveSchedule()" class="neumorph-btn w-full py-4 rounded-2xl flex items-center justify-center gap-3 uppercase tracking-widest text-[11px]">
                             <i data-lucide="calendar-check" class="w-4 h-4"></i> Apply Schedule to <span id="sched-room-name">...</span>
                         </button>
+
+                        <!-- Schedule Efficiency Display -->
+                        <div class="mt-6 glass-card p-6">
+                            <div class="flex items-center gap-2 mb-4">
+                                <i data-lucide="trending-up" class="text-green-500 w-4 h-4"></i>
+                                <h4 class="text-xs font-black text-green-600 uppercase tracking-widest">Schedule Efficiency</h4>
+                            </div>
+                            <div class="grid grid-cols-3 gap-4 text-center">
+                                <div>
+                                    <p id="schedule-efficiency" class="text-2xl font-black text-gray-800">--%</p>
+                                    <p class="text-[9px] text-gray-400 uppercase font-bold tracking-wider">Efficiency</p>
+                                </div>
+                                <div>
+                                    <p id="schedule-compliant" class="text-2xl font-black text-green-600">--</p>
+                                    <p class="text-[9px] text-gray-400 uppercase font-bold tracking-wider">Compliant (min)</p>
+                                </div>
+                                <div>
+                                    <p id="schedule-noncompliant" class="text-2xl font-black text-red-600">--</p>
+                                    <p class="text-[9px] text-gray-400 uppercase font-bold tracking-wider">Non-Compliant (min)</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- AUTOMATION SECTION - Neumorphic -->
@@ -783,9 +805,12 @@
             const thresholds = data.thresholds || { minTemp: 0, maxTemp: 0 };
             const specs = data.specs || {};
             const schedule = data.schedule || { onTime: "", offTime: "" };
-            
+
             document.getElementById('config-lab-name').innerText = getRoomLabel(selectedRoom).toUpperCase();
             document.getElementById('sched-room-name').innerText = getRoomLabel(selectedRoom);
+
+            // Load schedule efficiency metrics
+            loadScheduleEfficiency();
             
             document.getElementById('curr-temp-display').innerText = (data.temperature || 0).toFixed(1) + "°";
             document.getElementById('curr-min-display').innerText = (thresholds.minTemp || 0) + "°";
@@ -921,7 +946,7 @@
             // Save to room-level schedule
             const savePath = `${selectedRoom}/schedule`;
 
-            db.ref(savePath).set({ onTime, offTime })
+            db.ref(savePath).set({ onTime, offTime, enabled: true })
             .then(() => {
                 Swal.fire({ icon: 'success', title: 'Automation Set', text: `AC will trigger at ${onTime} and ${offTime}`, timer: 2000, showConfirmButton: false });
                 // Reset tracker for this room to allow immediate action if current time matches
@@ -931,7 +956,7 @@
                 const now = new Date();
                 const nowTime = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
                 const within = isTimeBetween(nowTime, onTime, offTime);
-                
+
                 // Update room-level AC state
                 if (within) {
                     db.ref(`${selectedRoom}`).update({ ac_command: 'ON', ac: true })
@@ -941,6 +966,27 @@
                     db.ref(`${selectedRoom}`).update({ ac_command: 'OFF', ac: false })
                         .then(() => console.log(`Automation: ${selectedRoom} immediate OFF`));
                     lastAutomationAction[selectedRoom] = `${selectedRoom}_${nowTime}_OFF`;
+                }
+
+                // Load schedule efficiency after saving
+                loadScheduleEfficiency();
+            });
+        }
+
+        function loadScheduleEfficiency() {
+            if (!selectedRoom) return;
+
+            const efficiencyPath = `${selectedRoom}/schedule/efficiency`;
+            db.ref(efficiencyPath).on('value', (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    document.getElementById('schedule-efficiency').textContent = data.efficiencyPercentage !== undefined ? data.efficiencyPercentage.toFixed(1) + '%' : '--%';
+                    document.getElementById('schedule-compliant').textContent = data.compliantMinutes || '--';
+                    document.getElementById('schedule-noncompliant').textContent = data.nonCompliantMinutes || '--';
+                } else {
+                    document.getElementById('schedule-efficiency').textContent = '--%';
+                    document.getElementById('schedule-compliant').textContent = '--';
+                    document.getElementById('schedule-noncompliant').textContent = '--';
                 }
             });
         }

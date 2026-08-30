@@ -464,6 +464,14 @@
 
                     </button>
 
+                    <button onclick="setMetricTab('schedule')" id="metric-schedule" class="neumorph-btn flex flex-col items-center gap-1.5 p-4 rounded-2xl transition-all">
+
+                        <i data-lucide="calendar-check" class="w-5 h-5"></i>
+
+                        <span class="text-[10px] font-black uppercase tracking-wide">Schedule</span>
+
+                    </button>
+
                 </div>
 
 
@@ -4388,6 +4396,16 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                 value = hours;
 
+            } else if (currentMetric === 'schedule') {
+                // Load schedule efficiency from Firebase
+                const scheduleSnapshot = await db.ref(`${room}/schedule/efficiency`).once('value');
+                const scheduleData = scheduleSnapshot.val();
+                if (scheduleData && scheduleData.efficiencyPercentage !== undefined) {
+                    value = scheduleData.efficiencyPercentage;
+                } else {
+                    value = 0; // No schedule data available
+                }
+
             } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
 
                 // For temp/humidity on today, use live data from labsData
@@ -4465,6 +4483,16 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
             } else if (currentMetric === 'usage') {
 
                 prevValue = dailyAnalytics.data[room]?.[prevDateLabel] || 0;
+
+            } else if (currentMetric === 'schedule') {
+                // Load previous day schedule efficiency from Firebase
+                const prevScheduleSnapshot = await db.ref(`${room}/schedule/efficiency`).once('value');
+                const prevScheduleData = prevScheduleSnapshot.val();
+                if (prevScheduleData && prevScheduleData.efficiencyPercentage !== undefined) {
+                    prevValue = prevScheduleData.efficiencyPercentage;
+                } else {
+                    prevValue = 0;
+                }
 
             } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
 
@@ -4572,6 +4600,10 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             statEl.textContent = `${totalValue > 0 ? totalValue.toFixed(1) : '--'}%`;
 
+        } else if (currentMetric === 'schedule') {
+
+            statEl.textContent = `${totalValue > 0 ? totalValue.toFixed(1) : '--'}%`;
+
         }
 
 
@@ -4642,6 +4674,14 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                 } else if (currentMetric === 'usage') {
 
                     previousValue += dailyAnalytics.data[room]?.[prevDateLabel] || 0;
+
+                } else if (currentMetric === 'schedule') {
+                    // Load schedule efficiency for comparison
+                    const scheduleSnapshot = await db.ref(`${room}/schedule/efficiency`).once('value');
+                    const scheduleData = scheduleSnapshot.val();
+                    if (scheduleData && scheduleData.efficiencyPercentage !== undefined) {
+                        previousValue += scheduleData.efficiencyPercentage;
+                    }
 
                 } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
 
@@ -4726,6 +4766,15 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                         previousValue += dailyAnalytics.data[room]?.[dateLabel] || 0;
 
+                    } else if (currentMetric === 'schedule') {
+                        // For weekly comparison, we'll use current schedule efficiency as a placeholder
+                        // Historical schedule efficiency data would need to be stored separately
+                        const scheduleSnapshot = await db.ref(`${room}/schedule/efficiency`).once('value');
+                        const scheduleData = scheduleSnapshot.val();
+                        if (scheduleData && scheduleData.efficiencyPercentage !== undefined) {
+                            previousValue += scheduleData.efficiencyPercentage / 7; // Distribute across 7 days
+                        }
+
                     } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
 
                         const dateStr = d.toISOString().split('T')[0];
@@ -4809,6 +4858,14 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                         previousValue += dailyAnalytics.data[room]?.[dateLabel] || 0;
 
+                    } else if (currentMetric === 'schedule') {
+                        // For monthly comparison, use current schedule efficiency distributed across days
+                        const scheduleSnapshot = await db.ref(`${room}/schedule/efficiency`).once('value');
+                        const scheduleData = scheduleSnapshot.val();
+                        if (scheduleData && scheduleData.efficiencyPercentage !== undefined) {
+                            previousValue += scheduleData.efficiencyPercentage / daysInPrevMonth;
+                        }
+
                     } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
 
                         const dateStr = d.toISOString().split('T')[0];
@@ -4891,6 +4948,14 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                         } else if (currentMetric === 'usage') {
 
                             previousValue += dailyAnalytics.data[room]?.[dateLabel] || 0;
+
+                        } else if (currentMetric === 'schedule') {
+                            // For yearly comparison, use current schedule efficiency distributed across days
+                            const scheduleSnapshot = await db.ref(`${room}/schedule/efficiency`).once('value');
+                            const scheduleData = scheduleSnapshot.val();
+                            if (scheduleData && scheduleData.efficiencyPercentage !== undefined) {
+                                previousValue += scheduleData.efficiencyPercentage / 365; // Distribute across 365 days
+                            }
 
                         } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
 

@@ -89,11 +89,24 @@ unsigned long lastAutomationCheckMillis = 0;
 unsigned long lastIRSendMillis = 0;
 unsigned long lastSerialLogMillis = 0;
 
+// Schedule Efficiency Tracking Variables
+String scheduleOnTime = "";  // Scheduled ON time (HH:MM format)
+String scheduleOffTime = ""; // Scheduled OFF time (HH:MM format)
+bool scheduleEnabled = false; // Whether schedule is enabled
+unsigned long scheduleCompliantMinutes = 0;  // Minutes AC ran within schedule
+unsigned long scheduleNonCompliantMinutes = 0; // Minutes AC ran outside schedule
+unsigned long totalScheduledMinutes = 0; // Total minutes in scheduled ON period
+unsigned long lastScheduleCheckMillis = 0; // Last time schedule adherence was checked
+
 void handleACCommand(String cmd, int unit = 0);
 void logAutomationEventToHistory();
 void updateOLED(float currentTemp);
 void runAutomation(float temp, float humidity);
 void handleIRReceiver();
+void checkScheduleAdherence();
+bool isWithinSchedule();
+void loadScheduleFromFirebase();
+void resetDailyScheduleCounters();
 
 void setup() {
   Serial.begin(115200);
@@ -207,6 +220,9 @@ void setup() {
       Serial.println("Synced maxTemp from Firebase: " + String(maxTemp) + "°C");
     }
   }
+
+  // Load schedule configuration from Firebase
+  loadScheduleFromFirebase();
 
   FirebaseJson json;
   json.set(".sv", "timestamp");
@@ -415,6 +431,9 @@ void loop() {
 
   handleIRReceiver();
 
+  // Check schedule adherence
+  checkScheduleAdherence();
+
   if (!isnan(t) && !isnan(h)) {
     runAutomation(t, h);
   }
@@ -465,6 +484,18 @@ void loop() {
       historyData.add("automationEnabled", automationEnabled);
       if (automationEnabled && automationStartTime > 0) {
         historyData.add("automationStartTime", automationStartTime / 1000); // Store as seconds since boot
+      }
+      
+      // Log schedule efficiency metrics
+      if (scheduleEnabled) {
+        historyData.add("scheduleEnabled", true);
+        historyData.add("scheduleCompliantMinutes", scheduleCompliantMinutes);
+        historyData.add("scheduleNonCompliantMinutes", scheduleNonCompliantMinutes);
+        historyData.add("totalScheduledMinutes", totalScheduledMinutes);
+        if (totalScheduledMinutes > 0) {
+          float efficiency = ((float)scheduleCompliantMinutes / (float)totalScheduledMinutes) * 100.0;
+          historyData.add("scheduleEfficiencyPercentage", efficiency);
+        }
       }
       
       // Preserve existing automation event data if it exists
@@ -849,4 +880,152 @@ void runAutomation(float temp, float humidity) {
   } else {
     Serial.println("Target temp matches current temp, no action needed");
   }
+}
+
+// Schedule Efficiency Functions
+
+void loadScheduleFromFirebase() {
+  Serial.println("[Schedule] Loading schedule configuration from Firebase");
+  
+  // Load schedule enabled status
+  Firebase.RTDB.getBool(&fbdo, "/" + String(ROOM_ID) + "/schedule/enabled");
+  if (fbdo.httpCode() == FIREBASE_ERROR_HTTP_CODE_OK) {
+    scheduleEnabled = fbdo.boolData();
+    Serial.println("[Schedule] Schedule enabled: " + String(scheduleEnabled));
+  }
+  
+  // Load ON time
+  Firebase.RTDB.getString(&fbdo, "/" + String(ROOM_ID) + "/schedule/onTime");
+  if (fbdo.httpCode() == FIREBASE_ERROR_HTTP_CODE_OK) {
+    scheduleOnTime = fbdo.stringData();
+    Serial.println("[Schedule] ON time: " + scheduleOnTime);
+  }
+  
+  // Load OFF time
+  Firebase.RTDB.getString(&fbdo, "/" + String(ROOM_ID) + "/schedule/offTime");
+  if (fbdo.httpCode() == FIREBASE_ERROR_HTTP_CODE_OK) {
+    scheduleOffTime = fbdo.stringData();
+    Serial.println("[Schedule] OFF time: " + scheduleOffTime);
+  }
+}
+
+bool isWithinSchedule() {
+  if (!scheduleEnabled || scheduleOnTime.isEmpty() || scheduleOffTime.isEmpty()) {
+    return false; // No schedule configured, consider as "within schedule"
+  }
+  
+  time_t now = time(nullptr);
+  if (now < 1000000000) {
+    return false; // Time not synced
+  }
+  
+  struct tm* timeinfo = localtime(&now);
+  int currentHour = timeinfo->tm_hour;
+  int currentMinute = timeinfo->tm_min;
+  int currentTotalMinutes = currentHour * 60 + currentMinute;
+  
+  // Parse ON time (HH:MM)
+  int onHour = scheduleOnTime.substring(0, 2).toInt();
+  int onMinute = scheduleOnTime.substring(3, 5).toInt();
+  int onTotalMinutes = onHour * 60 + onMinute;
+  
+  // Parse OFF time (HH:MM)
+  int offHour = scheduleOffTime.substring(0, 2).toInt();
+  int offMinute = scheduleOffTime.substring(3, 5).toInt();
+  int offTotalMinutes = offHour * 60 + offMinute;
+  
+  // Check if current time is within scheduled ON period
+  if (onTotalMinutes <= offTotalMinutes) {
+    // Same day schedule (e.g., 08:00 to 17:00)
+    return (currentTotalMinutes >= onTotalMinutes && currentTotalMinutes < offTotalMinutes);
+  } else {
+    // Overnight schedule (e.g., 22:00 to 06:00)
+    return (currentTotalMinutes >= onTotalMinutes || currentTotalMinutes < offTotalMinutes);
+  }
+}
+
+void checkScheduleAdherence() {
+  const unsigned long SCHEDULE_CHECK_INTERVAL_MS = 60000; // Check every minute
+  
+  if (millis() - lastScheduleCheckMillis < SCHEDULE_CHECK_INTERVAL_MS) {
+    return;
+  }
+  lastScheduleCheckMillis = millis();
+  
+  // Reset counters at midnight
+  time_t now = time(nullptr);
+  if (now >= 1000000000) {
+    struct tm* timeinfo = localtime(&now);
+    if (timeinfo->tm_hour == 0 && timeinfo->tm_min == 0) {
+      resetDailyScheduleCounters();
+    }
+  }
+  
+  if (!scheduleEnabled) {
+    return; // No schedule to track
+  }
+  
+  // Get current AC state from Firebase
+  bool acIsOn = false;
+  #if DUAL_UNIT_MODE
+  Firebase.RTDB.getBool(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/ac");
+  if (fbdo.httpCode() == FIREBASE_ERROR_HTTP_CODE_OK) {
+    acIsOn = fbdo.boolData();
+  }
+  #else
+  Firebase.RTDB.getBool(&fbdo, "/" + String(ROOM_ID) + "/ac");
+  if (fbdo.httpCode() == FIREBASE_ERROR_HTTP_CODE_OK) {
+    acIsOn = fbdo.boolData();
+  }
+  #endif
+  
+  bool withinSchedule = isWithinSchedule();
+  
+  if (acIsOn) {
+    if (withinSchedule) {
+      scheduleCompliantMinutes++;
+      Serial.println("[Schedule] AC running within schedule - Compliant minutes: " + String(scheduleCompliantMinutes));
+    } else {
+      scheduleNonCompliantMinutes++;
+      Serial.println("[Schedule] AC running outside schedule - Non-compliant minutes: " + String(scheduleNonCompliantMinutes));
+    }
+  }
+  
+  // Calculate total scheduled minutes for today
+  if (scheduleOnTime.length() >= 5 && scheduleOffTime.length() >= 5) {
+    int onHour = scheduleOnTime.substring(0, 2).toInt();
+    int onMinute = scheduleOnTime.substring(3, 5).toInt();
+    int offHour = scheduleOffTime.substring(0, 2).toInt();
+    int offMinute = scheduleOffTime.substring(3, 5).toInt();
+    
+    int onTotal = onHour * 60 + onMinute;
+    int offTotal = offHour * 60 + offMinute;
+    
+    if (onTotal <= offTotal) {
+      totalScheduledMinutes = offTotal - onTotal;
+    } else {
+      // Overnight schedule
+      totalScheduledMinutes = (24 * 60 - onTotal) + offTotal;
+    }
+  }
+  
+  // Update schedule efficiency metrics in Firebase
+  FirebaseJson scheduleData;
+  scheduleData.add("compliantMinutes", scheduleCompliantMinutes);
+  scheduleData.add("nonCompliantMinutes", scheduleNonCompliantMinutes);
+  scheduleData.add("totalScheduledMinutes", totalScheduledMinutes);
+  
+  if (totalScheduledMinutes > 0) {
+    float efficiency = ((float)scheduleCompliantMinutes / (float)totalScheduledMinutes) * 100.0;
+    scheduleData.add("efficiencyPercentage", efficiency);
+  }
+  
+  Firebase.RTDB.setJSON(&fbdo, "/" + String(ROOM_ID) + "/schedule/efficiency", &scheduleData);
+}
+
+void resetDailyScheduleCounters() {
+  Serial.println("[Schedule] Resetting daily schedule counters");
+  scheduleCompliantMinutes = 0;
+  scheduleNonCompliantMinutes = 0;
+  totalScheduledMinutes = 0;
 }
