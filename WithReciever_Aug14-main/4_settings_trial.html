@@ -865,9 +865,14 @@
             if (document.activeElement !== emptyThresholdEl) {
                 emptyThresholdEl.value = automation.humidityEmptyThreshold || 50;
             }
-            
-            // Don't auto-disable controls - let user control them manually
-            // toggleAutomation();
+
+            // Update automation enabled checkbox state
+            const automationCheckbox = document.getElementById('automation-enabled');
+            if (automationCheckbox) {
+                console.log(`[refreshConfigUI] Setting automation enabled to: ${automation.enabled}`);
+                automationCheckbox.checked = automation.enabled || false;
+                toggleAutomation();
+            }
 
             // Helper function to safely update input if not focused
             const safeUpdate = (elementId, value) => {
