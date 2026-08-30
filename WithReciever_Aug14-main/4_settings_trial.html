@@ -1083,7 +1083,9 @@
             const checkbox = document.getElementById('automation-enabled');
             const currentState = checkbox.checked;
             const newState = !currentState;
-            
+
+            console.log(`[Automation Toggle] Current state: ${currentState}, New state: ${newState}, Selected room: ${selectedRoom}`);
+
             Swal.fire({
                 title: newState ? 'Enable Automation?' : 'Disable Automation?',
                 text: newState ? 'This will enable smart automation to automatically adjust AC temperature based on humidity levels.' : 'This will disable smart automation. AC temperature will no longer be automatically adjusted.',
@@ -1098,24 +1100,43 @@
                     // Update checkbox state
                     checkbox.checked = newState;
                     toggleAutomation();
-                    
+
                     // Update Firebase directly
                     if (selectedRoom) {
-                        db.ref(`${selectedRoom}/automation/enabled`).set(newState)
+                        const firebasePath = `${selectedRoom}/automation/enabled`;
+                        console.log(`[Automation Toggle] Updating Firebase path: ${firebasePath} to ${newState}`);
+                        db.ref(firebasePath).set(newState)
                             .then(() => {
-                                console.log(`Automation ${newState ? 'enabled' : 'disabled'} for ${selectedRoom}`);
+                                console.log(`[Automation Toggle] Success: Automation ${newState ? 'enabled' : 'disabled'} for ${selectedRoom}`);
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: newState ? 'Automation Enabled' : 'Automation Disabled',
+                                    text: `Smart automation has been ${newState ? 'enabled' : 'disabled'} for ${selectedRoom}`,
+                                    timer: 2000,
+                                    showConfirmButton: false
+                                });
                             })
                             .catch((error) => {
-                                console.error('Error updating automation state:', error);
+                                console.error('[Automation Toggle] Error updating automation state:', error);
                                 Swal.fire({
                                     icon: 'error',
                                     title: 'Update Failed',
-                                    text: 'Failed to update automation state in Firebase.'
+                                    text: 'Failed to update automation state in Firebase. Error: ' + error.message
                                 });
                                 // Revert checkbox state on error
                                 checkbox.checked = currentState;
                                 toggleAutomation();
                             });
+                    } else {
+                        console.error('[Automation Toggle] No room selected!');
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'No Room Selected',
+                            text: 'Please select a room first before toggling automation.'
+                        });
+                        // Revert checkbox state
+                        checkbox.checked = currentState;
+                        toggleAutomation();
                     }
                 }
                 // If cancelled, checkbox stays in current state (no change needed)

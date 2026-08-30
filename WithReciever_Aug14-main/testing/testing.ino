@@ -199,7 +199,11 @@ void setup() {
       humidityOccupiedThreshold = threshold;
       MAX_HUMIDITY = threshold;
       Serial.println("Synced humidity occupied threshold from Firebase: " + String(humidityOccupiedThreshold) + "%");
+    } else {
+      Serial.println("⚠️ [Setup] Firebase humidity occupied threshold is 0 or invalid, using default: " + String(MAX_HUMIDITY) + "%");
     }
+  } else {
+    Serial.println("⚠️ [Setup] Failed to read humidity occupied threshold from Firebase. HTTP code: " + String(fbdo.httpCode()) + ", using default: " + String(MAX_HUMIDITY) + "%");
   }
 
   Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/automation/humidityEmptyThreshold");
@@ -209,7 +213,11 @@ void setup() {
       humidityEmptyThreshold = threshold;
       MIN_HUMIDITY = threshold;
       Serial.println("Synced humidity empty threshold from Firebase: " + String(humidityEmptyThreshold) + "%");
+    } else {
+      Serial.println("⚠️ [Setup] Firebase humidity empty threshold is 0 or invalid, using default: " + String(MIN_HUMIDITY) + "%");
     }
+  } else {
+    Serial.println("⚠️ [Setup] Failed to read humidity empty threshold from Firebase. HTTP code: " + String(fbdo.httpCode()) + ", using default: " + String(MIN_HUMIDITY) + "%");
   }
 
   Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/thresholds/minTemp");
@@ -859,8 +867,8 @@ void runAutomation(float temp, float humidity) {
   }
   lastAutomationCheckMillis = millis();
 
-  Serial.print("Humidity Automation Check - Temp: "); Serial.print(temp, 1); Serial.print("°C, Humidity: "); Serial.print(humidity, 1); Serial.print("%, Min Temp: "); Serial.print(minTemp, 1); Serial.print("°C, Max Temp: "); Serial.print(maxTemp, 1); Serial.println("°C");
-  Serial.print("Humidity Thresholds - Occupied: "); Serial.print(humidityOccupiedThreshold, 1); Serial.print("%, Empty: "); Serial.print(humidityEmptyThreshold, 1); Serial.println("%");
+  Serial.println("📊 [Humidity Automation] Running check...");
+  Serial.print("🌡️ [Humidity Automation] Temp: "); Serial.print(temp, 1); Serial.print("°C | Humidity: "); Serial.print(humidity, 1); Serial.print("% | Thresholds: "); Serial.print(MIN_HUMIDITY, 1); Serial.print("% - "); Serial.print(MAX_HUMIDITY, 1); Serial.println("%");
 
   float targetTemp;
 
@@ -887,7 +895,7 @@ void runAutomation(float temp, float humidity) {
     Serial.print("[Automation] Event set: "); Serial.println(lastAutomationEvent);
     Serial.print("[Automation] Past temp: "); Serial.print(lastAutomationEventPastTemp, 1); Serial.print("°C, Updated temp: "); Serial.print(lastAutomationEventUpdatedTemp, 1); Serial.println("°C");
   } else {
-    Serial.println("Humidity within normal range, no humidity-based action needed");
+    Serial.println("✅ [Humidity Automation] Humidity within normal range (45-60%), no action needed");
     return;
   }
 
