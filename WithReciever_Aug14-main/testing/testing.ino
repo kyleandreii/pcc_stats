@@ -82,12 +82,14 @@ float MAX_HUMIDITY = 60.0;  // Default, will be updated from Firebase
 float MIN_HUMIDITY = 45.0;  // Default, will be updated from Firebase
 float humidityOccupiedThreshold = 60.0;  // From Firebase: automation/humidityOccupiedThreshold
 float humidityEmptyThreshold = 45.0;     // From Firebase: automation/humidityEmptyThreshold
-const unsigned long AUTOMATION_INTERVAL_MS = 300000; // 5 minutes between automation checks
+const unsigned long AUTOMATION_INTERVAL_MS = 900000; // 15 minutes between automation checks
 const unsigned long STEP_PRESS_DELAY_MS = 400;
 const unsigned long IR_SEND_COOLDOWN_MS = 60000; // 1 minute cooldown between IR sends
 const unsigned long SERIAL_LOG_THROTTLE_MS = 5000; // 5 seconds between serial logs
 
 unsigned long lastAutomationCheckMillis = 0;
+unsigned long lastTempAutomationCheckMillis = 0;
+unsigned long lastHumidityAutomationCheckMillis = 0;
 unsigned long lastIRSendMillis = 0;
 unsigned long lastSerialLogMillis = 0;
 
@@ -770,105 +772,114 @@ void runAutomation(float temp, float humidity) {
 
   // Temperature safety automation (always runs if enabled, independent of humidity automation)
   if (temperatureAutomationEnabled) {
-    if (millis() - lastAutomationCheckMillis < AUTOMATION_INTERVAL_MS) {
-      return;
-    }
-    lastAutomationCheckMillis = millis();
+    if (millis() - lastTempAutomationCheckMillis < AUTOMATION_INTERVAL_MS) {
+      // Skip temperature check this time, but continue to humidity check
+    } else {
+      lastTempAutomationCheckMillis = millis();
 
-    Serial.println("🚨 [Temperature Automation] Running safety check...");
-    Serial.print("🌡️ [Temperature Automation] Current: "); Serial.print(temp, 1); Serial.print("°C | Min: "); Serial.print(minTemp, 1); Serial.print("°C | Max: "); Serial.print(maxTemp, 1); Serial.println("°C");
+      Serial.println("🚨 [Temperature Automation] Running safety check...");
+      Serial.print("🌡️ [Temperature Automation] Current: "); Serial.print(temp, 1); Serial.print("°C | Min: "); Serial.print(minTemp, 1); Serial.print("°C | Max: "); Serial.print(maxTemp, 1); Serial.println("°C");
 
-    if (temp > maxTemp) {
-      Serial.println("⚠️ TEMPERATURE SAFETY: Current temp exceeds max threshold!");
-      Serial.print("Current: "); Serial.print(temp, 1); Serial.print("°C > Max: "); Serial.print(maxTemp, 1); Serial.println("°C");
-      Serial.println("Action: Sending TEMP_DOWN to cool down");
+      if (temp > maxTemp) {
+        Serial.println("⚠️ TEMPERATURE SAFETY: Current temp exceeds max threshold!");
+        Serial.print("Current: "); Serial.print(temp, 1); Serial.print("°C > Max: "); Serial.print(maxTemp, 1); Serial.println("°C");
+        Serial.println("Action: Sending TEMP_DOWN to cool down");
 
-      unsigned long timeSinceLastIR = millis() - lastIRSendMillis;
-      if (timeSinceLastIR < IR_SEND_COOLDOWN_MS) {
-        unsigned long cooldownRemaining = (IR_SEND_COOLDOWN_MS - timeSinceLastIR) / 1000;
-        Serial.print("Cooldown active, "); Serial.print(cooldownRemaining); Serial.println(" seconds remaining");
-        return;
+        unsigned long timeSinceLastIR = millis() - lastIRSendMillis;
+        if (timeSinceLastIR < IR_SEND_COOLDOWN_MS) {
+          unsigned long cooldownRemaining = (IR_SEND_COOLDOWN_MS - timeSinceLastIR) / 1000;
+          Serial.print("Cooldown active, "); Serial.print(cooldownRemaining); Serial.println(" seconds remaining");
+        } else {
+          uint16_t down_buf[rawTempDownLen];
+          memcpy_P(down_buf, rawTempDown, sizeof(rawTempDown));
+          Serial.print("Sending TEMP_DOWN on pin "); Serial.println(kIrLedPin);
+          #if DUAL_UNIT_MODE
+          Serial.println("Sending to Unit 1 (pin 4)");
+          irsend.sendRaw(down_buf, rawTempDownLen, kFrequency);
+          delay(100);
+          Serial.println("Sending to Unit 2 (pin 5)");
+          irsend2.sendRaw(down_buf, rawTempDownLen, kFrequency);
+          #else
+          irsend.sendRaw(down_buf, rawTempDownLen, kFrequency);
+          #endif
+          Serial.println("TEMP_DOWN sent successfully");
+          lastIRSendMillis = millis();
+          // Log automation event with temperature data
+          lastAutomationEvent = "Temperature safety: TEMP_DOWN sent (temp exceeded max)";
+          lastAutomationEventType = "temperature";
+          lastAutomationEventTime = millis();
+          lastAutomationEventPastTemp = temp;
+          lastAutomationEventUpdatedTemp = temp - 1.0; // Assuming TEMP_DOWN reduces by 1 degree
+          Serial.print("[Automation] Event set: "); Serial.println(lastAutomationEvent);
+          Serial.print("[Automation] Past temp: "); Serial.print(lastAutomationEventPastTemp, 1); Serial.print("°C, Updated temp: "); Serial.print(lastAutomationEventUpdatedTemp, 1); Serial.println("°C");
+          // Log to Firebase history
+          logAutomationEventToHistory();
+        }
       }
 
-      uint16_t down_buf[rawTempDownLen];
-      memcpy_P(down_buf, rawTempDown, sizeof(rawTempDown));
-      Serial.print("Sending TEMP_DOWN on pin "); Serial.println(kIrLedPin);
-      #if DUAL_UNIT_MODE
-      Serial.println("Sending to Unit 1 (pin 4)");
-      irsend.sendRaw(down_buf, rawTempDownLen, kFrequency);
-      delay(100);
-      Serial.println("Sending to Unit 2 (pin 5)");
-      irsend2.sendRaw(down_buf, rawTempDownLen, kFrequency);
-      #else
-      irsend.sendRaw(down_buf, rawTempDownLen, kFrequency);
-      #endif
-      Serial.println("TEMP_DOWN sent successfully");
-      lastIRSendMillis = millis();
-      // Log automation event with temperature data
-      lastAutomationEvent = "Temperature safety: TEMP_DOWN sent (temp exceeded max)";
-      lastAutomationEventType = "temperature";
-      lastAutomationEventTime = millis();
-      lastAutomationEventPastTemp = temp;
-      lastAutomationEventUpdatedTemp = temp - 1.0; // Assuming TEMP_DOWN reduces by 1 degree
-      Serial.print("[Automation] Event set: "); Serial.println(lastAutomationEvent);
-      Serial.print("[Automation] Past temp: "); Serial.print(lastAutomationEventPastTemp, 1); Serial.print("°C, Updated temp: "); Serial.print(lastAutomationEventUpdatedTemp, 1); Serial.println("°C");
-      // Log to Firebase history
-      logAutomationEventToHistory();
-      return;
-    }
+      if (temp < minTemp) {
+        Serial.println("⚠️ TEMPERATURE SAFETY: Current temp below min threshold!");
+        Serial.print("Current: "); Serial.print(temp, 1); Serial.print("°C < Min: "); Serial.print(minTemp, 1); Serial.println("°C");
+        Serial.println("Action: Sending TEMP_UP to warm up");
 
-    if (temp < minTemp) {
-      Serial.println("⚠️ TEMPERATURE SAFETY: Current temp below min threshold!");
-      Serial.print("Current: "); Serial.print(temp, 1); Serial.print("°C < Min: "); Serial.print(minTemp, 1); Serial.println("°C");
-      Serial.println("Action: Sending TEMP_UP to warm up");
-
-      unsigned long timeSinceLastIR = millis() - lastIRSendMillis;
-      if (timeSinceLastIR < IR_SEND_COOLDOWN_MS) {
-        unsigned long cooldownRemaining = (IR_SEND_COOLDOWN_MS - timeSinceLastIR) / 1000;
-        Serial.print("Cooldown active, "); Serial.print(cooldownRemaining); Serial.println(" seconds remaining");
-        return;
+        unsigned long timeSinceLastIR = millis() - lastIRSendMillis;
+        if (timeSinceLastIR < IR_SEND_COOLDOWN_MS) {
+          unsigned long cooldownRemaining = (IR_SEND_COOLDOWN_MS - timeSinceLastIR) / 1000;
+          Serial.print("Cooldown active, "); Serial.print(cooldownRemaining); Serial.println(" seconds remaining");
+        } else {
+          uint16_t up_buf[rawTempUpLen];
+          memcpy_P(up_buf, rawTempUp, sizeof(rawTempUp));
+          Serial.print("Sending TEMP_UP on pin "); Serial.println(kIrLedPin);
+          #if DUAL_UNIT_MODE
+          Serial.println("Sending to Unit 1 (pin 4)");
+          irsend.sendRaw(up_buf, rawTempUpLen, kFrequency);
+          delay(100);
+          Serial.println("Sending to Unit 2 (pin 5)");
+          irsend2.sendRaw(up_buf, rawTempUpLen, kFrequency);
+          #else
+          irsend.sendRaw(up_buf, rawTempUpLen, kFrequency);
+          #endif
+          Serial.println("TEMP_UP sent successfully");
+          lastIRSendMillis = millis();
+          // Log automation event with temperature data
+          lastAutomationEvent = "Temperature safety: TEMP_UP sent (temp below min)";
+          lastAutomationEventType = "temperature";
+          lastAutomationEventTime = millis();
+          lastAutomationEventPastTemp = temp;
+          lastAutomationEventUpdatedTemp = temp + 1.0; // Assuming TEMP_UP increases by 1 degree
+          Serial.print("[Automation] Event set: "); Serial.println(lastAutomationEvent);
+          Serial.print("[Automation] Past temp: "); Serial.print(lastAutomationEventPastTemp, 1); Serial.print("°C, Updated temp: "); Serial.print(lastAutomationEventUpdatedTemp, 1); Serial.println("°C");
+          // Log to Firebase history
+          logAutomationEventToHistory();
+        }
       }
-
-      uint16_t up_buf[rawTempUpLen];
-      memcpy_P(up_buf, rawTempUp, sizeof(rawTempUp));
-      Serial.print("Sending TEMP_UP on pin "); Serial.println(kIrLedPin);
-      #if DUAL_UNIT_MODE
-      Serial.println("Sending to Unit 1 (pin 4)");
-      irsend.sendRaw(up_buf, rawTempUpLen, kFrequency);
-      delay(100);
-      Serial.println("Sending to Unit 2 (pin 5)");
-      irsend2.sendRaw(up_buf, rawTempUpLen, kFrequency);
-      #else
-      irsend.sendRaw(up_buf, rawTempUpLen, kFrequency);
-      #endif
-      Serial.println("TEMP_UP sent successfully");
-      lastIRSendMillis = millis();
-      // Log automation event with temperature data
-      lastAutomationEvent = "Temperature safety: TEMP_UP sent (temp below min)";
-      lastAutomationEventType = "temperature";
-      lastAutomationEventTime = millis();
-      lastAutomationEventPastTemp = temp;
-      lastAutomationEventUpdatedTemp = temp + 1.0; // Assuming TEMP_UP increases by 1 degree
-      Serial.print("[Automation] Event set: "); Serial.println(lastAutomationEvent);
-      Serial.print("[Automation] Past temp: "); Serial.print(lastAutomationEventPastTemp, 1); Serial.print("°C, Updated temp: "); Serial.print(lastAutomationEventUpdatedTemp, 1); Serial.println("°C");
-      // Log to Firebase history
-      logAutomationEventToHistory();
-      return;
     }
   }
 
   // Humidity-based automation (only runs if humidity automation is enabled)
   if (!automationEnabled) {
+    static unsigned long lastDisabledLog = 0;
+    if (millis() - lastDisabledLog > 10000) {
+      Serial.println("❌ [Humidity Automation] Skipped - automation disabled");
+      lastDisabledLog = millis();
+    }
     return;
   }
 
-  if (millis() - lastAutomationCheckMillis < AUTOMATION_INTERVAL_MS) {
+  if (millis() - lastHumidityAutomationCheckMillis < AUTOMATION_INTERVAL_MS) {
+    static unsigned long lastIntervalLog = 0;
+    if (millis() - lastIntervalLog > 10000) {
+      Serial.println("⏱️ [Humidity Automation] Skipped - interval not reached");
+      lastIntervalLog = millis();
+    }
     return;
   }
-  lastAutomationCheckMillis = millis();
+  lastHumidityAutomationCheckMillis = millis();
 
   Serial.println("📊 [Humidity Automation] Running check...");
   Serial.print("🌡️ [Humidity Automation] Temp: "); Serial.print(temp, 1); Serial.print("°C | Humidity: "); Serial.print(humidity, 1); Serial.print("% | Thresholds: "); Serial.print(MIN_HUMIDITY, 1); Serial.print("% - "); Serial.print(MAX_HUMIDITY, 1); Serial.println("%");
+  Serial.print("🔍 [Humidity Automation] Humidity check: "); Serial.print(humidity, 1); Serial.print("% > "); Serial.print(MAX_HUMIDITY, 1); Serial.print("? "); Serial.println(humidity > MAX_HUMIDITY ? "YES" : "NO");
+  Serial.print("🔍 [Humidity Automation] Humidity check: "); Serial.print(humidity, 1); Serial.print("% < "); Serial.print(MIN_HUMIDITY, 1); Serial.print("? "); Serial.println(humidity < MIN_HUMIDITY ? "YES" : "NO");
 
   float targetTemp;
 
