@@ -333,8 +333,12 @@
         }
         
         function executeRenderAlerts() {
-            let sumT = 0, criticalCount = 0, incidentHtml = "";
+            let sumT = 0, criticalCount = 0;
             const AUTO_DISMISS_MS = 30 * 60 * 1000; // 30 minutes in milliseconds
+            const MAX_INCIDENTS_TO_SHOW = 10; // Limit to 10 incidents
+
+            // Collect all incidents first
+            let incidents = [];
 
             // Process temperature alerts from room data
             labKeys.forEach((roomKey) => {
@@ -342,7 +346,7 @@
                 const temp = parseFloat(d.temperature) || 0;
                 const maxT = parseFloat(d.maxT) || 30;
                 sumT += temp;
-                
+
                 const isAlarm = (d.status === "ALARM" || temp > maxT);
                 const isNotResolved = !locallyResolvedKeys.includes(roomKey);
 
@@ -352,11 +356,11 @@
                         alertTimestamps[roomKey] = Date.now();
                         localStorage.setItem('pcc_alert_timestamps', JSON.stringify(alertTimestamps));
                     }
-                    
+
                     // Check if alert has been active for more than 30 minutes
                     const alertAge = Date.now() - alertTimestamps[roomKey];
                     const shouldAutoDismiss = alertAge > AUTO_DISMISS_MS;
-                    
+
                     if (shouldAutoDismiss) {
                         // Auto-dismiss the alert
                         const idx = locallyResolvedKeys.indexOf(roomKey);
@@ -372,21 +376,13 @@
                         // Show alert with remaining time
                         const remainingMinutes = Math.ceil((AUTO_DISMISS_MS - alertAge) / (60 * 1000));
                         criticalCount++;
-                        incidentHtml += `
-                            <div class="incident-card flex items-center justify-between">
-                                <div class="flex items-center gap-4 pl-4">
-                                    <div class="stats-icon-bg" style="background-color: #fee2e2; color: #dc2626;"><i data-lucide="alert-octagon" class="animate-flicker"></i></div>
-                                    <div>
-                                        <h4 class="font-black text-gray-800 text-sm">${roomKey.replace('_', ' ')}</h4>
-                                        <p class="text-[10px] text-red-600 font-bold uppercase tracking-widest">Temperature Critical</p>
-                                        <p class="text-[8px] text-gray-400 mt-1">Auto-dismiss in ${remainingMinutes}min</p>
-                                    </div>
-                                </div>
-                                <div class="flex items-center gap-6">
-                                    <div class="text-right"><p class="text-[9px] font-bold text-gray-400 uppercase">Live</p><p class="text-2xl font-black text-red-600">${temp.toFixed(1)}°C</p></div>
-                                    <button onclick="resolveIncident('${roomKey}')" class="px-5 py-2 bg-[#800000] text-white text-[10px] font-black rounded-lg uppercase shadow-lg hover:bg-black transition-all active:scale-95">Resolve</button>
-                                </div>
-                            </div>`;
+                        incidents.push({
+                            type: 'temperature',
+                            roomKey,
+                            temp,
+                            remainingMinutes,
+                            timestamp: Date.now() // Use current time for sorting
+                        });
                     }
                 } else if (!isAlarm) {
                     const idx = locallyResolvedKeys.indexOf(roomKey);
@@ -416,26 +412,62 @@
                 if (alert.type !== 'device_offline') return;
 
                 offlineAlertCount++;
-                const roomLabel = alert.roomLabel || alert.room?.replace('_', ' ') || 'Unknown Room';
-                const timeStr = alert.timestamp ? new Date(alert.timestamp).toLocaleString() : 'Unknown';
+                incidents.push({
+                    type: 'offline',
+                    alertKey,
+                    alert,
+                    timestamp: alert.timestamp || 0
+                });
+            });
 
-                incidentHtml += `
-                    <div class="incident-card offline flex items-center justify-between">
-                        <div class="flex items-center gap-4 pl-4">
-                            <div class="stats-icon-bg" style="background-color: #ffedd5; color: #ea580c;"><i data-lucide="wifi-off" class="animate-flicker"></i></div>
-                            <div>
-                                <div class="flex items-center gap-2 mb-1">
-                                    <span class="bg-orange-100 text-orange-700 px-2 py-0.5 rounded text-[9px] font-bold uppercase">Offline</span>
-                                    <h4 class="font-black text-gray-800 text-sm">${roomLabel}</h4>
+            // Sort incidents by timestamp (newest first)
+            incidents.sort((a, b) => b.timestamp - a.timestamp);
+
+            // Limit to 10 incidents
+            incidents = incidents.slice(0, MAX_INCIDENTS_TO_SHOW);
+
+            // Generate HTML for limited incidents
+            let incidentHtml = "";
+            incidents.forEach(incident => {
+                if (incident.type === 'temperature') {
+                    incidentHtml += `
+                        <div class="incident-card flex items-center justify-between">
+                            <div class="flex items-center gap-4 pl-4">
+                                <div class="stats-icon-bg" style="background-color: #fee2e2; color: #dc2626;"><i data-lucide="alert-octagon" class="animate-flicker"></i></div>
+                                <div>
+                                    <h4 class="font-black text-gray-800 text-sm">${incident.roomKey.replace('_', ' ')}</h4>
+                                    <p class="text-[10px] text-red-600 font-bold uppercase tracking-widest">Temperature Critical</p>
+                                    <p class="text-[8px] text-gray-400 mt-1">Auto-dismiss in ${incident.remainingMinutes}min</p>
                                 </div>
-                                <p class="text-[10px] text-orange-600 font-bold uppercase tracking-widest">${alert.message || 'Device not responding'}</p>
-                                <p class="text-[10px] text-gray-500 mt-1 font-semibold">${timeStr}</p>
                             </div>
-                        </div>
-                        <div class="flex items-center gap-6">
-                            <button onclick="acknowledgeAlert('${alertKey}')" class="px-5 py-2 border-2 border-[#800000] text-[#800000] text-[10px] font-black rounded-lg uppercase hover:bg-[#800000] hover:text-white transition-all active:scale-95">Acknowledge</button>
-                        </div>
-                    </div>`;
+                            <div class="flex items-center gap-6">
+                                <div class="text-right"><p class="text-[9px] font-bold text-gray-400 uppercase">Live</p><p class="text-2xl font-black text-red-600">${incident.temp.toFixed(1)}°C</p></div>
+                                <button onclick="resolveIncident('${incident.roomKey}')" class="px-5 py-2 bg-[#800000] text-white text-[10px] font-black rounded-lg uppercase shadow-lg hover:bg-black transition-all active:scale-95">Resolve</button>
+                            </div>
+                        </div>`;
+                } else if (incident.type === 'offline') {
+                    const alert = incident.alert;
+                    const roomLabel = alert.roomLabel || alert.room?.replace('_', ' ') || 'Unknown Room';
+                    const timeStr = alert.timestamp ? new Date(alert.timestamp).toLocaleString() : 'Unknown';
+
+                    incidentHtml += `
+                        <div class="incident-card offline flex items-center justify-between">
+                            <div class="flex items-center gap-4 pl-4">
+                                <div class="stats-icon-bg" style="background-color: #ffedd5; color: #ea580c;"><i data-lucide="wifi-off" class="animate-flicker"></i></div>
+                                <div>
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <span class="bg-orange-100 text-orange-700 px-2 py-0.5 rounded text-[9px] font-bold uppercase">Offline</span>
+                                        <h4 class="font-black text-gray-800 text-sm">${roomLabel}</h4>
+                                    </div>
+                                    <p class="text-[10px] text-orange-600 font-bold uppercase tracking-widest">${alert.message || 'Device not responding'}</p>
+                                    <p class="text-[10px] text-gray-500 mt-1 font-semibold">${timeStr}</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-6">
+                                <button onclick="acknowledgeAlert('${incident.alertKey}')" class="px-5 py-2 border-2 border-[#800000] text-[#800000] text-[10px] font-black rounded-lg uppercase hover:bg-[#800000] hover:text-white transition-all active:scale-95">Acknowledge</button>
+                            </div>
+                        </div>`;
+                }
             });
 
             // Indicators - use shared utility for summary cards
