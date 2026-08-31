@@ -926,9 +926,11 @@ void runAutomation(float temp, float humidity) {
   }
 
   Serial.print("Target temp: "); Serial.print(targetTemp, 1); Serial.print("°C, Current sensor temp: "); Serial.print(temp, 1); Serial.println("°C");
+  Serial.println("Checking if temp change needed...");
 
   if (targetTemp != temp) {
     unsigned long timeSinceLastIR = millis() - lastIRSendMillis;
+    Serial.print("Time since last IR send: "); Serial.print(timeSinceLastIR / 1000); Serial.println(" seconds");
     if (timeSinceLastIR < IR_SEND_COOLDOWN_MS) {
       unsigned long cooldownRemaining = (IR_SEND_COOLDOWN_MS - timeSinceLastIR) / 1000;
       Serial.print("Cooldown active, "); Serial.print(cooldownRemaining); Serial.println(" seconds remaining");
@@ -936,6 +938,7 @@ void runAutomation(float temp, float humidity) {
       logAutomationEventToHistory();
       return;
     }
+    Serial.println("No cooldown active, proceeding with IR commands");
 
     float difference = targetTemp - temp;
     int steps = (int)round(abs(difference));
