@@ -2445,7 +2445,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                     const hours = getUsageHoursForDate(room, dateStr);
 
-                    const cost = AirconCostCalculator.computeAirconCost(roomConfig, hours, ratePerKwh, targetTemp);
+                    const cost = AirconCostCalculator.computeAirconCost(roomConfig, hours, ratePerKwh, avgTargetTemp);
                     
                     const avgTempStr = typeof avgTemp === 'number' ? avgTemp.toFixed(1) : avgTemp;
                     const avgHumStr = typeof avgHum === 'number' ? Math.round(avgHum) : avgHum;
@@ -5482,14 +5482,25 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                 if (currentMetric === 'cost') {
                     const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
+
+                    // Get historical average target temperature from Firebase
+                    const dateStr = d.toISOString().split('T')[0];
+                    const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
+                    const hourData = snapshot.val();
+
                     let targetTemp;
                     if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
+                        // For dual unit, get average target temp for each unit
+                        const unit1TargetTemps = hourData ? Object.values(hourData).map(h => h.units?.unit_1?.targetTemp).filter(t => t !== undefined && t !== null) : [];
+                        const unit2TargetTemps = hourData ? Object.values(hourData).map(h => h.units?.unit_2?.targetTemp).filter(t => t !== undefined && t !== null) : [];
                         targetTemp = {
-                            unit_1: labsData[room]?.units?.unit_1?.targetTemp,
-                            unit_2: labsData[room]?.units?.unit_2?.targetTemp
+                            unit_1: unit1TargetTemps.length > 0 ? (unit1TargetTemps.reduce((a, b) => a + b, 0) / unit1TargetTemps.length) : labsData[room]?.units?.unit_1?.targetTemp,
+                            unit_2: unit2TargetTemps.length > 0 ? (unit2TargetTemps.reduce((a, b) => a + b, 0) / unit2TargetTemps.length) : labsData[room]?.units?.unit_2?.targetTemp
                         };
                     } else {
-                        targetTemp = labsData[room]?.targetTemp;
+                        // For single unit, get average target temp
+                        const targetTemps = hourData ? Object.values(hourData).map(h => h.targetTemp).filter(t => t !== undefined && t !== null) : [];
+                        targetTemp = targetTemps.length > 0 ? (targetTemps.reduce((a, b) => a + b, 0) / targetTemps.length) : labsData[room]?.targetTemp;
                     }
                     value = AirconCostCalculator.computeAirconCost(
                         airconConfig[room],
@@ -5597,14 +5608,25 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                 if (currentMetric === 'cost') {
                     const hours = dailyAnalytics.data[room]?.[dateLabel] || 0;
                     const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
+
+                    // Get historical average target temperature from Firebase
+                    const dateStr = d.toISOString().split('T')[0];
+                    const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
+                    const hourData = snapshot.val();
+
                     let targetTemp;
                     if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
+                        // For dual unit, get average target temp for each unit
+                        const unit1TargetTemps = hourData ? Object.values(hourData).map(h => h.units?.unit_1?.targetTemp).filter(t => t !== undefined && t !== null) : [];
+                        const unit2TargetTemps = hourData ? Object.values(hourData).map(h => h.units?.unit_2?.targetTemp).filter(t => t !== undefined && t !== null) : [];
                         targetTemp = {
-                            unit_1: labsData[room]?.units?.unit_1?.targetTemp,
-                            unit_2: labsData[room]?.units?.unit_2?.targetTemp
+                            unit_1: unit1TargetTemps.length > 0 ? (unit1TargetTemps.reduce((a, b) => a + b, 0) / unit1TargetTemps.length) : labsData[room]?.units?.unit_1?.targetTemp,
+                            unit_2: unit2TargetTemps.length > 0 ? (unit2TargetTemps.reduce((a, b) => a + b, 0) / unit2TargetTemps.length) : labsData[room]?.units?.unit_2?.targetTemp
                         };
                     } else {
-                        targetTemp = labsData[room]?.targetTemp;
+                        // For single unit, get average target temp
+                        const targetTemps = hourData ? Object.values(hourData).map(h => h.targetTemp).filter(t => t !== undefined && t !== null) : [];
+                        targetTemp = targetTemps.length > 0 ? (targetTemps.reduce((a, b) => a + b, 0) / targetTemps.length) : labsData[room]?.targetTemp;
                     }
                     value = AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh, targetTemp);
 
