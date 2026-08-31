@@ -158,7 +158,7 @@ const AirconCostCalculator = (function() {
      */
     function computeSingleUnitCost(unitConfig, hours, ratePerKwh, targetTemp) {
         console.log('[Cost Calculator] computeSingleUnitCost called:', { unitConfig, hours, ratePerKwh, targetTemp });
-        
+
         if (!unitConfig || hours <= 0 || ratePerKwh <= 0) {
             console.log('[Cost Calculator] Returning 0 - invalid input');
             return 0;
@@ -166,8 +166,10 @@ const AirconCostCalculator = (function() {
 
         // Get effective wattage based on target temperature, or fall back to rated watts
         let watts;
+        let usedTemperatureBasedCalculation = false;
         if (targetTemp !== undefined && targetTemp !== null) {
             watts = getEffectiveWatts(unitConfig, targetTemp);
+            usedTemperatureBasedCalculation = (watts > 0 && watts !== getRatedWatts(unitConfig));
         } else {
             watts = getRatedWatts(unitConfig);
         }
@@ -180,8 +182,10 @@ const AirconCostCalculator = (function() {
         // Get duty cycle (default to 1.0 if not specified)
         const dutyCycle = unitConfig.duty_cycle || 1.0;
 
-        // Calculate average power in kW (accounting for duty cycle)
-        const avgPowerKw = (watts * dutyCycle) / 1000;
+        // Calculate average power in kW
+        // Only apply duty cycle if NOT using temperature-based calculation
+        // Temperature calibration already represents actual power consumption
+        const avgPowerKw = usedTemperatureBasedCalculation ? (watts / 1000) : ((watts * dutyCycle) / 1000);
 
         // Calculate energy in kWh
         const energyKwh = avgPowerKw * hours;
@@ -189,7 +193,15 @@ const AirconCostCalculator = (function() {
         // Calculate cost
         const cost = energyKwh * ratePerKwh;
 
-        console.log('[Cost Calculator] Calculation result:', { watts, dutyCycle, avgPowerKw, energyKwh, cost });
+        console.log('[Cost Calculator] Calculation result:', {
+            watts,
+            usedTemperatureBasedCalculation,
+            dutyCycle,
+            dutyCycleApplied: !usedTemperatureBasedCalculation,
+            avgPowerKw,
+            energyKwh,
+            cost
+        });
 
         return parseFloat(cost.toFixed(2));
     }
