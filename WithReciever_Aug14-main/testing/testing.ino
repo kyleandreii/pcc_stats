@@ -806,7 +806,7 @@ void runAutomation(float temp, float humidity) {
           lastIRSendMillis = millis();
           // Update Firebase targetTemp
           float newTargetTemp = temp - 1.0;
-          Firebase.setFloat(firebaseData, String(ROOM_ID) + "/targetTemp", newTargetTemp);
+          Firebase.RTDB.setFloat(&fbdo, String(ROOM_ID) + "/targetTemp", newTargetTemp);
           Serial.print("[Automation] Updated Firebase targetTemp to: "); Serial.println(newTargetTemp, 1);
           // Log automation event with temperature data
           lastAutomationEvent = "Temperature safety: TEMP_DOWN sent (temp exceeded max)";
@@ -847,7 +847,7 @@ void runAutomation(float temp, float humidity) {
           lastIRSendMillis = millis();
           // Update Firebase targetTemp
           float newTargetTemp = temp + 1.0;
-          Firebase.setFloat(firebaseData, String(ROOM_ID) + "/targetTemp", newTargetTemp);
+          Firebase.RTDB.setFloat(&fbdo, String(ROOM_ID) + "/targetTemp", newTargetTemp);
           Serial.print("[Automation] Updated Firebase targetTemp to: "); Serial.println(newTargetTemp, 1);
           // Log automation event with temperature data
           lastAutomationEvent = "Temperature safety: TEMP_UP sent (temp below min)";
@@ -896,7 +896,7 @@ void runAutomation(float temp, float humidity) {
     Serial.println("📊 HUMIDITY AUTOMATION: Occupied detected");
     Serial.print("Humidity: "); Serial.print(humidity, 1); Serial.print("% > "); Serial.print(MAX_HUMIDITY); Serial.print("%, setting target to max: "); Serial.println(targetTemp, 1);
     // Update Firebase targetTemp
-    Firebase.setFloat(firebaseData, String(ROOM_ID) + "/targetTemp", targetTemp);
+    Firebase.RTDB.setFloat(&fbdo, String(ROOM_ID) + "/targetTemp", targetTemp);
     Serial.print("[Automation] Updated Firebase targetTemp to: "); Serial.println(targetTemp, 1);
     lastAutomationEvent = "Humidity automation: Occupied detected, setting target to max temp";
     lastAutomationEventType = "humidity";
@@ -910,7 +910,7 @@ void runAutomation(float temp, float humidity) {
     Serial.println("📊 HUMIDITY AUTOMATION: Not occupied detected");
     Serial.print("Humidity: "); Serial.print(humidity, 1); Serial.print("% < "); Serial.print(MIN_HUMIDITY); Serial.print("%, setting target to min: "); Serial.println(targetTemp, 1);
     // Update Firebase targetTemp
-    Firebase.setFloat(firebaseData, String(ROOM_ID) + "/targetTemp", targetTemp);
+    Firebase.RTDB.setFloat(&fbdo, String(ROOM_ID) + "/targetTemp", targetTemp);
     Serial.print("[Automation] Updated Firebase targetTemp to: "); Serial.println(targetTemp, 1);
     lastAutomationEvent = "Humidity automation: Not occupied detected, setting target to min temp";
     lastAutomationEventType = "humidity";

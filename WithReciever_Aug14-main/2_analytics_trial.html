@@ -2250,6 +2250,11 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                 const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
 
+                console.log(`[Cost Verification] Room: ${room}`);
+                console.log(`[Cost Verification] Room Config:`, JSON.stringify(roomConfig, null, 2));
+                console.log(`[Cost Verification] Total Hours: ${totalHours}`);
+                console.log(`[Cost Verification] Rate per kWh: ${ratePerKwh}`);
+
                 // Get target temperature for cost calculation
                 let targetTemp;
                 if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
@@ -2260,6 +2265,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                 } else {
                     targetTemp = labsData[room]?.targetTemp;
                 }
+
+                console.log(`[Cost Verification] Target Temp:`, targetTemp);
 
                 
                 let temps = [], hums = [], targetTemps = [], effectiveWatts = [], totalHours = 0;
@@ -2316,7 +2323,18 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                 const avgTargetTemp = targetTemps.length > 0 ? (targetTemps.reduce((a, b) => a + b, 0) / targetTemps.length) : (targetTemp || 'N/A');
                 const avgEffectiveWatts = effectiveWatts.length > 0 ? (effectiveWatts.reduce((a, b) => a + b, 0) / effectiveWatts.length) : 'N/A';
 
+                console.log(`[Cost Verification] Avg Target Temp: ${avgTargetTemp}`);
+                console.log(`[Cost Verification] Avg Effective Watts: ${avgEffectiveWatts}`);
+
                 const cost = AirconCostCalculator.computeAirconCost(roomConfig, totalHours, ratePerKwh, targetTemp);
+
+                console.log(`[Cost Verification] Calculated Cost: ₱${cost}`);
+                console.log(`[Cost Verification] --- Cost Breakdown ---`);
+                console.log(`[Cost Verification] Hours: ${totalHours}`);
+                console.log(`[Cost Verification] Rate: ₱${ratePerKwh}/kWh`);
+                console.log(`[Cost Verification] Avg Effective Watts: ${avgEffectiveWatts}W`);
+                console.log(`[Cost Verification] Energy (kWh): ${(avgEffectiveWatts / 1000 * totalHours).toFixed(4)}`);
+                console.log(`[Cost Verification] Cost Check: ₱${((avgEffectiveWatts / 1000 * totalHours) * ratePerKwh).toFixed(2)}`);
 
                 
                 const avgTempStr = typeof avgTemp === 'number' ? avgTemp.toFixed(1) : avgTemp;
@@ -4439,6 +4457,11 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             // Get target temperature for cost calculation
             const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
+
+            console.log(`[Live Cost Verification] Room: ${room}`);
+            console.log(`[Live Cost Verification] Room Config:`, JSON.stringify(roomConfig, null, 2));
+            console.log(`[Live Cost Verification] Usage Hours: ${hours}`);
+
             let targetTemp;
             if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
                 targetTemp = {
@@ -4448,6 +4471,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
             } else {
                 targetTemp = labsData[room]?.targetTemp;
             }
+
+            console.log(`[Live Cost Verification] Target Temp: ${targetTemp}`);
 
 
             // Use the same data source as Daily Usage Report
@@ -4553,6 +4578,18 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                     targetTemp
 
                 );
+
+                console.log(`[Live Cost Verification] Calculated Cost: ₱${value}`);
+                console.log(`[Live Cost Verification] --- Cost Breakdown ---`);
+                console.log(`[Live Cost Verification] Hours: ${hours}`);
+                console.log(`[Live Cost Verification] Rate: ₱${ratePerKwh}/kWh`);
+                console.log(`[Live Cost Verification] Target Temp: ${targetTemp}°C`);
+
+                // Calculate effective watts for verification
+                const effectiveWatts = AirconCostCalculator.getEffectiveWatts(roomConfig, targetTemp);
+                console.log(`[Live Cost Verification] Effective Watts: ${effectiveWatts}W`);
+                console.log(`[Live Cost Verification] Energy (kWh): ${(effectiveWatts / 1000 * hours).toFixed(4)}`);
+                console.log(`[Live Cost Verification] Cost Check: ₱${((effectiveWatts / 1000 * hours) * ratePerKwh).toFixed(2)}`);
 
             } else if (currentMetric === 'usage') {
 
