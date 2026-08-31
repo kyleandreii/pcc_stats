@@ -545,12 +545,21 @@ void loop() {
       historyData.add("humidity", h);
       // Log targetTemp for accurate historical cost calculations
       #if DUAL_UNIT_MODE
-      float targetTemp1 = Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/targetTemp");
-      float targetTemp2 = Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/targetTemp");
+      float targetTemp1 = 24.0; // Default fallback
+      float targetTemp2 = 24.0; // Default fallback
+      if (Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/targetTemp")) {
+        targetTemp1 = fbdo.floatData();
+      }
+      if (Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/targetTemp")) {
+        targetTemp2 = fbdo.floatData();
+      }
       historyData.add("targetTemp1", targetTemp1);
       historyData.add("targetTemp2", targetTemp2);
       #else
-      float targetTemp = Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/targetTemp");
+      float targetTemp = 24.0; // Default fallback
+      if (Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/targetTemp")) {
+        targetTemp = fbdo.floatData();
+      }
       historyData.add("targetTemp", targetTemp);
       #endif
       // Log automation state and start time

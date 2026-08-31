@@ -4534,6 +4534,28 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                     console.log(`[loadDayView] ${room} (today): ${hours} hours from live data`);
 
+                    // Get historical average target temperature from today's history for accurate cost calculation
+                    const dateKey = currentDate.toISOString().split('T')[0];
+                    const snapshot = await db.ref(`history/${room}/${dateKey}`).once('value');
+                    const hourData = snapshot.val();
+
+                    if (hourData) {
+                        if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
+                            // For dual unit, get average target temp for each unit
+                            const unit1TargetTemps = Object.values(hourData).map(h => h.units?.unit_1?.targetTemp).filter(t => t !== undefined && t !== null);
+                            const unit2TargetTemps = Object.values(hourData).map(h => h.units?.unit_2?.targetTemp).filter(t => t !== undefined && t !== null);
+                            targetTemp = {
+                                unit_1: unit1TargetTemps.length > 0 ? (unit1TargetTemps.reduce((a, b) => a + b, 0) / unit1TargetTemps.length) : targetTemp.unit_1,
+                                unit_2: unit2TargetTemps.length > 0 ? (unit2TargetTemps.reduce((a, b) => a + b, 0) / unit2TargetTemps.length) : targetTemp.unit_2
+                            };
+                        } else {
+                            // For single unit, get average target temp
+                            const targetTemps = Object.values(hourData).map(h => h.targetTemp).filter(t => t !== undefined && t !== null);
+                            targetTemp = targetTemps.length > 0 ? (targetTemps.reduce((a, b) => a + b, 0) / targetTemps.length) : targetTemp;
+                        }
+                        console.log(`[loadDayView] ${room} (today): historical avg targetTemp: ${targetTemp}`);
+                    }
+
                 }
 
             } else {
@@ -4574,6 +4596,28 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                 } else {
 
                     console.log(`[loadDayView] ${room} on ${dateLabel}: ${hours} hours from dailyAnalytics`);
+
+                    // Get historical average target temperature from Firebase for accurate cost calculation
+                    const dateKey = currentDate.toISOString().split('T')[0];
+                    const snapshot = await db.ref(`history/${room}/${dateKey}`).once('value');
+                    const hourData = snapshot.val();
+
+                    if (hourData) {
+                        if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
+                            // For dual unit, get average target temp for each unit
+                            const unit1TargetTemps = Object.values(hourData).map(h => h.units?.unit_1?.targetTemp).filter(t => t !== undefined && t !== null);
+                            const unit2TargetTemps = Object.values(hourData).map(h => h.units?.unit_2?.targetTemp).filter(t => t !== undefined && t !== null);
+                            targetTemp = {
+                                unit_1: unit1TargetTemps.length > 0 ? (unit1TargetTemps.reduce((a, b) => a + b, 0) / unit1TargetTemps.length) : targetTemp.unit_1,
+                                unit_2: unit2TargetTemps.length > 0 ? (unit2TargetTemps.reduce((a, b) => a + b, 0) / unit2TargetTemps.length) : targetTemp.unit_2
+                            };
+                        } else {
+                            // For single unit, get average target temp
+                            const targetTemps = Object.values(hourData).map(h => h.targetTemp).filter(t => t !== undefined && t !== null);
+                            targetTemp = targetTemps.length > 0 ? (targetTemps.reduce((a, b) => a + b, 0) / targetTemps.length) : targetTemp;
+                        }
+                        console.log(`[loadDayView] ${room} on ${dateLabel}: historical avg targetTemp: ${targetTemp}`);
+                    }
 
                 }
 
