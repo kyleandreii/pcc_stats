@@ -779,7 +779,7 @@
                     const el = document.getElementById('manual-temp-val');
                     // Only update if not currently being edited by user
                     if (el && document.activeElement !== el) {
-                        el.innerText = newTarget;
+                        el.innerText = Math.round(newTarget);
                     }
                 }
             });
@@ -826,11 +826,11 @@
                 
                 // Set unit 1 temperature
                 const unit1Target = data.units.unit_1?.targetTemp !== undefined ? data.units.unit_1.targetTemp : 24;
-                document.getElementById('unit1-temp-val').innerText = unit1Target;
-                
+                document.getElementById('unit1-temp-val').innerText = Math.round(unit1Target);
+
                 // Set unit 2 temperature
                 const unit2Target = data.units.unit_2?.targetTemp !== undefined ? data.units.unit_2.targetTemp : 24;
-                document.getElementById('unit2-temp-val').innerText = unit2Target;
+                document.getElementById('unit2-temp-val').innerText = Math.round(unit2Target);
             } else {
                 // Show single-unit controls
                 document.getElementById('single-unit-temp-controls').classList.remove('hidden');
@@ -838,9 +838,9 @@
                 
                 // Set up Firebase listeners for target temperature to ensure persistence
                 setupTargetTempListeners(selectedRoom);
-                
+
                 const displayTarget = data.targetTemp !== undefined ? data.targetTemp : 24;
-                document.getElementById('manual-temp-val').innerText = displayTarget;
+                document.getElementById('manual-temp-val').innerText = Math.round(displayTarget);
             }
 
             document.getElementById('input-on-time').value = schedule.onTime || "";

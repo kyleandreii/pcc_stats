@@ -82,7 +82,7 @@ float MAX_HUMIDITY = 60.0;  // Default, will be updated from Firebase
 float MIN_HUMIDITY = 45.0;  // Default, will be updated from Firebase
 float humidityOccupiedThreshold = 60.0;  // From Firebase: automation/humidityOccupiedThreshold
 float humidityEmptyThreshold = 45.0;     // From Firebase: automation/humidityEmptyThreshold
-const unsigned long AUTOMATION_INTERVAL_MS = 30000; // 30 seconds between automation checks (temporarily reduced for testing)
+const unsigned long AUTOMATION_INTERVAL_MS = 900000; // 15 minutes between automation checks
 const unsigned long STEP_PRESS_DELAY_MS = 400;
 const unsigned long IR_SEND_COOLDOWN_MS = 60000; // 1 minute cooldown between IR sends
 const unsigned long SERIAL_LOG_THROTTLE_MS = 5000; // 5 seconds between serial logs
@@ -101,6 +101,8 @@ unsigned long scheduleCompliantMinutes = 0;  // Minutes AC ran within schedule
 unsigned long scheduleNonCompliantMinutes = 0; // Minutes AC ran outside schedule
 unsigned long totalScheduledMinutes = 0; // Total minutes in scheduled ON period
 unsigned long lastScheduleCheckMillis = 0; // Last time schedule adherence was checked
+bool manualOverrideActive = false; // Whether manual override is active
+unsigned long lastScheduleBoundaryMillis = 0; // Last time schedule boundary (ON/OFF) occurred
 
 void handleACCommand(String cmd, int unit = 0, bool isAutomation = false);
 void logAutomationEventToHistory();
@@ -243,6 +245,13 @@ void setup() {
   // Load schedule configuration from Firebase
   loadScheduleFromFirebase();
 
+  // Load manual override state from Firebase
+  Firebase.RTDB.getBool(&fbdo, String(ROOM_ID) + "/manualOverrideActive");
+  if (fbdo.httpCode() == FIREBASE_ERROR_HTTP_CODE_OK) {
+    manualOverrideActive = fbdo.boolData();
+    Serial.println("[Setup] Manual override state loaded from Firebase: " + String(manualOverrideActive ? "ACTIVE" : "INACTIVE"));
+  }
+
   Serial.println("[Setup] Temperature Safety Automation: ENABLED");
   Serial.println("[Setup] Automation Interval: " + String(AUTOMATION_INTERVAL_MS / 1000) + " seconds");
   Serial.println("[Setup] IR Send Cooldown: " + String(IR_SEND_COOLDOWN_MS / 1000) + " seconds");
@@ -254,8 +263,14 @@ void setup() {
   Firebase.RTDB.setString(&fbdo, "/" + String(ROOM_ID) + "/device_room_id", ROOM_ID);
 
   #if DUAL_UNIT_MODE
-  Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/ac", false);
-  Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/ac", false);
+  // Only force AC to false on startup if manual override is not active
+  if (!manualOverrideActive) {
+    Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/ac", false);
+    Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/ac", false);
+    Serial.println("[Setup] Manual override not active, forcing AC to false on startup");
+  } else {
+    Serial.println("[Setup] Manual override active, preserving current AC state on startup");
+  }
   Firebase.RTDB.setString(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/ac_command", "IDLE");
   Firebase.RTDB.setString(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/ac_command", "IDLE");
   #endif
@@ -509,14 +524,14 @@ void loop() {
       strftime(hourStr, sizeof(hourStr), "%H", timeinfo);
 
       String historyPath = "/history/" + String(ROOM_ID) + "/" + String(dateStr) + "/" + String(hourStr);
-      
-      // Read existing data first to preserve automation events
+
+      // Read existing data first to preserve automation_events subdirectory
       Firebase.RTDB.getJSON(&fbdo, historyPath.c_str());
       FirebaseJson existingData;
       if (fbdo.jsonString() != "") {
         existingData.setJsonData(fbdo.jsonString());
       }
-      
+
       FirebaseJson historyData;
       historyData.add("temperature", t);
       historyData.add("humidity", h);
@@ -535,7 +550,7 @@ void loop() {
       if (automationEnabled && automationStartTime > 0) {
         historyData.add("automationStartTime", automationStartTime / 1000); // Store as seconds since boot
       }
-      
+
       // Log schedule efficiency metrics
       if (scheduleEnabled) {
         historyData.add("scheduleEnabled", true);
@@ -546,6 +561,15 @@ void loop() {
           float efficiency = ((float)scheduleCompliantMinutes / (float)totalScheduledMinutes) * 100.0;
           historyData.add("scheduleEfficiencyPercentage", efficiency);
         }
+      }
+
+      // Preserve automation_events subdirectory if it exists
+      FirebaseJsonData automationEventsData;
+      if (existingData.get(automationEventsData, "automation_events")) {
+        FirebaseJson automationEventsJson;
+        automationEventsData.getJSON(automationEventsJson);
+        historyData.add("automation_events", automationEventsJson);
+        Serial.println("[History] Preserving existing automation_events subdirectory");
       }
       
       // Preserve existing automation event data if it exists
@@ -663,6 +687,11 @@ void handleACCommand(String cmd, int unit, bool isAutomation) {
   // Only log automation event if this is an automated command
   if (isAutomation) {
     logAutomationEventToHistory();
+  } else {
+    // Track manual changes for override logic
+    manualOverrideActive = true;
+    Firebase.RTDB.setBool(&fbdo, String(ROOM_ID) + "/manualOverrideActive", true);
+    Serial.println("[Manual Override] Manual AC change recorded, schedule override active until next schedule boundary");
   }
 
   // Update Firebase based on unit
@@ -807,8 +836,15 @@ void runAutomation(float temp, float humidity) {
           lastIRSendMillis = millis();
           // Update Firebase targetTemp
           float newTargetTemp = temp - 1.0;
+          #if DUAL_UNIT_MODE
+          Firebase.RTDB.setFloat(&fbdo, String(ROOM_ID) + "/units/unit_1/targetTemp", newTargetTemp);
+          Firebase.RTDB.setFloat(&fbdo, String(ROOM_ID) + "/units/unit_2/targetTemp", newTargetTemp);
+          Serial.print("[Automation] Updated Firebase unit_1 targetTemp to: "); Serial.println(newTargetTemp, 1);
+          Serial.print("[Automation] Updated Firebase unit_2 targetTemp to: "); Serial.println(newTargetTemp, 1);
+          #else
           Firebase.RTDB.setFloat(&fbdo, String(ROOM_ID) + "/targetTemp", newTargetTemp);
           Serial.print("[Automation] Updated Firebase targetTemp to: "); Serial.println(newTargetTemp, 1);
+          #endif
           // Log automation event with temperature data
           lastAutomationEvent = "Temperature safety: TEMP_DOWN sent (temp exceeded max)";
           lastAutomationEventType = "temperature";
@@ -848,8 +884,15 @@ void runAutomation(float temp, float humidity) {
           lastIRSendMillis = millis();
           // Update Firebase targetTemp
           float newTargetTemp = temp + 1.0;
+          #if DUAL_UNIT_MODE
+          Firebase.RTDB.setFloat(&fbdo, String(ROOM_ID) + "/units/unit_1/targetTemp", newTargetTemp);
+          Firebase.RTDB.setFloat(&fbdo, String(ROOM_ID) + "/units/unit_2/targetTemp", newTargetTemp);
+          Serial.print("[Automation] Updated Firebase unit_1 targetTemp to: "); Serial.println(newTargetTemp, 1);
+          Serial.print("[Automation] Updated Firebase unit_2 targetTemp to: "); Serial.println(newTargetTemp, 1);
+          #else
           Firebase.RTDB.setFloat(&fbdo, String(ROOM_ID) + "/targetTemp", newTargetTemp);
           Serial.print("[Automation] Updated Firebase targetTemp to: "); Serial.println(newTargetTemp, 1);
+          #endif
           // Log automation event with temperature data
           lastAutomationEvent = "Temperature safety: TEMP_UP sent (temp below min)";
           lastAutomationEventType = "temperature";
@@ -897,8 +940,15 @@ void runAutomation(float temp, float humidity) {
     Serial.println("📊 HUMIDITY AUTOMATION: Occupied detected");
     Serial.print("Humidity: "); Serial.print(humidity, 1); Serial.print("% > "); Serial.print(MAX_HUMIDITY); Serial.print("%, setting target to max: "); Serial.println(targetTemp, 1);
     // Update Firebase targetTemp
+    #if DUAL_UNIT_MODE
+    Firebase.RTDB.setFloat(&fbdo, String(ROOM_ID) + "/units/unit_1/targetTemp", targetTemp);
+    Firebase.RTDB.setFloat(&fbdo, String(ROOM_ID) + "/units/unit_2/targetTemp", targetTemp);
+    Serial.print("[Automation] Updated Firebase unit_1 targetTemp to: "); Serial.println(targetTemp, 1);
+    Serial.print("[Automation] Updated Firebase unit_2 targetTemp to: "); Serial.println(targetTemp, 1);
+    #else
     Firebase.RTDB.setFloat(&fbdo, String(ROOM_ID) + "/targetTemp", targetTemp);
     Serial.print("[Automation] Updated Firebase targetTemp to: "); Serial.println(targetTemp, 1);
+    #endif
     lastAutomationEvent = "Humidity automation: Occupied detected, setting target to max temp";
     lastAutomationEventType = "humidity";
     lastAutomationEventTime = millis();
@@ -911,8 +961,15 @@ void runAutomation(float temp, float humidity) {
     Serial.println("📊 HUMIDITY AUTOMATION: Not occupied detected");
     Serial.print("Humidity: "); Serial.print(humidity, 1); Serial.print("% < "); Serial.print(MIN_HUMIDITY); Serial.print("%, setting target to min: "); Serial.println(targetTemp, 1);
     // Update Firebase targetTemp
+    #if DUAL_UNIT_MODE
+    Firebase.RTDB.setFloat(&fbdo, String(ROOM_ID) + "/units/unit_1/targetTemp", targetTemp);
+    Firebase.RTDB.setFloat(&fbdo, String(ROOM_ID) + "/units/unit_2/targetTemp", targetTemp);
+    Serial.print("[Automation] Updated Firebase unit_1 targetTemp to: "); Serial.println(targetTemp, 1);
+    Serial.print("[Automation] Updated Firebase unit_2 targetTemp to: "); Serial.println(targetTemp, 1);
+    #else
     Firebase.RTDB.setFloat(&fbdo, String(ROOM_ID) + "/targetTemp", targetTemp);
     Serial.print("[Automation] Updated Firebase targetTemp to: "); Serial.println(targetTemp, 1);
+    #endif
     lastAutomationEvent = "Humidity automation: Not occupied detected, setting target to min temp";
     lastAutomationEventType = "humidity";
     lastAutomationEventTime = millis();
@@ -1089,8 +1146,27 @@ void checkScheduleAdherence() {
 
   bool withinSchedule = isWithinSchedule();
 
-  // Schedule-based AC control
+  // Detect schedule boundary (ON/OFF transition)
   static bool lastWithinSchedule = false;
+  if (withinSchedule != lastWithinSchedule) {
+    // Schedule boundary detected - clear manual override
+    if (manualOverrideActive) {
+      manualOverrideActive = false;
+      Firebase.RTDB.setBool(&fbdo, String(ROOM_ID) + "/manualOverrideActive", false);
+      Serial.println("[Manual Override] Schedule boundary detected, clearing manual override");
+    }
+    lastScheduleBoundaryMillis = millis();
+  }
+
+  // Check if manual override is active
+  if (manualOverrideActive) {
+    Serial.println("[Manual Override] Manual override active, skipping schedule-based control");
+    // Skip schedule-based AC control during manual override
+    lastWithinSchedule = withinSchedule; // Update to prevent false boundary detection later
+    return;
+  }
+
+  // Schedule-based AC control
   if (withinSchedule != lastWithinSchedule) {
     if (withinSchedule && !acIsOn) {
       // Schedule started, turn AC on
