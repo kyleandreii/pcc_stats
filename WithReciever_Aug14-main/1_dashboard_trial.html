@@ -918,6 +918,7 @@
                 // Firebase is authoritative for AC state - use it directly for cross-device sync
                 const isPoweredOn = d.ac === true || d.ac === "ON" || d.ac === 1;
                 console.log(`[Dashboard] ${roomPath} - Using Firebase: ${d.ac}, isPoweredOn=${isPoweredOn}`);
+                console.log(`[Dashboard] ${roomPath} - Full room data:`, JSON.stringify(d));
                 
                 console.log(`[Dashboard] ${roomPath} - Final state: isOnline=${isDeviceOnline}, isPoweredOn=${isPoweredOn}`);
                 
