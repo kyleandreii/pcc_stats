@@ -4542,8 +4542,9 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                     if (hourData) {
                         if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
                             // For dual unit, get average target temp for each unit
-                            const unit1TargetTemps = Object.values(hourData).map(h => h.units?.unit_1?.targetTemp).filter(t => t !== undefined && t !== null);
-                            const unit2TargetTemps = Object.values(hourData).map(h => h.units?.unit_2?.targetTemp).filter(t => t !== undefined && t !== null);
+                            // ESP32 logs as targetTemp1 and targetTemp2 directly in hourData
+                            const unit1TargetTemps = Object.values(hourData).map(h => h.targetTemp1).filter(t => t !== undefined && t !== null);
+                            const unit2TargetTemps = Object.values(hourData).map(h => h.targetTemp2).filter(t => t !== undefined && t !== null);
                             targetTemp = {
                                 unit_1: unit1TargetTemps.length > 0 ? (unit1TargetTemps.reduce((a, b) => a + b, 0) / unit1TargetTemps.length) : targetTemp.unit_1,
                                 unit_2: unit2TargetTemps.length > 0 ? (unit2TargetTemps.reduce((a, b) => a + b, 0) / unit2TargetTemps.length) : targetTemp.unit_2
@@ -4605,8 +4606,9 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                     if (hourData) {
                         if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
                             // For dual unit, get average target temp for each unit
-                            const unit1TargetTemps = Object.values(hourData).map(h => h.units?.unit_1?.targetTemp).filter(t => t !== undefined && t !== null);
-                            const unit2TargetTemps = Object.values(hourData).map(h => h.units?.unit_2?.targetTemp).filter(t => t !== undefined && t !== null);
+                            // ESP32 logs as targetTemp1 and targetTemp2 directly in hourData
+                            const unit1TargetTemps = Object.values(hourData).map(h => h.targetTemp1).filter(t => t !== undefined && t !== null);
+                            const unit2TargetTemps = Object.values(hourData).map(h => h.targetTemp2).filter(t => t !== undefined && t !== null);
                             targetTemp = {
                                 unit_1: unit1TargetTemps.length > 0 ? (unit1TargetTemps.reduce((a, b) => a + b, 0) / unit1TargetTemps.length) : targetTemp.unit_1,
                                 unit_2: unit2TargetTemps.length > 0 ? (unit2TargetTemps.reduce((a, b) => a + b, 0) / unit2TargetTemps.length) : targetTemp.unit_2
@@ -5535,8 +5537,9 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                     let targetTemp;
                     if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
                         // For dual unit, get average target temp for each unit
-                        const unit1TargetTemps = hourData ? Object.values(hourData).map(h => h.units?.unit_1?.targetTemp).filter(t => t !== undefined && t !== null) : [];
-                        const unit2TargetTemps = hourData ? Object.values(hourData).map(h => h.units?.unit_2?.targetTemp).filter(t => t !== undefined && t !== null) : [];
+                        // ESP32 logs as targetTemp1 and targetTemp2 directly in hourData
+                        const unit1TargetTemps = hourData ? Object.values(hourData).map(h => h.targetTemp1).filter(t => t !== undefined && t !== null) : [];
+                        const unit2TargetTemps = hourData ? Object.values(hourData).map(h => h.targetTemp2).filter(t => t !== undefined && t !== null) : [];
                         targetTemp = {
                             unit_1: unit1TargetTemps.length > 0 ? (unit1TargetTemps.reduce((a, b) => a + b, 0) / unit1TargetTemps.length) : labsData[room]?.units?.unit_1?.targetTemp,
                             unit_2: unit2TargetTemps.length > 0 ? (unit2TargetTemps.reduce((a, b) => a + b, 0) / unit2TargetTemps.length) : labsData[room]?.units?.unit_2?.targetTemp
@@ -5661,8 +5664,9 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                     let targetTemp;
                     if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
                         // For dual unit, get average target temp for each unit
-                        const unit1TargetTemps = hourData ? Object.values(hourData).map(h => h.units?.unit_1?.targetTemp).filter(t => t !== undefined && t !== null) : [];
-                        const unit2TargetTemps = hourData ? Object.values(hourData).map(h => h.units?.unit_2?.targetTemp).filter(t => t !== undefined && t !== null) : [];
+                        // ESP32 logs as targetTemp1 and targetTemp2 directly in hourData
+                        const unit1TargetTemps = hourData ? Object.values(hourData).map(h => h.targetTemp1).filter(t => t !== undefined && t !== null) : [];
+                        const unit2TargetTemps = hourData ? Object.values(hourData).map(h => h.targetTemp2).filter(t => t !== undefined && t !== null) : [];
                         targetTemp = {
                             unit_1: unit1TargetTemps.length > 0 ? (unit1TargetTemps.reduce((a, b) => a + b, 0) / unit1TargetTemps.length) : labsData[room]?.units?.unit_1?.targetTemp,
                             unit_2: unit2TargetTemps.length > 0 ? (unit2TargetTemps.reduce((a, b) => a + b, 0) / unit2TargetTemps.length) : labsData[room]?.units?.unit_2?.targetTemp
