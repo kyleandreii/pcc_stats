@@ -699,7 +699,7 @@ void logAutomationEventToHistory() {
     strftime(dateStr, sizeof(dateStr), "%Y-%m-%d", &timeinfo);
     strftime(hourStr, sizeof(hourStr), "%H", &timeinfo);
     
-    String historyPath = "/history/" + String(ROOM_ID) + "/" + String(dateStr) + "/" + String(hourStr);
+    String historyPath = "/history/" + String(ROOM_ID) + "/" + String(dateStr) + "/" + String(hourStr) + "/automation_events";
 
     FirebaseJson historyData;
     historyData.add("automationEvent", lastAutomationEvent);
@@ -709,7 +709,7 @@ void logAutomationEventToHistory() {
     historyData.add("automationEventUpdatedTemp", lastAutomationEventUpdatedTemp);
 
     Serial.print("[History] Writing to Firebase path: "); Serial.println(historyPath.c_str());
-    // Use pushJSON instead of setJSON to preserve all events (creates unique keys)
+    // Use pushJSON to preserve all events (creates unique keys)
     bool historySuccess = Firebase.RTDB.pushJSON(&fbdo, historyPath.c_str(), &historyData);
     Serial.print("[History] Firebase write: "); Serial.println(historySuccess ? "success" : "failed");
     if (!historySuccess) {
