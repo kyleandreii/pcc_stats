@@ -103,6 +103,7 @@ unsigned long totalScheduledMinutes = 0; // Total minutes in scheduled ON period
 unsigned long lastScheduleCheckMillis = 0; // Last time schedule adherence was checked
 bool manualOverrideActive = false; // Whether manual override is active
 unsigned long lastScheduleBoundaryMillis = 0; // Last time schedule boundary (ON/OFF) occurred
+bool lastWithinSchedule = false; // Last schedule state (to detect boundaries)
 
 void handleACCommand(String cmd, int unit = 0, bool isAutomation = false);
 void logAutomationEventToHistory();
@@ -250,6 +251,13 @@ void setup() {
   if (fbdo.httpCode() == FIREBASE_ERROR_HTTP_CODE_OK) {
     manualOverrideActive = fbdo.boolData();
     Serial.println("[Setup] Manual override state loaded from Firebase: " + String(manualOverrideActive ? "ACTIVE" : "INACTIVE"));
+  }
+
+  // Load last schedule state from Firebase to prevent false boundary detection on restart
+  Firebase.RTDB.getBool(&fbdo, String(ROOM_ID) + "/lastWithinSchedule");
+  if (fbdo.httpCode() == FIREBASE_ERROR_HTTP_CODE_OK) {
+    lastWithinSchedule = fbdo.boolData();
+    Serial.println("[Setup] Last schedule state loaded from Firebase: " + String(lastWithinSchedule ? "WITHIN" : "OUTSIDE"));
   }
 
   Serial.println("[Setup] Temperature Safety Automation: ENABLED");
@@ -1147,7 +1155,6 @@ void checkScheduleAdherence() {
   bool withinSchedule = isWithinSchedule();
 
   // Detect schedule boundary (ON/OFF transition)
-  static bool lastWithinSchedule = false;
   if (withinSchedule != lastWithinSchedule) {
     // Schedule boundary detected - clear manual override
     if (manualOverrideActive) {
@@ -1155,6 +1162,8 @@ void checkScheduleAdherence() {
       Firebase.RTDB.setBool(&fbdo, String(ROOM_ID) + "/manualOverrideActive", false);
       Serial.println("[Manual Override] Schedule boundary detected, clearing manual override");
     }
+    // Save the new schedule state to Firebase
+    Firebase.RTDB.setBool(&fbdo, String(ROOM_ID) + "/lastWithinSchedule", withinSchedule);
     lastScheduleBoundaryMillis = millis();
   }
 

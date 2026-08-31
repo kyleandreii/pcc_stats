@@ -2342,7 +2342,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                 console.log(`[Cost Verification] Avg Target Temp: ${avgTargetTemp}`);
                 console.log(`[Cost Verification] Avg Effective Watts: ${avgEffectiveWatts}`);
 
-                const cost = AirconCostCalculator.computeAirconCost(roomConfig, totalHours, ratePerKwh, targetTemp);
+                const cost = AirconCostCalculator.computeAirconCost(roomConfig, totalHours, ratePerKwh, avgTargetTemp);
 
                 console.log(`[Cost Verification] Calculated Cost: ₱${cost}`);
                 console.log(`[Cost Verification] --- Cost Breakdown ---`);
