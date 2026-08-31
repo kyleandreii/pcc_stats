@@ -4540,18 +4540,38 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                     const hourData = snapshot.val();
 
                     if (hourData) {
-                        if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
+                        console.log(`[loadDayView] ${room} (today): roomConfig.units:`, roomConfig.units);
+                        console.log(`[loadDayView] ${room} (today): roomConfig.units.unit_1:`, roomConfig.units?.unit_1);
+                        console.log(`[loadDayView] ${room} (today): roomConfig.units.unit_2:`, roomConfig.units?.unit_2);
+
+                        // Check if historical data has dual unit format (targetTemp1, targetTemp2)
+                        const hasDualUnitData = Object.values(hourData).some(h => h.targetTemp1 !== undefined || h.targetTemp2 !== undefined);
+                        console.log(`[loadDayView] ${room} (today): hasDualUnitData:`, hasDualUnitData);
+
+                        if (hasDualUnitData || (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2))) {
                             // For dual unit, get average target temp for each unit
                             // ESP32 logs as targetTemp1 and targetTemp2 directly in hourData
                             const unit1TargetTemps = Object.values(hourData).map(h => h.targetTemp1).filter(t => t !== undefined && t !== null);
                             const unit2TargetTemps = Object.values(hourData).map(h => h.targetTemp2).filter(t => t !== undefined && t !== null);
-                            targetTemp = {
-                                unit_1: unit1TargetTemps.length > 0 ? (unit1TargetTemps.reduce((a, b) => a + b, 0) / unit1TargetTemps.length) : targetTemp.unit_1,
-                                unit_2: unit2TargetTemps.length > 0 ? (unit2TargetTemps.reduce((a, b) => a + b, 0) / unit2TargetTemps.length) : targetTemp.unit_2
-                            };
+                            console.log(`[loadDayView] ${room} (today): unit1TargetTemps array:`, unit1TargetTemps);
+                            console.log(`[loadDayView] ${room} (today): unit2TargetTemps array:`, unit2TargetTemps);
+
+                            // If roomConfig has dual unit setup, use object format
+                            if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
+                                targetTemp = {
+                                    unit_1: unit1TargetTemps.length > 0 ? (unit1TargetTemps.reduce((a, b) => a + b, 0) / unit1TargetTemps.length) : targetTemp.unit_1,
+                                    unit_2: unit2TargetTemps.length > 0 ? (unit2TargetTemps.reduce((a, b) => a + b, 0) / unit2TargetTemps.length) : targetTemp.unit_2
+                                };
+                            } else {
+                                // If roomConfig is single unit but historical data has dual unit format, average both units
+                                const allTemps = [...unit1TargetTemps, ...unit2TargetTemps];
+                                targetTemp = allTemps.length > 0 ? (allTemps.reduce((a, b) => a + b, 0) / allTemps.length) : targetTemp;
+                                console.log(`[loadDayView] ${room} (today): averaged dual unit temps to single value:`, targetTemp);
+                            }
                         } else {
                             // For single unit, get average target temp
                             const targetTemps = Object.values(hourData).map(h => h.targetTemp).filter(t => t !== undefined && t !== null);
+                            console.log(`[loadDayView] ${room} (today): targetTemps array:`, targetTemps);
                             targetTemp = targetTemps.length > 0 ? (targetTemps.reduce((a, b) => a + b, 0) / targetTemps.length) : targetTemp;
                         }
                         console.log(`[loadDayView] ${room} (today): historical avg targetTemp: ${targetTemp}`);
