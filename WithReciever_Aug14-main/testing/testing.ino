@@ -82,7 +82,7 @@ float MAX_HUMIDITY = 60.0;  // Default, will be updated from Firebase
 float MIN_HUMIDITY = 45.0;  // Default, will be updated from Firebase
 float humidityOccupiedThreshold = 60.0;  // From Firebase: automation/humidityOccupiedThreshold
 float humidityEmptyThreshold = 45.0;     // From Firebase: automation/humidityEmptyThreshold
-const unsigned long AUTOMATION_INTERVAL_MS = 900000; // 15 minutes between automation checks
+const unsigned long AUTOMATION_INTERVAL_MS = 30000; // 30 seconds between automation checks (temporarily reduced for testing)
 const unsigned long STEP_PRESS_DELAY_MS = 400;
 const unsigned long IR_SEND_COOLDOWN_MS = 60000; // 1 minute cooldown between IR sends
 const unsigned long SERIAL_LOG_THROTTLE_MS = 5000; // 5 seconds between serial logs
@@ -700,7 +700,7 @@ void logAutomationEventToHistory() {
     strftime(hourStr, sizeof(hourStr), "%H", &timeinfo);
     
     String historyPath = "/history/" + String(ROOM_ID) + "/" + String(dateStr) + "/" + String(hourStr);
-    
+
     FirebaseJson historyData;
     historyData.add("automationEvent", lastAutomationEvent);
     historyData.add("automationEventType", lastAutomationEventType);
@@ -709,7 +709,8 @@ void logAutomationEventToHistory() {
     historyData.add("automationEventUpdatedTemp", lastAutomationEventUpdatedTemp);
 
     Serial.print("[History] Writing to Firebase path: "); Serial.println(historyPath.c_str());
-    bool historySuccess = Firebase.RTDB.setJSON(&fbdo, historyPath.c_str(), &historyData);
+    // Use pushJSON instead of setJSON to preserve all events (creates unique keys)
+    bool historySuccess = Firebase.RTDB.pushJSON(&fbdo, historyPath.c_str(), &historyData);
     Serial.print("[History] Firebase write: "); Serial.println(historySuccess ? "success" : "failed");
     if (!historySuccess) {
       Serial.print("[History] Error: "); Serial.println(fbdo.errorReason());
@@ -931,6 +932,8 @@ void runAutomation(float temp, float humidity) {
     if (timeSinceLastIR < IR_SEND_COOLDOWN_MS) {
       unsigned long cooldownRemaining = (IR_SEND_COOLDOWN_MS - timeSinceLastIR) / 1000;
       Serial.print("Cooldown active, "); Serial.print(cooldownRemaining); Serial.println(" seconds remaining");
+      Serial.println("Logging automation event to history despite cooldown");
+      logAutomationEventToHistory();
       return;
     }
 

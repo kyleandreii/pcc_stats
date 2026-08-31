@@ -1018,69 +1018,72 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                     
                     if (dayData) {
                         Object.keys(dayData).forEach(hour => {
-                            const entry = dayData[hour];
-                            if (entry) {
-                                console.log(`[Automation] ${path}/${hour} - Has automationEvent: ${!!entry.automationEvent}, automationEventType: ${entry.automationEventType}, automationEventTime: ${entry.automationEventTime}`);
-                                
-                                // Check for automation events
-                                if (entry.automationEvent && entry.automationEventType && entry.automationEventTime) {
-                                    const timestamp = parseInt(entry.automationEventTime);
-                                    console.log(`[Automation] Raw timestamp from Firebase: ${entry.automationEventTime} (parsed: ${timestamp})`);
-                                    if (!isNaN(timestamp)) {
-                                        // Detect if timestamp is in seconds (new data) or milliseconds (old data)
-                                        // Epoch in seconds: ~10 digits (e.g., 1787946607 for 2026)
-                                        // Epoch in ms: ~13 digits (e.g., 1787946607000)
-                                        let eventTime;
-                                        if (timestamp < 10000000000) {
-                                            // New format: seconds - convert to ms for Date
-                                            eventTime = new Date(timestamp * 1000);
-                                            console.log(`[Automation] Timestamp in seconds, converted to ms`);
-                                        } else {
-                                            // Old format: milliseconds
-                                            eventTime = new Date(timestamp);
-                                            console.log(`[Automation] Timestamp in milliseconds`);
+                            const hourData = dayData[hour];
+                            if (hourData) {
+                                // Handle both old format (single entry per hour) and new format (pushJSON with unique keys)
+                                if (hourData.automationEvent) {
+                                    // Old format: single entry directly at hour level
+                                    console.log(`[Automation] ${path}/${hour} - Old format detected`);
+                                    processAutomationEntry(hourData, room, fromDate, toDate, automationEvents);
+                                } else {
+                                    // New format: multiple entries with unique keys within hour
+                                    console.log(`[Automation] ${path}/${hour} - New format detected, processing ${Object.keys(hourData).length} entries`);
+                                    Object.keys(hourData).forEach(uniqueKey => {
+                                        const entry = hourData[uniqueKey];
+                                        if (entry) {
+                                            processAutomationEntry(entry, room, fromDate, toDate, automationEvents);
                                         }
-                                        console.log(`[Automation] Valid event time: ${eventTime.toISOString()} (local: ${eventTime.toLocaleString()})`);
-                                        
-                                        if (eventTime >= fromDate && eventTime <= toDate) {
-                                            const eventType = entry.automationEventType;
-                                            if (automationEvents[room][eventType]) {
-                                                automationEvents[room][eventType].push({
-                                                    x: eventTime.getTime(),
-                                                    y: Math.random() * 9 + 0.5,
-                                                    time: eventTime,
-                                                    description: entry.automationEvent,
-                                                    pastTemp: entry.automationEventPastTemp,
-                                                    updatedTemp: entry.automationEventUpdatedTemp
-                                                });
-                                                console.log(`[Automation] Added ${eventType} event for ${room}`);
-                                            }
-                                        } else {
-                                            console.log(`[Automation] Event time ${eventTime.toISOString()} outside date range ${fromDate.toISOString()} to ${toDate.toISOString()}`);
-                                        }
-                                    }
-                                }
-                                // Also check for automation start time (legacy)
-                                if (entry.automationEnabled && entry.automationStartTime && !entry.automationEvent) {
-                                    const timestamp = parseInt(entry.automationStartTime);
-                                    if (!isNaN(timestamp)) {
-                                        const eventTime = new Date(timestamp * 1000);
-                                        if (eventTime >= fromDate && eventTime <= toDate) {
-                                            automationEvents[room].humidity.push({
-                                                x: eventTime.getTime(),
-                                                y: Math.random() * 9 + 0.5,
-                                                time: eventTime,
-                                                description: "Automation enabled (legacy)"
-                                            });
-                                            console.log(`[Automation] Added legacy automation event for ${room}`);
-                                        }
-                                    }
+                                    });
                                 }
                             }
                         });
                     }
                 } catch (e) {
                     console.error(`[Automation] Error fetching ${path}:`, e);
+                }
+            }
+        }
+
+        // Helper function to process a single automation entry
+        function processAutomationEntry(entry, room, fromDate, toDate, automationEvents) {
+            console.log(`[Automation] Processing entry - Has automationEvent: ${!!entry.automationEvent}, automationEventType: ${entry.automationEventType}, automationEventTime: ${entry.automationEventTime}`);
+
+            // Check for automation events
+            if (entry.automationEvent && entry.automationEventType && entry.automationEventTime) {
+                const timestamp = parseInt(entry.automationEventTime);
+                console.log(`[Automation] Raw timestamp from Firebase: ${entry.automationEventTime} (parsed: ${timestamp})`);
+                if (!isNaN(timestamp)) {
+                    // Detect if timestamp is in seconds (new data) or milliseconds (old data)
+                    // Epoch in seconds: ~10 digits (e.g., 1787946607 for 2026)
+                    // Epoch in ms: ~13 digits (e.g., 1787946607000)
+                    let eventTime;
+                    if (timestamp < 10000000000) {
+                        // New format: seconds - convert to ms for Date
+                        eventTime = new Date(timestamp * 1000);
+                        console.log(`[Automation] Timestamp in seconds, converted to ms`);
+                    } else {
+                        // Old format: milliseconds
+                        eventTime = new Date(timestamp);
+                        console.log(`[Automation] Timestamp in milliseconds`);
+                    }
+                    console.log(`[Automation] Valid event time: ${eventTime.toISOString()} (local: ${eventTime.toLocaleString()})`);
+
+                    if (eventTime >= fromDate && eventTime <= toDate) {
+                        const eventType = entry.automationEventType;
+                        if (automationEvents[room][eventType]) {
+                            automationEvents[room][eventType].push({
+                                x: eventTime.getTime(),
+                                y: Math.random() * 9 + 0.5,
+                                time: eventTime,
+                                description: entry.automationEvent,
+                                pastTemp: entry.automationEventPastTemp,
+                                updatedTemp: entry.automationEventUpdatedTemp
+                            });
+                            console.log(`[Automation] Added ${eventType} event for ${room}`);
+                        }
+                    } else {
+                        console.log(`[Automation] Event time ${eventTime.toISOString()} outside date range ${fromDate.toISOString()} to ${toDate.toISOString()}`);
+                    }
                 }
             }
         }
