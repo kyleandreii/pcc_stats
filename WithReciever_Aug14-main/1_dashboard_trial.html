@@ -13,6 +13,140 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="shared-utils.js"></script>
     <script src="ui-enhancements.js"></script>
+    <script>
+        // Fallback: Initialize notification system if shared-utils.js didn't load properly
+        // Wait for DOM to be ready before initializing
+        function initFallbackNotificationSystem() {
+            if (typeof notificationSystem !== 'undefined') {
+                console.log('[Dashboard] notificationSystem already defined from shared-utils.js');
+                return;
+            }
+            
+            console.log('[Dashboard] notificationSystem not defined, initializing fallback...');
+            
+            class NotificationSystem {
+                constructor() {
+                    this.notifications = [];
+                    this.container = null;
+                    this.init();
+                }
+
+                init() {
+                    if (!document.body)return;
+                    this.container = document.createElement('div');
+                    this.container.id = 'notification-container';
+                    this.container.style.cssText = `
+                        position: fixed;
+                        top: 20px;
+                        right: 20px;
+                        z-index: 10000;
+                        display: flex;
+                        flex-direction: column;
+                        gap: 10px;
+                    `;
+                    document.body.appendChild(this.container);
+                }
+
+                show(message, type = 'info') {
+                    const id = Date.now();
+                    this.notifications.push({ id, message, type });
+                    this.render();
+                    
+                    setTimeout(() => {
+                        this.remove(id);
+                    }, 3000);
+                }
+
+                remove(id) {
+                    this.notifications = this.notifications.filter(n => n.id !== id);
+                    this.render();
+                }
+
+                render() {
+                    if (!this.container) return;
+                    this.container.innerHTML = '';
+                    
+                    if (this.notifications.length === 0) return;
+
+                    const latest = this.notifications[this.notifications.length - 1];
+                    const count = this.notifications.length;
+                    
+                    const notification = document.createElement('div');
+                    notification.style.cssText = `
+                        background: white;
+                        border-radius: 12px;
+                        padding: 16px 20px;
+                        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+                        display: flex;
+                        align-items: center;
+                        gap: 12px;
+                        min-width: 300px;
+                        animation: slideIn 0.3s ease-out;
+                        border-left: 4px solid ${this.getColor(latest.type)};
+                    `;
+
+                    const badge = count > 1 ? `
+                        <div style="
+                            background: #ef4444;
+                            color: white;
+                            border-radius: 50%;
+                            width: 24px;
+                            height: 24px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            font-size: 12px;
+                            font-weight: bold;
+                        ">${count}</div>
+                    ` : '';
+
+                    notification.innerHTML = `
+                        ${badge}
+                        <span style="font-size: 14px; font-weight: 500; color: #374151;">${latest.message}</span>
+                    `;
+
+                    this.container.appendChild(notification);
+                }
+
+                getColor(type) {
+                    const colors = {
+                        info: '#3b82f6',
+                        success: '#10b981',
+                        warning: '#f59e0b',
+                        error: '#ef4444'
+                    };
+                    return colors[type] || colors.info;
+                }
+            }
+
+            window.notificationSystem = new NotificationSystem();
+
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes slideIn {
+                    from {
+                        transform: translateX(100%);
+                        opacity: 0;
+                    }
+                    to {
+                        transform: translateX(0);
+                        opacity: 1;
+                    }
+                }
+            `;
+            if (document.head) {
+                document.head.appendChild(style);
+            }
+            
+            console.log('[Dashboard] Fallback notification system initialized');
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initFallbackNotificationSystem);
+        } else {
+            initFallbackNotificationSystem();
+        }
+    </script>
 
     <style>
         /* Dashboard-specific styles that complement global CSS */
@@ -340,6 +474,11 @@
 
         // Format seconds into human-readable format (days/hours/minutes)
         function formatDuration(seconds) {
+            // Check if value is in milliseconds (very large number) and convert to seconds
+            if (seconds > 31536000) { // If > 1 year in seconds, assume it's milliseconds
+                seconds = seconds / 1000;
+            }
+            
             const days = Math.floor(seconds / 86400);
             const hours = Math.floor((seconds % 86400) / 3600);
             const minutes = Math.floor((seconds % 3600) / 60);
@@ -722,7 +861,7 @@
             }, POWER_COOLDOWN_MS);
         }
         
-        function formatDuration(timestamp) {
+        function formatTimeAgo(timestamp) {
             if (!timestamp) return 'Unknown';
             const now = Date.now();
             const diff = now - parseInt(timestamp);
@@ -751,7 +890,7 @@
             // Get AC state from Firebase
             let isOn = false;
             if (unit) {
-                isOn = labsData[roomPath]?.units?.[unit]?.ac === true || labsData[roomPath]?.units?.[unit]?.ac === "ON" || labsData[roomPath]?.units?.[unit]?.ac === 1;
+                isOn = labsData[roomPath]?.units?.[unit]?.ac === true || labsData[roomPath]?.units?.[unit]?.ac === "ON";
             } else {
                 isOn = labsData[roomPath]?.ac === true || labsData[roomPath]?.ac === "ON" || labsData[roomPath]?.ac === 1;
             }
@@ -763,8 +902,19 @@
                 return '0h online';
             }
             
+            // Convert to number and handle potential string values
+            let durationNum = parseFloat(onlineDuration);
+            
+            // If value is very large (> 1 year in seconds), assume it's milliseconds and convert
+            if (durationNum > 31536000) {
+                console.log(`[Duration] ${roomPath} ${unit || ''}: Converting milliseconds to seconds (value: ${durationNum})`);
+                durationNum = durationNum / 1000;
+            }
+            
+            console.log(`[Duration] ${roomPath} ${unit || ''}: Final duration in seconds: ${durationNum}`);
+            
             // Format the online duration (in seconds)
-            const duration = formatDuration(onlineDuration);
+            const duration = formatDuration(durationNum);
             const result = `${duration} online`;
             console.log(`[Duration] ${roomPath} ${unit || ''}: Returning ${result}`);
             return result;
@@ -787,6 +937,17 @@
             allDots.forEach((dot, i) => {
                 console.log('[Test] Status dot', i, ':', dot.className);
             });
+        }
+        
+        // Test notification system - call from console: testNotification()
+        function testNotification() {
+            console.log('[Test] Testing notification system...');
+            if (typeof notificationSystem !== 'undefined') {
+                notificationSystem.show('Test notification', 'info');
+                console.log('[Test] Notification sent');
+            } else {
+                console.log('[Test] notificationSystem is not defined');
+            }
         }
 
         function adjustUnitTargetTemp(roomPath, unit, change) {
@@ -880,7 +1041,8 @@
                 
                 const label = roomLabels[i];
                 const temp = d.temperature || 0;
-                const hum = d.humidity || 0;
+                // Invert humidity only if device has data, otherwise show 0
+                const hum = (d.humidity !== undefined && d.humidity !== null && d.humidity !== 0) ? 100 - d.humidity : 0;
                 const minT = d.thresholds?.minTemp || 20;
                 const maxT = d.thresholds?.maxTemp || 30;
                 
@@ -1087,6 +1249,11 @@
                     db.ref('alerts').push(alertData);
                     console.log(`[Offline Detection] Alert created for ${roomId}`);
                     
+                    // Show popup notification
+                    if (typeof notificationSystem !== 'undefined') {
+                        notificationSystem.show(`${roomLabel} is offline`, 'error');
+                    }
+                    
                     // Send browser notification if permitted
                     if (Notification.permission === 'granted') {
                         new Notification('Device Offline Alert', {
@@ -1098,6 +1265,11 @@
                     // Device came back online - reset flag
                     deviceOfflineFlags[roomId] = false;
                     console.log(`[Offline Detection] ${roomId} is back online`);
+                    
+                    // Show popup notification
+                    if (typeof notificationSystem !== 'undefined') {
+                        notificationSystem.show(`${roomLabel} is back online`, 'success');
+                    }
                 }
             });
             
@@ -1133,6 +1305,11 @@
                         db.ref('alerts').push(alertData);
                         console.log(`[Offline Detection] Periodic check - Alert created for ${roomId}`);
                         
+                        // Show popup notification
+                        if (typeof notificationSystem !== 'undefined') {
+                            notificationSystem.show(`${roomLabel} is offline`, 'error');
+                        }
+                        
                         if (Notification.permission === 'granted') {
                             new Notification('Device Offline Alert', {
                                 body: `${roomLabel} has stopped responding`,
@@ -1142,6 +1319,11 @@
                     } else if (!isOffline && deviceOfflineFlags[roomId]) {
                         deviceOfflineFlags[roomId] = false;
                         console.log(`[Offline Detection] Periodic check - ${roomId} is back online`);
+                        
+                        // Show popup notification
+                        if (typeof notificationSystem !== 'undefined') {
+                            notificationSystem.show(`${roomLabel} is back online`, 'success');
+                        }
                     }
                 }).catch((error) => {
                     console.error(`[Offline Detection] Periodic check error for ${roomId}:`, error);

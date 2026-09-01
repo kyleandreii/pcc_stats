@@ -1093,11 +1093,11 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                                 });
                             }
 
-                            // Humidity data
-                            if (hourData.humidity !== undefined && hourData.humidity !== null) {
+                            // Humidity data (inverted, show 0 if no device data)
+                            if (hourData.humidity !== undefined && hourData.humidity !== null && hourData.humidity !== 0) {
                                 chartData.humidity.push({
                                     x: timestamp,
-                                    y: parseFloat(hourData.humidity)
+                                    y: 100 - parseFloat(hourData.humidity)
                                 });
                             }
 
@@ -2014,7 +2014,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                 trendHistory.temp[room].push(parseFloat(d.temperature) || 0);
 
-                trendHistory.hum[room].push(parseFloat(d.humidity) || 0);
+                // Invert humidity only if device has data, otherwise show 0
+                trendHistory.hum[room].push((d.humidity !== undefined && d.humidity !== null && d.humidity !== 0) ? 100 - parseFloat(d.humidity) : 0);
 
             });
 
@@ -2098,7 +2099,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                 trendHistory.temp[room].push(parseFloat(d.temperature) || 0);
 
-                trendHistory.hum[room].push(parseFloat(d.humidity) || 0);
+                // Invert humidity only if device has data, otherwise show 0
+                trendHistory.hum[room].push((d.humidity !== undefined && d.humidity !== null && d.humidity !== 0) ? 100 - parseFloat(d.humidity) : 0);
 
             });
 
@@ -2377,7 +2379,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                                 temps.push(parseFloat(entry.temperature) || 0);
 
-                                hums.push(parseFloat(entry.humidity) || 0);
+                                hums.push((entry.humidity !== undefined && entry.humidity !== null && entry.humidity !== 0) ? 100 - parseFloat(entry.humidity) : 0); // Invert humidity
                                 
                                 // Extract targetTemp from history if available
                                 if (entry.targetTemp !== undefined && entry.targetTemp !== null) {
@@ -2494,7 +2496,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                                 temps.push(parseFloat(entry.temperature) || 0);
 
-                                hums.push(parseFloat(entry.humidity) || 0);
+                                hums.push((entry.humidity !== undefined && entry.humidity !== null && entry.humidity !== 0) ? 100 - parseFloat(entry.humidity) : 0); // Invert humidity
                                 
                                 // Extract targetTemp from history if available
                                 if (entry.targetTemp !== undefined && entry.targetTemp !== null) {
@@ -2586,7 +2588,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                                 const temp = parseFloat(entry.temperature) || 0;
 
-                                const hum = parseFloat(entry.humidity) || 0;
+                                const hum = (entry.humidity !== undefined && entry.humidity !== null && entry.humidity !== 0) ? 100 - parseFloat(entry.humidity) : 0; // Invert humidity
 
                                 const status = entry.status || 'NORMAL';
                                 
@@ -3035,7 +3037,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             const humData = allHours.map(hour => {
                 const roomData = historicalData[hour]?.[room];
-                const value = roomData ? parseFloat(roomData.humidity) || 0 : null;
+                // Invert humidity only if device has data, otherwise show 0
+                const value = roomData ? ((roomData.humidity !== undefined && roomData.humidity !== null && roomData.humidity !== 0) ? 100 - parseFloat(roomData.humidity) : 0) : null;
                 return value;
             });
 
@@ -3501,7 +3504,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                 const tVal = parseFloat(d.temperature) || 0;
 
-                const hVal = parseFloat(d.humidity) || 0;
+                // Invert humidity only if device has data, otherwise show 0
+                const hVal = (d.humidity !== undefined && d.humidity !== null && d.humidity !== 0) ? 100 - parseFloat(d.humidity) : 0;
 
                 const maxT = parseFloat(d.maxT) || 30;
 
@@ -4860,7 +4864,9 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                     } else if (currentMetric === 'humidity') {
 
-                        value = parseFloat(labsData[room]?.humidity) || 0;
+                        // Invert humidity only if device has data, otherwise show 0
+                        const humValue = labsData[room]?.humidity;
+                        value = (humValue !== undefined && humValue !== null && humValue !== 0) ? 100 - parseFloat(humValue) : 0;
 
                     }
 
@@ -4888,7 +4894,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                         } else if (currentMetric === 'humidity') {
 
-                            const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                            const hums = Object.values(hourData).map(h => (h.humidity !== undefined && h.humidity !== null && h.humidity !== 0) ? 100 - (h.humidity || 0) : 0).filter(h => h); // Invert humidity
 
                             if (hums.length > 0) {
 
@@ -4958,7 +4964,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                     } else if (currentMetric === 'humidity') {
 
-                        const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                        const hums = Object.values(hourData).map(h => (h.humidity !== undefined && h.humidity !== null && h.humidity !== 0) ? 100 - (h.humidity || 0) : 0).filter(h => h); // Invert humidity
 
                         if (hums.length > 0) {
 
@@ -5147,7 +5153,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                         } else if (currentMetric === 'humidity') {
 
-                            const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                            const hums = Object.values(hourData).map(h => (h.humidity !== undefined && h.humidity !== null && h.humidity !== 0) ? 100 - (h.humidity || 0) : 0).filter(h => h); // Invert humidity
 
                             if (hums.length > 0) {
 
@@ -5239,7 +5245,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                             } else if (currentMetric === 'humidity') {
 
-                                const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                                const hums = Object.values(hourData).map(h => (h.humidity !== undefined && h.humidity !== null && h.humidity !== 0) ? 100 - (h.humidity || 0) : 0).filter(h => h); // Invert humidity
 
                                 if (hums.length > 0) {
 
@@ -5330,7 +5336,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                             } else if (currentMetric === 'humidity') {
 
-                                const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                                const hums = Object.values(hourData).map(h => (h.humidity !== undefined && h.humidity !== null && h.humidity !== 0) ? 100 - (h.humidity || 0) : 0).filter(h => h); // Invert humidity
 
                                 if (hums.length > 0) {
 
@@ -5421,7 +5427,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                                 } else if (currentMetric === 'humidity') {
 
-                                    const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                                    const hums = Object.values(hourData).map(h => (h.humidity !== undefined && h.humidity !== null && h.humidity !== 0) ? 100 - (h.humidity || 0) : 0).filter(h => h); // Invert humidity
 
                                     if (hums.length > 0) {
 
@@ -5767,7 +5773,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                         } else if (currentMetric === 'humidity') {
 
-                            const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                            const hums = Object.values(hourData).map(h => (h.humidity !== undefined && h.humidity !== null && h.humidity !== 0) ? 100 - (h.humidity || 0) : 0).filter(h => h); // Invert humidity
 
                             if (hums.length > 0) {
 
@@ -5885,7 +5891,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                         } else if (currentMetric === 'humidity') {
 
-                            const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                            const hums = Object.values(hourData).map(h => (h.humidity !== undefined && h.humidity !== null && h.humidity !== 0) ? 100 - (h.humidity || 0) : 0).filter(h => h); // Invert humidity
 
                             if (hums.length > 0) {
 
@@ -6103,7 +6109,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                         } else if (currentMetric === 'humidity') {
 
-                            const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                            const hums = Object.values(hourData).map(h => (h.humidity !== undefined && h.humidity !== null && h.humidity !== 0) ? 100 - (h.humidity || 0) : 0).filter(h => h); // Invert humidity
 
                             if (hums.length > 0) {
 
@@ -6211,7 +6217,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                         } else if (currentMetric === 'humidity') {
 
-                            const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                            const hums = Object.values(hourData).map(h => (h.humidity !== undefined && h.humidity !== null && h.humidity !== 0) ? 100 - (h.humidity || 0) : 0).filter(h => h); // Invert humidity
 
                             if (hums.length > 0) {
 
@@ -6429,7 +6435,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                             } else if (currentMetric === 'humidity') {
 
-                                const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                                const hums = Object.values(hourData).map(h => (h.humidity !== undefined && h.humidity !== null && h.humidity !== 0) ? 100 - (h.humidity || 0) : 0).filter(h => h); // Invert humidity
 
                                 if (hums.length > 0) {
 
@@ -6545,7 +6551,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                             } else if (currentMetric === 'humidity') {
 
-                                const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                                const hums = Object.values(hourData).map(h => (h.humidity !== undefined && h.humidity !== null && h.humidity !== 0) ? 100 - (h.humidity || 0) : 0).filter(h => h); // Invert humidity
 
                                 if (hums.length > 0) {
 
@@ -6757,7 +6763,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                             } else if (currentMetric === 'humidity') {
 
-                                const hums = Object.values(hourData).map(h => h.humidity).filter(h => h);
+                                const hums = Object.values(hourData).map(h => (h.humidity !== undefined && h.humidity !== null && h.humidity !== 0) ? 100 - (h.humidity || 0) : 0).filter(h => h); // Invert humidity
 
                                 if (hums.length > 0) {
 

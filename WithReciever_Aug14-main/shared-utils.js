@@ -122,3 +122,137 @@ function updateSummaryCards(stats, elementIds) {
         document.getElementById(ids.avgTemp).innerText = stats.avgTemp;
     }
 }
+
+/**
+ * Popup notification system with number badge for multiple alerts
+ * Auto-dismisses after 3 seconds
+ */
+class NotificationSystem {
+    constructor() {
+        this.notifications = [];
+        this.container = null;
+        this.init();
+    }
+
+    init() {
+        // Create notification container
+        this.container = document.createElement('div');
+        this.container.id = 'notification-container';
+        this.container.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        `;
+        document.body.appendChild(this.container);
+    }
+
+    show(message, type = 'info') {
+        const id = Date.now();
+        this.notifications.push({ id, message, type });
+        this.render();
+        
+        // Auto-dismiss after 3 seconds
+        setTimeout(() => {
+            this.remove(id);
+        }, 3000);
+    }
+
+    remove(id) {
+        this.notifications = this.notifications.filter(n => n.id !== id);
+        this.render();
+    }
+
+    render() {
+        this.container.innerHTML = '';
+        
+        if (this.notifications.length === 0) return;
+
+        // Show a single notification with badge count
+        const latest = this.notifications[this.notifications.length - 1];
+        const count = this.notifications.length;
+        
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            background: white;
+            border-radius: 12px;
+            padding: 16px 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 300px;
+            animation: slideIn 0.3s ease-out;
+            border-left: 4px solid ${this.getColor(latest.type)};
+        `;
+
+        const badge = count > 1 ? `
+            <div style="
+                background: #ef4444;
+                color: white;
+                border-radius: 50%;
+                width: 24px;
+                height: 24px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 12px;
+                font-weight: bold;
+            ">${count}</div>
+        ` : '';
+
+        notification.innerHTML = `
+            ${badge}
+            <span style="font-size: 14px; font-weight: 500; color: #374151;">${latest.message}</span>
+        `;
+
+        this.container.appendChild(notification);
+    }
+
+    getColor(type) {
+        const colors = {
+            info: '#3b82f6',
+            success: '#10b981',
+            warning: '#f59e0b',
+            error: '#ef4444'
+        };
+        return colors[type] || colors.info;
+    }
+}
+
+// Initialize notification system globally when DOM is ready
+let notificationSystem = null;
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        notificationSystem = new NotificationSystem();
+    });
+} else {
+    // DOM is already ready
+    notificationSystem = new NotificationSystem();
+}
+
+// Add animation keyframes
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes slideIn {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+`;
+if (document.head) {
+    document.head.appendChild(style);
+} else {
+    document.addEventListener('DOMContentLoaded', () => {
+        document.head.appendChild(style);
+    });
+}

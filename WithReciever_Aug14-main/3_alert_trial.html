@@ -319,20 +319,15 @@
         let alertsData = {};
         let alertTimestamps = JSON.parse(localStorage.getItem('pcc_alert_timestamps')) || {}; // Track when alerts first triggered
         let renderDebounceTimer = null;
-        const RENDER_DEBOUNCE_MS = 2000; // Only re-render every 2 seconds max
+        const RENDER_DEBOUNCE_MS = 500; // Reduced to 500ms to allow faster rendering
 
         function renderAlerts() {
-            // Debounce rendering to prevent spam
-            if (renderDebounceTimer) {
-                clearTimeout(renderDebounceTimer);
-            }
-            
-            renderDebounceTimer = setTimeout(() => {
-                executeRenderAlerts();
-            }, RENDER_DEBOUNCE_MS);
+            console.log('[renderAlerts] Called - executing immediately');
+            executeRenderAlerts();
         }
         
         function executeRenderAlerts() {
+            console.log('[executeRenderAlerts] ===== START =====');
             let sumT = 0, criticalCount = 0;
             const AUTO_DISMISS_MS = 30 * 60 * 1000; // 30 minutes in milliseconds
             const MAX_INCIDENTS_TO_SHOW = 10; // Limit to 10 incidents
@@ -341,6 +336,7 @@
             let incidents = [];
 
             // Process temperature alerts from room data
+            console.log('[executeRenderAlerts] Processing temperature alerts for rooms:', labKeys);
             labKeys.forEach((roomKey) => {
                 const d = labsData[roomKey];
                 const temp = parseFloat(d.temperature) || 0;
@@ -349,6 +345,8 @@
 
                 const isAlarm = (d.status === "ALARM" || temp > maxT);
                 const isNotResolved = !locallyResolvedKeys.includes(roomKey);
+
+                console.log(`[executeRenderAlerts] Room ${roomKey}: temp=${temp}, maxT=${maxT}, status=${d.status}, isAlarm=${isAlarm}, isNotResolved=${isNotResolved}`);
 
                 if (isAlarm && isNotResolved) {
                     // Record timestamp when alert first appears
@@ -383,6 +381,7 @@
                             remainingMinutes,
                             timestamp: Date.now() // Use current time for sorting
                         });
+                        console.log(`[executeRenderAlerts] Added temperature incident for ${roomKey}`);
                     }
                 } else if (!isAlarm) {
                     const idx = locallyResolvedKeys.indexOf(roomKey);
@@ -398,12 +397,16 @@
                 }
             });
 
+            console.log(`[executeRenderAlerts] Temperature incidents count: ${incidents.length}`);
+
             // Process device offline alerts from /alerts (for incident list only, NOT summary cards)
             const alertKeys = Object.keys(alertsData).sort((a, b) => {
                 const timeA = alertsData[a].timestamp || 0;
                 const timeB = alertsData[b].timestamp || 0;
                 return timeB - timeA; // Newest first
             });
+
+            console.log(`[executeRenderAlerts] Processing ${alertKeys.length} alerts from Firebase`);
 
             let offlineAlertCount = 0;
             alertKeys.forEach((alertKey) => {
@@ -418,7 +421,11 @@
                     alert,
                     timestamp: alert.timestamp || 0
                 });
+                console.log(`[executeRenderAlerts] Added offline incident for ${alertKey}`);
             });
+
+            console.log(`[executeRenderAlerts] Offline incidents count: ${offlineAlertCount}`);
+            console.log(`[executeRenderAlerts] Total incidents: ${incidents.length}`);
 
             // Sort incidents by timestamp (newest first)
             incidents.sort((a, b) => b.timestamp - a.timestamp);
@@ -498,6 +505,7 @@
         // More specific Firebase listeners to prevent spam
         // Only listen to Room_ paths, not entire database
         db.ref().on("value", (snap) => {
+            console.log('[Alerts Page] Firebase data received');
             const data = snap.val();
             if(data) {
                 // Only update if room data actually changed
@@ -507,6 +515,8 @@
                     (key.startsWith("Room_") || key.startsWith("Room ")) && 
                     !systemKeys.includes(key)
                 );
+                
+                console.log('[Alerts Page] Found rooms:', newLabKeys);
                 
                 let dataChanged = false;
                 newLabKeys.forEach(key => {
@@ -519,20 +529,28 @@
                 if (dataChanged || newLabKeys.length !== labKeys.length) {
                     labsData = newLabsData;
                     labKeys = newLabKeys;
+                    console.log('[Alerts Page] Data changed, rendering alerts');
                     renderAlerts();
                 }
+            } else {
+                console.log('[Alerts Page] No data received from Firebase');
             }
         });
 
         // Listen for device offline alerts with debouncing
         db.ref('alerts').on('value', (snap) => {
+            console.log('[Alerts Page] Alerts data received');
             const data = snap.val();
             if(data) {
+                console.log('[Alerts Page] Alerts data:', Object.keys(data));
                 // Only update if alerts actually changed
                 if (JSON.stringify(alertsData) !== JSON.stringify(data)) {
                     alertsData = data;
+                    console.log('[Alerts Page] Alerts changed, rendering');
                     renderAlerts();
                 }
+            } else {
+                console.log('[Alerts Page] No alerts data');
             }
         });
 
