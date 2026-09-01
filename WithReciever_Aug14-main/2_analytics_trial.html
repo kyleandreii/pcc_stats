@@ -25,6 +25,7 @@
     <script src="https://unpkg.com/lucide@latest"></script>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 
     <script src="shared-utils.js"></script>
 
@@ -775,55 +776,28 @@
             </div>
 
             <!-- Automation Performance Analysis -->
-            <div class="card bg-white p-8 rounded-3xl shadow-sm border border-gray-100 mb-12">
-                <div class="flex flex-wrap items-center gap-4 mb-6">
+            <div class="card bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-12">
+                <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
                     <h3 class="font-black text-gray-800 uppercase tracking-widest text-xs">Automation Performance Analysis</h3>
-                    <select id="automation-room-filter" class="text-[10px] bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg font-black uppercase border-none cursor-pointer">
-                        <option value="all">All Rooms</option>
-                    </select>
-                </div>
-
-                <!-- Summary Metrics -->
-                <div id="performance-summary" class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-                    <div class="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-2xl border border-blue-200">
-                        <p class="text-[9px] font-bold text-blue-600 uppercase tracking-wider mb-1">Avg Temperature</p>
-                        <p id="summary-avg-temp" class="text-2xl font-black text-blue-800">--°C</p>
-                    </div>
-                    <div class="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-2xl border border-green-200">
-                        <p class="text-[9px] font-bold text-green-600 uppercase tracking-wider mb-1">Avg Humidity</p>
-                        <p id="summary-avg-humidity" class="text-2xl font-black text-green-800">--%</p>
-                    </div>
-                    <div class="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-2xl border border-purple-200">
-                        <p class="text-[9px] font-bold text-purple-600 uppercase tracking-wider mb-1">Automation Events</p>
-                        <p id="summary-automation-events" class="text-2xl font-black text-purple-800">--</p>
-                    </div>
-                    <div class="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-2xl border border-orange-200">
-                        <p class="text-[9px] font-bold text-orange-600 uppercase tracking-wider mb-1">Total Cost</p>
-                        <p id="summary-total-cost" class="text-2xl font-black text-orange-800">--</p>
-                    </div>
-                    <div class="bg-gradient-to-br from-emerald-50 to-emerald-100 p-4 rounded-2xl border border-emerald-200">
-                        <p class="text-[9px] font-bold text-emerald-600 uppercase tracking-wider mb-1">Savings</p>
-                        <p id="summary-savings" class="text-2xl font-black text-emerald-800">--</p>
+                    <div class="flex items-center gap-2">
+                        <select id="automation-room-filter" class="text-[9px] bg-gray-100 text-gray-700 px-2 py-1 rounded-lg font-black uppercase border-none cursor-pointer">
+                            <option value="all">All Rooms</option>
+                        </select>
+                        <select id="automation-time-range" class="text-[9px] bg-gray-100 text-gray-700 px-2 py-1 rounded-lg font-black uppercase border-none cursor-pointer">
+                            <option value="today">Today</option>
+                            <option value="yesterday">Yesterday</option>
+                            <option value="custom">Custom Date</option>
+                        </select>
                     </div>
                 </div>
 
-                <!-- Toggle Buttons -->
-                <div class="flex flex-wrap gap-2 mb-4">
-                    <button id="toggle-temperature" class="text-[9px] bg-red-100 text-red-700 px-3 py-1.5 rounded-lg font-black uppercase border-none cursor-pointer hover:bg-red-200 transition-colors active">Temperature</button>
-                    <button id="toggle-humidity" class="text-[9px] bg-green-100 text-green-700 px-3 py-1.5 rounded-lg font-black uppercase border-none cursor-pointer hover:bg-green-200 transition-colors active">Humidity</button>
-                    <button id="toggle-cost" class="text-[9px] bg-orange-100 text-orange-700 px-3 py-1.5 rounded-lg font-black uppercase border-none cursor-pointer hover:bg-orange-200 transition-colors active">Cost</button>
-                    <button id="toggle-savings" class="text-[9px] bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-lg font-black uppercase border-none cursor-pointer hover:bg-emerald-200 transition-colors active">Savings</button>
+                <!-- Custom Date Picker (hidden by default) -->
+                <div id="custom-date-range" class="hidden flex items-center gap-2 mb-4">
+                    <input type="date" id="custom-date" class="text-[9px] bg-gray-100 text-gray-700 px-2 py-1 rounded-lg font-black uppercase border-none cursor-pointer">
+                    <button id="apply-custom-range" class="text-[9px] bg-blue-100 text-blue-700 px-2 py-1 rounded-lg font-black uppercase border-none cursor-pointer hover:bg-blue-200 transition-colors">Apply</button>
                 </div>
 
-                <div class="h-80"><canvas id="automationChart"></canvas></div>
-                <div class="flex items-center justify-between mt-4">
-                    <div id="time-range-indicator" class="text-[9px] text-gray-400 font-black uppercase tracking-wider"></div>
-                    <div class="flex gap-2">
-                        <button id="export-csv" class="text-[9px] bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg font-black uppercase border-none cursor-pointer hover:bg-gray-200 transition-colors">Export CSV</button>
-                        <button id="export-image" class="text-[9px] bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg font-black uppercase border-none cursor-pointer hover:bg-gray-200 transition-colors">Export Image</button>
-                    </div>
-                </div>
-                <div id="timezone-label-automation" class="hidden text-[9px] text-gray-400 font-black uppercase tracking-wider mt-2 text-center">Times shown in Philippine Time (PHT, UTC+8)</div>
+                <div class="h-96"><canvas id="automationChart"></canvas></div>
             </div>
 
 
@@ -857,6 +831,12 @@
 <script>
 
     lucide.createIcons();
+
+    // Cooldown tracking - moved to top to prevent initialization errors
+    let periodTabCooldown = false;
+    let metricTabCooldown = false;
+    let dateNavCooldown = false;
+    const COOLDOWN_MS = 500;
 
 
 
@@ -986,153 +966,70 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
     }
 
-    // Toggle button handlers for chart datasets
-    document.getElementById('toggle-temperature').addEventListener('click', function() {
-        this.classList.toggle('active');
-        toggleDataset('temperature', this.classList.contains('active'));
-    });
-    document.getElementById('toggle-humidity').addEventListener('click', function() {
-        this.classList.toggle('active');
-        toggleDataset('humidity', this.classList.contains('active'));
-    });
-    document.getElementById('toggle-cost').addEventListener('click', function() {
-        this.classList.toggle('active');
-        toggleDataset('cost', this.classList.contains('active'));
-    });
-    document.getElementById('toggle-savings').addEventListener('click', function() {
-        this.classList.toggle('active');
-        toggleDataset('savings', this.classList.contains('active'));
-    });
+    // Time range selector handler
+    document.addEventListener('DOMContentLoaded', function() {
+        const timeRangeSelector = document.getElementById('automation-time-range');
+        const customDateRange = document.getElementById('custom-date-range');
+        const applyCustomRange = document.getElementById('apply-custom-range');
+        const roomFilter = document.getElementById('automation-room-filter');
 
-    function toggleDataset(type, isVisible) {
-        const chart = automationChart;
-        if (!chart) return;
-        
-        chart.data.datasets.forEach((dataset, index) => {
-            if (dataset.label.toLowerCase().includes(type)) {
-                if (isVisible) {
-                    chart.show(index);
+        if (timeRangeSelector) {
+            timeRangeSelector.addEventListener('change', function() {
+                if (this.value === 'custom') {
+                    customDateRange.classList.remove('hidden');
                 } else {
-                    chart.hide(index);
+                    customDateRange.classList.add('hidden');
+                    loadAutomationData();
                 }
-            }
-        });
-        chart.update();
-    }
-
-    // Calculate savings: Fixed 16°C cost vs Temperature-based cost
-    async function calculateSavings(room, dateArray) {
-        let totalHours = 0;
-        let totalFixedCost = 0;
-        let totalTempBasedCost = 0;
-        let totalTemp = 0;
-        let totalHumidity = 0;
-        let tempCount = 0;
-        let humidityCount = 0;
-        let automationEventCount = 0;
-
-        for (const dateStr of dateArray) {
-            const path = `/history/${room}/${dateStr}`;
-            try {
-                const snapshot = await db.ref(path).once('value');
-                const dayData = snapshot.val();
-                
-                if (dayData) {
-                    Object.keys(dayData).forEach(hour => {
-                        const hourData = dayData[hour];
-                        if (hourData) {
-                            // Count automation events
-                            if (hourData.automation_events) {
-                                automationEventCount += Object.keys(hourData.automation_events).length;
-                            } else if (hourData.automationEvent) {
-                                automationEventCount++;
-                            }
-
-                            // Get temperature and humidity
-                            if (hourData.temperature !== undefined && hourData.temperature !== null) {
-                                totalTemp += parseFloat(hourData.temperature);
-                                tempCount++;
-                            }
-                            if (hourData.humidity !== undefined && hourData.humidity !== null) {
-                                totalHumidity += parseFloat(hourData.humidity);
-                                humidityCount++;
-                            }
-
-                            // Get target temperature for cost calculation
-                            let targetTemp = 24; // default
-                            if (hourData.targetTemp !== undefined && hourData.targetTemp !== null) {
-                                targetTemp = parseFloat(hourData.targetTemp);
-                            } else if (hourData.targetTemp1 !== undefined && hourData.targetTemp1 !== null) {
-                                // Dual unit - average both
-                                const t1 = parseFloat(hourData.targetTemp1);
-                                const t2 = hourData.targetTemp2 !== undefined && hourData.targetTemp2 !== null ? parseFloat(hourData.targetTemp2) : t1;
-                                targetTemp = (t1 + t2) / 2;
-                            }
-
-                            // Calculate cost for 1 hour at this target temp
-                            const hours = 1; // 1 hour per entry
-                            totalHours += hours;
-
-                            // Fixed 16°C cost (using rated watts with duty cycle)
-                            const fixed16Cost = AirconCostCalculator.computeAirconCost(
-                                { aircon_type: 'non_inverter', duty_cycle: 0.65, rated_watts: 4020 },
-                                hours,
-                                14.7833,
-                                16 // fixed 16°C
-                            );
-                            totalFixedCost += fixed16Cost;
-
-                            // Temperature-based cost (using actual target temp)
-                            const tempBasedCost = AirconCostCalculator.computeAirconCost(
-                                { aircon_type: 'non_inverter', duty_cycle: 0.65, rated_watts: 4020 },
-                                hours,
-                                14.7833,
-                                targetTemp // actual target temp
-                            );
-                            totalTempBasedCost += tempBasedCost;
-                        }
-                    });
-                }
-            } catch (e) {
-                console.error(`[Savings] Error calculating savings for ${path}:`, e);
-            }
+            });
         }
 
-        const savings = totalFixedCost - totalTempBasedCost;
-        const savingsPercentage = totalFixedCost > 0 ? (savings / totalFixedCost) * 100 : 0;
+        if (applyCustomRange) {
+            applyCustomRange.addEventListener('click', function() {
+                loadAutomationData();
+            });
+        }
 
-        return {
-            avgTemp: tempCount > 0 ? totalTemp / tempCount : 0,
-            avgHumidity: humidityCount > 0 ? totalHumidity / humidityCount : 0,
-            automationEvents: automationEventCount,
-            totalCost: totalTempBasedCost,
-            savings: savings,
-            savingsPercentage: savingsPercentage,
-            totalHours: totalHours
-        };
-    }
+        if (roomFilter) {
+            roomFilter.addEventListener('change', function() {
+                loadAutomationData();
+            });
+        }
+    });
+
+    // calculateSavings function removed - no longer needed without summary metrics
 
     async function loadAutomationData() {
         console.log('[Automation] Loading automation data...');
-        const fromDateStr = document.getElementById('export-date-from').value;
-        const toDateStr = document.getElementById('export-date-to').value;
         const roomFilter = document.getElementById('automation-room-filter').value;
+        const timeRange = document.getElementById('automation-time-range').value;
 
-        console.log(`[Automation] Date range: ${fromDateStr} to ${toDateStr}`);
-        console.log(`[Automation] Room filter: ${roomFilter}`);
+        // Calculate single date based on selection (using Philippine timezone)
+        let targetDate = new Date();
+        // Get current date in Philippine timezone (UTC+8)
+        const now = new Date();
+        const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+        const phTime = new Date(utc + (3600000 * 8));
 
-        const fromDate = new Date(fromDateStr);
-        const toDate = new Date(toDateStr);
-        toDate.setHours(23, 59, 59, 999);
-
-        const dateArray = [];
-        let currentDate = new Date(fromDate);
-        while (currentDate <= toDate) {
-            dateArray.push(currentDate.toISOString().split('T')[0]);
-            currentDate.setDate(currentDate.getDate() + 1);
+        if (timeRange === 'today') {
+            targetDate = phTime;
+        } else if (timeRange === 'yesterday') {
+            targetDate = new Date(phTime);
+            targetDate.setDate(targetDate.getDate() - 1);
+        } else if (timeRange === 'custom') {
+            const customDate = document.getElementById('custom-date').value;
+            if (customDate) {
+                targetDate = new Date(customDate);
+            } else {
+                console.log('[Automation] Custom date not specified, using today');
+                targetDate = phTime;
+            }
         }
 
-        console.log(`[Automation] Date array:`, dateArray);
+        // Format date string in Philippine timezone
+        const dateStr = targetDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+        console.log(`[Automation] Target date: ${dateStr}`);
+        console.log(`[Automation] Room filter: ${roomFilter}`);
 
         const roomKeys = Object.keys(labsData || {}).filter(key => key.startsWith("Room_")).sort();
         const filteredRooms = roomFilter === 'all' ? roomKeys : [roomFilter];
@@ -1141,227 +1038,96 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
         console.log(`[Automation] Filtered rooms:`, filteredRooms);
 
         const automationEvents = {};
-        
-        for (const room of filteredRooms) {
-            automationEvents[room] = {
-                power: [],
-                humidity: [],
-                temperature: []
-            };
-            
-            for (const dateStr of dateArray) {
-                const path = `/history/${room}/${dateStr}`;
-                console.log(`[Automation] Fetching: ${path}`);
-                try {
-                    const snapshot = await db.ref(path).once('value');
-                    console.log(`[Automation] Fetching: ${path}`);
-                    if (snapshot.exists()) {
-                        console.log(`[Automation] ${path} - Data exists: true`);
-                        console.log(`[Automation] ${path} - Hours in data:`, Object.keys(snapshot.val() || {}));
-                    } else {
-                        console.log(`[Automation] ${path} - Data exists: false`);
-                    }
 
-                    const dayData = snapshot.val();
-
-                    console.log(`[Automation] ${path} - Data exists: ${!!dayData}`);
-                    
-                    if (dayData) {
-                        Object.keys(dayData).forEach(hour => {
-                            const hourData = dayData[hour];
-                            if (hourData) {
-                                // Check for automation_events subdirectory (new format)
-                                if (hourData.automation_events) {
-                                    console.log(`[Automation] ${path}/${hour} - New format detected with automation_events subdirectory`);
-                                    const automationEventsData = hourData.automation_events;
-                                    Object.keys(automationEventsData).forEach(uniqueKey => {
-                                        const entry = automationEventsData[uniqueKey];
-                                        if (entry) {
-                                            console.log(`[Automation] Entry key: ${uniqueKey}, Entry data:`, JSON.stringify(entry));
-                                            processAutomationEntry(entry, room, fromDate, toDate, automationEvents);
-                                        }
-                                    });
-                                }
-                                // Handle old format (single entry per hour)
-                                else if (hourData.automationEvent) {
-                                    console.log(`[Automation] ${path}/${hour} - Old format detected`);
-                                    processAutomationEntry(hourData, room, fromDate, toDate, automationEvents);
-                                }
-                                // Handle mixed format with unique keys directly at hour level
-                                else {
-                                    console.log(`[Automation] ${path}/${hour} - Mixed format detected, processing ${Object.keys(hourData).length} entries`);
-                                    Object.keys(hourData).forEach(uniqueKey => {
-                                        const entry = hourData[uniqueKey];
-                                        if (entry && entry.automationEvent) {
-                                            console.log(`[Automation] Entry key: ${uniqueKey}, Entry data:`, JSON.stringify(entry));
-                                            processAutomationEntry(entry, room, fromDate, toDate, automationEvents);
-                                        }
-                                    });
-                                }
-                            }
-                        });
-                    }
-                } catch (e) {
-                    console.error(`[Automation] Error fetching ${path}:`, e);
-                }
-            }
-        }
-
-        // Helper function to process a single automation entry
-        function processAutomationEntry(entry, room, fromDate, toDate, automationEvents) {
-            console.log(`[Automation] Processing entry - Has automationEvent: ${!!entry.automationEvent}, automationEventType: ${entry.automationEventType}, automationEventTime: ${entry.automationEventTime}`);
-
-            // Check for automation events
-            if (entry.automationEvent && entry.automationEventType && entry.automationEventTime) {
-                const timestamp = parseInt(entry.automationEventTime);
-                console.log(`[Automation] Raw timestamp from Firebase: ${entry.automationEventTime} (parsed: ${timestamp})`);
-                if (!isNaN(timestamp)) {
-                    // Detect if timestamp is in seconds (new data) or milliseconds (old data)
-                    // Epoch in seconds: ~10 digits (e.g., 1787946607 for 2026)
-                    // Epoch in ms: ~13 digits (e.g., 1787946607000)
-                    let eventTime;
-                    if (timestamp < 10000000000) {
-                        // New format: seconds - convert to ms for Date
-                        eventTime = new Date(timestamp * 1000);
-                        console.log(`[Automation] Timestamp in seconds, converted to ms`);
-                    } else {
-                        // Old format: milliseconds
-                        eventTime = new Date(timestamp);
-                        console.log(`[Automation] Timestamp in milliseconds`);
-                    }
-                    console.log(`[Automation] Valid event time: ${eventTime.toISOString()} (local: ${eventTime.toLocaleString()})`);
-
-                    if (eventTime >= fromDate && eventTime <= toDate) {
-                        const eventType = entry.automationEventType;
-                        if (automationEvents[room][eventType]) {
-                            automationEvents[room][eventType].push({
-                                x: eventTime.getTime(),
-                                y: Math.random() * 9 + 0.5,
-                                time: eventTime,
-                                description: entry.automationEvent,
-                                pastTemp: entry.automationEventPastTemp,
-                                updatedTemp: entry.automationEventUpdatedTemp
-                            });
-                            console.log(`[Automation] Added ${eventType} event for ${room}`);
-                        }
-                    } else {
-                        console.log(`[Automation] Event time ${eventTime.toISOString()} outside date range ${fromDate.toISOString()} to ${toDate.toISOString()}`);
-                    }
-                }
-            }
-        }
-        
-        console.log(`[Automation] Final automation events:`, automationEvents);
-
-        // Calculate savings and load performance data for summary metrics
-        let overallStats = {
-            avgTemp: 0,
-            avgHumidity: 0,
-            automationEvents: 0,
-            totalCost: 0,
-            savings: 0,
-            savingsPercentage: 0,
-            totalHours: 0
-        };
-
-        for (const room of filteredRooms) {
-            const roomStats = await calculateSavings(room, dateArray);
-            overallStats.avgTemp += roomStats.avgTemp;
-            overallStats.avgHumidity += roomStats.avgHumidity;
-            overallStats.automationEvents += roomStats.automationEvents;
-            overallStats.totalCost += roomStats.totalCost;
-            overallStats.savings += roomStats.savings;
-            overallStats.totalHours += roomStats.totalHours;
-        }
-
-        // Calculate averages
-        overallStats.avgTemp /= filteredRooms.length;
-        overallStats.avgHumidity /= filteredRooms.length;
-        overallStats.savingsPercentage = (overallStats.totalCost + overallStats.savings) > 0 ? (overallStats.savings / (overallStats.totalCost + overallStats.savings)) * 100 : 0;
-
-        // Update summary metrics
-        document.getElementById('summary-avg-temp').textContent = `${overallStats.avgTemp.toFixed(1)}°C`;
-        document.getElementById('summary-avg-humidity').textContent = `${overallStats.avgHumidity.toFixed(1)}%`;
-        document.getElementById('summary-automation-events').textContent = overallStats.automationEvents;
-        document.getElementById('summary-total-cost').textContent = `₱${overallStats.totalCost.toFixed(2)}`;
-        document.getElementById('summary-savings').textContent = `₱${overallStats.savings.toFixed(2)} (${overallStats.savingsPercentage.toFixed(1)}%)`;
-
-        // Load historical data for chart (temperature, humidity, cost, savings)
+        // Load historical data for chart (hourly temperature, humidity, cost, savings, automation events) for single day
         const chartData = {
             temperature: [],
             humidity: [],
             cost: [],
-            savings: []
+            savings: [],
+            automationEvents: []
         };
 
-        for (const dateStr of dateArray) {
-            for (const room of filteredRooms) {
-                const path = `/history/${room}/${dateStr}`;
-                try {
-                    const snapshot = await db.ref(path).once('value');
-                    const dayData = snapshot.val();
+        for (const room of filteredRooms) {
+            const path = `/history/${room}/${dateStr}`;
+            try {
+                const snapshot = await db.ref(path).once('value');
+                const dayData = snapshot.val();
 
-                    if (dayData) {
-                        Object.keys(dayData).forEach(hour => {
-                            const hourData = dayData[hour];
-                            if (hourData) {
-                                const timestamp = new Date(dateStr).getTime() + (parseInt(hour) * 3600000);
+                if (dayData) {
+                    Object.keys(dayData).sort().forEach(hour => {
+                        const hourData = dayData[hour];
+                        if (hourData) {
+                            // Create timestamp in Philippine timezone (UTC+8)
+                            const dateObj = new Date(dateStr + 'T00:00:00+08:00');
+                            const timestamp = dateObj.getTime() + (parseInt(hour) * 3600000);
 
-                                // Temperature data
-                                if (hourData.temperature !== undefined && hourData.temperature !== null) {
-                                    chartData.temperature.push({
-                                        x: timestamp,
-                                        y: parseFloat(hourData.temperature)
-                                    });
-                                }
-
-                                // Humidity data
-                                if (hourData.humidity !== undefined && hourData.humidity !== null) {
-                                    chartData.humidity.push({
-                                        x: timestamp,
-                                        y: parseFloat(hourData.humidity)
-                                    });
-                                }
-
-                                // Cost data (calculate for this hour)
-                                let targetTemp = 24;
-                                if (hourData.targetTemp !== undefined && hourData.targetTemp !== null) {
-                                    targetTemp = parseFloat(hourData.targetTemp);
-                                } else if (hourData.targetTemp1 !== undefined && hourData.targetTemp1 !== null) {
-                                    const t1 = parseFloat(hourData.targetTemp1);
-                                    const t2 = hourData.targetTemp2 !== undefined && hourData.targetTemp2 !== null ? parseFloat(hourData.targetTemp2) : t1;
-                                    targetTemp = (t1 + t2) / 2;
-                                }
-
-                                const hourlyCost = AirconCostCalculator.computeAirconCost(
-                                    { aircon_type: 'non_inverter', duty_cycle: 0.65, rated_watts: 4020 },
-                                    1,
-                                    14.7833,
-                                    targetTemp
-                                );
-                                chartData.cost.push({
+                            // Temperature data
+                            if (hourData.temperature !== undefined && hourData.temperature !== null) {
+                                chartData.temperature.push({
                                     x: timestamp,
-                                    y: hourlyCost
-                                });
-
-                                // Savings data (fixed 16°C vs actual)
-                                const fixed16Cost = AirconCostCalculator.computeAirconCost(
-                                    { aircon_type: 'non_inverter', duty_cycle: 0.65, rated_watts: 4020 },
-                                    1,
-                                    14.7833,
-                                    16
-                                );
-                                const hourlySavings = fixed16Cost - hourlyCost;
-                                chartData.savings.push({
-                                    x: timestamp,
-                                    y: hourlySavings
+                                    y: parseFloat(hourData.temperature)
                                 });
                             }
-                        });
-                    }
-                } catch (e) {
-                    console.error(`[Automation] Error fetching chart data for ${path}:`, e);
+
+                            // Humidity data
+                            if (hourData.humidity !== undefined && hourData.humidity !== null) {
+                                chartData.humidity.push({
+                                    x: timestamp,
+                                    y: parseFloat(hourData.humidity)
+                                });
+                            }
+
+                            // Cost data (calculate for this hour)
+                            let targetTemp = 24;
+                            if (hourData.targetTemp !== undefined && hourData.targetTemp !== null) {
+                                targetTemp = parseFloat(hourData.targetTemp);
+                            } else if (hourData.targetTemp1 !== undefined && hourData.targetTemp1 !== null) {
+                                const t1 = parseFloat(hourData.targetTemp1);
+                                const t2 = hourData.targetTemp2 !== undefined && hourData.targetTemp2 !== null ? parseFloat(hourData.targetTemp2) : t1;
+                                targetTemp = (t1 + t2) / 2;
+                            }
+
+                            const hourlyCost = AirconCostCalculator.computeAirconCost(
+                                { aircon_type: 'non_inverter', duty_cycle: 0.65, rated_watts: 4020 },
+                                1,
+                                14.7833,
+                                targetTemp
+                            );
+                            chartData.cost.push({
+                                x: timestamp,
+                                y: hourlyCost
+                            });
+
+                            // Savings data (fixed 16°C vs actual)
+                            const fixed16Cost = AirconCostCalculator.computeAirconCost(
+                                { aircon_type: 'non_inverter', duty_cycle: 0.65, rated_watts: 4020 },
+                                1,
+                                14.7833,
+                                16
+                            );
+                            const hourlySavings = fixed16Cost - hourlyCost;
+                            chartData.savings.push({
+                                x: timestamp,
+                                y: hourlySavings
+                            });
+
+                            // Automation events data (count events per hour)
+                            let eventCount = 0;
+                            if (hourData.automation_events) {
+                                eventCount = Object.keys(hourData.automation_events).length;
+                            } else if (hourData.automationEvent) {
+                                eventCount = 1;
+                            }
+                            chartData.automationEvents.push({
+                                x: timestamp,
+                                y: eventCount
+                            });
+                        }
+                    });
                 }
+            } catch (e) {
+                console.error(`[Automation] Error fetching chart data for ${path}:`, e);
             }
         }
 
@@ -1382,8 +1148,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                 backgroundColor: '#EF4444',
                 borderColor: '#DC2626',
                 borderWidth: 2,
-                pointRadius: 4,
-                pointHoverRadius: 8,
+                pointRadius: 0,
+                pointHoverRadius: 3,
                 tension: 0.3,
                 fill: false,
                 yAxisID: 'y'
@@ -1398,8 +1164,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                 backgroundColor: '#10B981',
                 borderColor: '#059669',
                 borderWidth: 2,
-                pointRadius: 4,
-                pointHoverRadius: 8,
+                pointRadius: 0,
+                pointHoverRadius: 3,
                 tension: 0.3,
                 fill: false,
                 yAxisID: 'y'
@@ -1414,24 +1180,40 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                 backgroundColor: '#F59E0B',
                 borderColor: '#D97706',
                 borderWidth: 2,
-                pointRadius: 4,
-                pointHoverRadius: 8,
+                pointRadius: 0,
+                pointHoverRadius: 3,
                 tension: 0.3,
                 fill: false,
                 yAxisID: 'y1'
             });
         }
 
-        // Savings dataset (right axis)
+        // Savings dataset (right axis) - purple color
         if (chartData.savings.length > 0) {
             datasets.push({
                 label: 'Savings',
                 data: chartData.savings,
-                backgroundColor: '#10B981',
-                borderColor: '#059669',
+                backgroundColor: '#8B5CF6',
+                borderColor: '#7C3AED',
                 borderWidth: 2,
-                pointRadius: 4,
-                pointHoverRadius: 8,
+                pointRadius: 0,
+                pointHoverRadius: 3,
+                tension: 0.3,
+                fill: false,
+                yAxisID: 'y1'
+            });
+        }
+
+        // Automation Events dataset (right axis) - gray color
+        if (chartData.automationEvents.length > 0) {
+            datasets.push({
+                label: 'Automation Events',
+                data: chartData.automationEvents,
+                backgroundColor: '#6B7280',
+                borderColor: '#4B5563',
+                borderWidth: 2,
+                pointRadius: 0,
+                pointHoverRadius: 3,
                 tension: 0.3,
                 fill: false,
                 yAxisID: 'y1'
@@ -1441,18 +1223,6 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
         console.log(`[Automation] Total datasets: ${datasets.length}`);
         automationChart.data.datasets = datasets;
         automationChart.update('active');
-
-        // Update time range indicator
-        const timeRangeIndicator = document.getElementById('time-range-indicator');
-        timeRangeIndicator.textContent = `Time Range: ${fromDateStr} to ${toDateStr}`;
-
-        // Show timezone label if there's data
-        const timezoneLabel = document.getElementById('timezone-label-automation');
-        if (datasets.length > 0) {
-            timezoneLabel.classList.remove('hidden');
-        } else {
-            timezoneLabel.classList.add('hidden');
-        }
     }
 
     function loadAirconConfig() {
@@ -1765,6 +1535,9 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                             label: function(context) {
                                 const label = context.dataset.label || '';
                                 const value = context.parsed.y;
+                                if (label === 'Automation Events') {
+                                    return `${label}: ${value}`;
+                                }
                                 const unit = context.dataset.yAxisID === 'y' ? '°C/%' : '₱';
                                 return `${label}: ${value.toFixed(2)} ${unit}`;
                             }
@@ -1773,20 +1546,18 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                 },
                 scales: {
                     x: {
-                        type: 'linear',
+                        type: 'time',
+                        time: {
+                            unit: 'hour',
+                            displayFormats: {
+                                hour: 'h:mm a'
+                            },
+                            timezone: 'Asia/Manila'
+                        },
                         position: 'bottom',
-                        title: { display: true, text: 'Time', font: { weight: 'bold', size: 11 } },
+                        title: { display: true, text: 'Time (PHT)', font: { weight: 'bold', size: 11 } },
                         ticks: {
-                            font: { weight: 'bold' },
-                            callback: function(value) {
-                                const date = new Date(value);
-                                return date.toLocaleTimeString('en-PH', {
-                                    timeZone: 'Asia/Manila',
-                                    hour: 'numeric',
-                                    minute: '2-digit',
-                                    hour12: true
-                                });
-                            }
+                            font: { weight: 'bold' }
                         }
                     },
                     y: {
@@ -1870,9 +1641,15 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
     }
 
     // Add event listeners for export buttons
-    document.getElementById('export-csv').addEventListener('click', exportAutomationCSV);
-    document.getElementById('export-image').addEventListener('click', exportAutomationImage);
-    document.getElementById('automation-type-filter').addEventListener('change', loadAutomationData);
+    const exportCsv = document.getElementById('export-csv');
+    if (exportCsv) {
+        exportCsv.addEventListener('click', exportAutomationCSV);
+    }
+    const exportImage = document.getElementById('export-image');
+    if (exportImage) {
+        exportImage.addEventListener('click', exportAutomationImage);
+    }
+    // automation-type-filter removed - no longer needed
 
 
     // Initialize charts with existing trendHistory data
@@ -4057,15 +3834,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
 
 
-    // Cooldown tracking
-
-    let periodTabCooldown = false;
-
-    let metricTabCooldown = false;
-
-    let dateNavCooldown = false;
-
-    const COOLDOWN_MS = 500;
+    // Cooldown tracking variables moved to top of script to prevent initialization errors
 
 
 

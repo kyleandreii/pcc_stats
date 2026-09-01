@@ -99,18 +99,7 @@
             border-color: rgba(16, 185, 129, 0.2);
         }
 
-        /* Schedule/Automation Controls */
-        .schedule-row {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-lg);
-            padding: var(--space-4);
-            transition: var(--transition-base);
-        }
-        .schedule-row:hover {
-            border-color: var(--border-color);
-            box-shadow: var(--shadow-sm);
-        }
+        /* Automation Controls */
 
         /* Toggle Switch */
         .toggle-switch {
@@ -306,58 +295,6 @@
                 </div>
 
                 <div class="lg:col-span-8 space-y-6">
-
-                    <!-- SCHEDULER SECTION - Neumorphic -->
-                    <div class="neumorph-card p-8">
-                        <div class="section-header flex items-center justify-between">
-                            <div class="flex items-center gap-3">
-                                <i data-lucide="clock" class="text-[#800000] w-5 h-5"></i>
-                                <h3 class="font-bold text-gray-700 uppercase tracking-wider text-xs">AC Power Automation</h3>
-                                <span id="schedule-unit-badge" class="hidden section-badge text-[9px] font-bold px-2 py-1 rounded-full uppercase">Unit 1</span>
-                            </div>
-                            <div class="flex items-center gap-4">
-                                <div id="schedule-status" class="text-[9px] font-black uppercase px-4 py-1.5 neumorph-card rounded-full text-gray-400">No Active Schedule</div>
-                                <div id="ac-state" class="text-[9px] font-black uppercase px-4 py-1.5 neumorph-card rounded-full text-gray-400">AC: --</div>
-                            </div>
-                        </div>
-
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-                            <div class="space-y-3">
-                                <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Automatic ON Time</label>
-                                <input type="time" id="input-on-time" class="neumorph-input w-full">
-                            </div>
-                            <div class="space-y-3">
-                                <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Automatic OFF Time</label>
-                                <input type="time" id="input-off-time" class="neumorph-input w-full">
-                            </div>
-                        </div>
-
-                        <button onclick="saveSchedule()" class="neumorph-btn w-full py-4 rounded-2xl flex items-center justify-center gap-3 uppercase tracking-widest text-[11px]">
-                            <i data-lucide="calendar-check" class="w-4 h-4"></i> Apply Schedule to <span id="sched-room-name">...</span>
-                        </button>
-
-                        <!-- Schedule Efficiency Display -->
-                        <div class="mt-6 glass-card p-6">
-                            <div class="flex items-center gap-2 mb-4">
-                                <i data-lucide="trending-up" class="text-green-500 w-4 h-4"></i>
-                                <h4 class="text-xs font-black text-green-600 uppercase tracking-widest">Schedule Efficiency</h4>
-                            </div>
-                            <div class="grid grid-cols-3 gap-4 text-center">
-                                <div>
-                                    <p id="schedule-efficiency" class="text-2xl font-black text-gray-800">--%</p>
-                                    <p class="text-[9px] text-gray-400 uppercase font-bold tracking-wider">Efficiency</p>
-                                </div>
-                                <div>
-                                    <p id="schedule-compliant" class="text-2xl font-black text-green-600">--</p>
-                                    <p class="text-[9px] text-gray-400 uppercase font-bold tracking-wider">Compliant (min)</p>
-                                </div>
-                                <div>
-                                    <p id="schedule-noncompliant" class="text-2xl font-black text-red-600">--</p>
-                                    <p class="text-[9px] text-gray-400 uppercase font-bold tracking-wider">Non-Compliant (min)</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
 
                     <!-- AUTOMATION SECTION - Neumorphic -->
                     <div class="neumorph-card p-8">
@@ -804,13 +741,8 @@
             const data = labsData[selectedRoom];
             const thresholds = data.thresholds || { minTemp: 0, maxTemp: 0 };
             const specs = data.specs || {};
-            const schedule = data.schedule || { onTime: "", offTime: "" };
 
             document.getElementById('config-lab-name').innerText = getRoomLabel(selectedRoom).toUpperCase();
-            document.getElementById('sched-room-name').innerText = getRoomLabel(selectedRoom);
-
-            // Load schedule efficiency metrics
-            loadScheduleEfficiency();
             
             document.getElementById('curr-temp-display').innerText = (data.temperature || 0).toFixed(1) + "°";
             document.getElementById('curr-min-display').innerText = (thresholds.minTemp || 0) + "°";
@@ -841,18 +773,6 @@
 
                 const displayTarget = data.targetTemp !== undefined ? data.targetTemp : 24;
                 document.getElementById('manual-temp-val').innerText = Math.round(displayTarget);
-            }
-
-            document.getElementById('input-on-time').value = schedule.onTime || "";
-            document.getElementById('input-off-time').value = schedule.offTime || "";
-            
-            const statusBox = document.getElementById('schedule-status');
-            if(schedule.onTime && schedule.offTime) {
-                statusBox.innerText = `Automation: Active (${schedule.onTime} - ${schedule.offTime})`;
-                statusBox.className = "text-[9px] font-black uppercase px-3 py-1 bg-green-100 rounded text-green-600";
-            } else {
-                statusBox.innerText = "No Active Schedule";
-                statusBox.className = "text-[9px] font-black uppercase px-3 py-1 bg-gray-100 rounded text-gray-400";
             }
 
             // Load automation settings - only update if not currently focused
@@ -907,13 +827,6 @@
             safeUpdate('input-serial-no', specs.serialNo);
             safeUpdate('input-duty-cycle', specs.dutyCycle);
             safeUpdate('input-rating', specs.rating);
-            // Update AC state display
-            const acStateEl = document.getElementById('ac-state');
-            if (acStateEl) {
-                const acOn = data.ac === true;
-                acStateEl.innerText = `AC: ${acOn ? 'ON' : 'OFF'}`;
-                acStateEl.className = acOn ? "text-[9px] font-black uppercase px-3 py-1 bg-green-100 rounded text-green-600" : "text-[9px] font-black uppercase px-3 py-1 bg-gray-100 rounded text-gray-400";
-            }
         }
 
         // Helper utilities for time comparisons (HH:MM)
@@ -926,133 +839,16 @@
         }
 
         function isTimeBetween(current, start, end) {
-            if (!start || !end) return false;
-            const c = toMinutes(current);
-            const s = toMinutes(start);
-            const e = toMinutes(end);
-            if (c === null || s === null || e === null) return false;
-            if (s <= e) {
-                return c >= s && c < e; // within same day (end exclusive)
-            }
-            // overnight (e.g., 23:00 -> 06:00)
-            return c >= s || c < e;
+            const c = current.split(':').map(Number);
+            const s = start.split(':').map(Number);
+            const e = end.split(':').map(Number);
+            const cMin = c[0] * 60 + c[1];
+            const sMin = s[0] * 60 + s[1];
+            const eMin = e[0] * 60 + e[1];
+            return cMin >= sMin && cMin <= eMin;
         }
 
-        function saveSchedule() {
-            if (!selectedRoom) return;
-            const onTime = document.getElementById('input-on-time').value;
-            const offTime = document.getElementById('input-off-time').value;
-
-            if(!onTime || !offTime) {
-                Swal.fire({ icon: 'error', title: 'Invalid Time', text: 'Please set both ON and OFF times.' });
-                return;
-            }
-
-            // Save to room-level schedule
-            const savePath = `${selectedRoom}/schedule`;
-
-            db.ref(savePath).set({ onTime, offTime, enabled: true })
-            .then(() => {
-                Swal.fire({ icon: 'success', title: 'Automation Set', text: `AC will trigger at ${onTime} and ${offTime}`, timer: 2000, showConfirmButton: false });
-                // Reset tracker for this room to allow immediate action if current time matches
-                lastAutomationAction[selectedRoom] = null;
-
-                // Apply immediate state: if current time is within the scheduled range, mark AC ON, otherwise OFF
-                const now = new Date();
-                const nowTime = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
-                const within = isTimeBetween(nowTime, onTime, offTime);
-
-                // Update room-level AC state
-                if (within) {
-                    db.ref(`${selectedRoom}`).update({ ac_command: 'ON', ac: true })
-                        .then(() => console.log(`Automation: ${selectedRoom} immediate ON`));
-                    lastAutomationAction[selectedRoom] = `${selectedRoom}_${nowTime}_ON`;
-                } else {
-                    db.ref(`${selectedRoom}`).update({ ac_command: 'OFF', ac: false })
-                        .then(() => console.log(`Automation: ${selectedRoom} immediate OFF`));
-                    lastAutomationAction[selectedRoom] = `${selectedRoom}_${nowTime}_OFF`;
-                }
-
-                // Load schedule efficiency after saving
-                loadScheduleEfficiency();
-            });
-        }
-
-        function loadScheduleEfficiency() {
-            if (!selectedRoom) return;
-
-            const efficiencyPath = `${selectedRoom}/schedule/efficiency`;
-            db.ref(efficiencyPath).on('value', (snapshot) => {
-                const data = snapshot.val();
-                if (data) {
-                    document.getElementById('schedule-efficiency').textContent = data.efficiencyPercentage !== undefined ? data.efficiencyPercentage.toFixed(1) + '%' : '--%';
-                    document.getElementById('schedule-compliant').textContent = data.compliantMinutes || '--';
-                    document.getElementById('schedule-noncompliant').textContent = data.nonCompliantMinutes || '--';
-                } else {
-                    document.getElementById('schedule-efficiency').textContent = '--%';
-                    document.getElementById('schedule-compliant').textContent = '--';
-                    document.getElementById('schedule-noncompliant').textContent = '--';
-                }
-            });
-        }
-
-        function runAutomationCheck() {
-            const now = new Date();
-            const currentTime = now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes().toString().padStart(2, '0');
-            
-            console.log(`[Automation Check] Running at ${currentTime}, checking ${labKeys.length} rooms`);
-            
-            labKeys.forEach(room => {
-                const roomData = labsData[room];
-                const sched = roomData?.schedule;
-                if (!sched || !sched.onTime || !sched.offTime) {
-                    console.log(`[Automation Check] ${room} - No schedule configured`);
-                    return;
-                }
-
-                const actionKey = `${room}_${currentTime}`;
-                let debugMsg = `[Automation] ${room} - Current: ${currentTime}, Schedule: ${sched.onTime}-${sched.offTime}`;
-                console.log(debugMsg);
-
-                // Exact-time triggers (send commands at configured minutes)
-                if (sched.onTime === currentTime && lastAutomationAction[room] !== actionKey + "_ON") {
-                    console.log(debugMsg + " → TRIGGER ON");
-                    
-                    // Check if room has dual units configured
-                    if (roomData?.units?.unit_1 && roomData?.units?.unit_2) {
-                        console.log(`[Automation] ${room} - Dual unit mode detected`);
-                        db.ref(`${room}/units/unit_1`).update({ ac_command: "ON", ac: true });
-                        db.ref(`${room}/units/unit_2`).update({ ac_command: "ON", ac: true });
-                    } else {
-                        console.log(`[Automation] ${room} - Single unit mode detected`);
-                        db.ref(`${room}`).update({ ac_command: "ON", ac: true });
-                    }
-                    
-                    console.log(`[Automation] ${room} turned ON successfully`);
-                    lastAutomationAction[room] = actionKey + "_ON";
-                    return;
-                }
-
-                if (sched.offTime === currentTime && lastAutomationAction[room] !== actionKey + "_OFF") {
-                    console.log(debugMsg + " → TRIGGER OFF");
-                    
-                    // Check if room has dual units configured
-                    if (roomData?.units?.unit_1 && roomData?.units?.unit_2) {
-                        console.log(`[Automation] ${room} - Dual unit mode detected`);
-                        db.ref(`${room}/units/unit_1`).update({ ac_command: "OFF", ac: false });
-                        db.ref(`${room}/units/unit_2`).update({ ac_command: "OFF", ac: false });
-                    } else {
-                        console.log(`[Automation] ${room} - Single unit mode detected`);
-                        db.ref(`${room}`).update({ ac_command: "OFF", ac: false });
-                    }
-                    
-                    console.log(`[Automation] ${room} turned OFF successfully`);
-                    lastAutomationAction[room] = actionKey + "_OFF";
-                    return;
-                }
-                // NOTE: Removed continuous schedule window enforcement to respect manual toggles from dashboard
-            });
-        }
+        // runAutomationCheck function removed - AC Power Automation disabled
 
         function adjustManualTemp(change, unitNumber = null) {
             if (!selectedRoom) return;

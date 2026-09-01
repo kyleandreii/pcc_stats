@@ -93,27 +93,13 @@ unsigned long lastHumidityAutomationCheckMillis = 0;
 unsigned long lastIRSendMillis = 0;
 unsigned long lastSerialLogMillis = 0;
 
-// Schedule Efficiency Tracking Variables
-String scheduleOnTime = "";  // Scheduled ON time (HH:MM format)
-String scheduleOffTime = ""; // Scheduled OFF time (HH:MM format)
-bool scheduleEnabled = false; // Schedule automation disabled
-unsigned long scheduleCompliantMinutes = 0;  // Minutes AC ran within schedule
-unsigned long scheduleNonCompliantMinutes = 0; // Minutes AC ran outside schedule
-unsigned long totalScheduledMinutes = 0; // Total minutes in scheduled ON period
-unsigned long lastScheduleCheckMillis = 0; // Last time schedule adherence was checked
-bool manualOverrideActive = false; // Whether manual override is active
-unsigned long lastScheduleBoundaryMillis = 0; // Last time schedule boundary (ON/OFF) occurred
-bool lastWithinSchedule = false; // Last schedule state (to detect boundaries)
+// Schedule Efficiency Tracking Variables - REMOVED (AC Power Automation disabled)
 
 void handleACCommand(String cmd, int unit = 0, bool isAutomation = false);
 void logAutomationEventToHistory();
 void updateOLED(float currentTemp);
 void runAutomation(float temp, float humidity);
 void handleIRReceiver();
-void checkScheduleAdherence();
-bool isWithinSchedule();
-void loadScheduleFromFirebase();
-void resetDailyScheduleCounters();
 
 void setup() {
   Serial.begin(115200);
@@ -243,24 +229,9 @@ void setup() {
     }
   }
 
-  // Load schedule configuration from Firebase
-  loadScheduleFromFirebase();
+  // Schedule configuration loading REMOVED (AC Power Automation disabled)
 
-  // Load manual override state from Firebase
-  Firebase.RTDB.getBool(&fbdo, String(ROOM_ID) + "/manualOverrideActive");
-  if (fbdo.httpCode() == FIREBASE_ERROR_HTTP_CODE_OK) {
-    manualOverrideActive = fbdo.boolData();
-    Serial.println("[Setup] Manual override state loaded from Firebase: " + String(manualOverrideActive ? "ACTIVE" : "INACTIVE"));
-  }
-
-  // Load last schedule state from Firebase to prevent false boundary detection on restart
-  Firebase.RTDB.getBool(&fbdo, String(ROOM_ID) + "/lastWithinSchedule");
-  if (fbdo.httpCode() == FIREBASE_ERROR_HTTP_CODE_OK) {
-    lastWithinSchedule = fbdo.boolData();
-    Serial.println("[Setup] Last schedule state loaded from Firebase: " + String(lastWithinSchedule ? "WITHIN" : "OUTSIDE"));
-  }
-
-  Serial.println("[Setup] Temperature Safety Automation: ENABLED");
+  Serial.println("[Setup] Temperature Safety Automation: DISABLED");
   Serial.println("[Setup] Automation Interval: " + String(AUTOMATION_INTERVAL_MS / 1000) + " seconds");
   Serial.println("[Setup] IR Send Cooldown: " + String(IR_SEND_COOLDOWN_MS / 1000) + " seconds");
 
@@ -504,8 +475,7 @@ void loop() {
 
   handleIRReceiver();
 
-  // Check schedule adherence
-  checkScheduleAdherence();
+  // Schedule adherence check REMOVED (AC Power Automation disabled)
 
   if (!isnan(t) && !isnan(h)) {
     runAutomation(t, h);
@@ -568,17 +538,7 @@ void loop() {
         historyData.add("automationStartTime", automationStartTime / 1000); // Store as seconds since boot
       }
 
-      // Log schedule efficiency metrics
-      if (scheduleEnabled) {
-        historyData.add("scheduleEnabled", true);
-        historyData.add("scheduleCompliantMinutes", scheduleCompliantMinutes);
-        historyData.add("scheduleNonCompliantMinutes", scheduleNonCompliantMinutes);
-        historyData.add("totalScheduledMinutes", totalScheduledMinutes);
-        if (totalScheduledMinutes > 0) {
-          float efficiency = ((float)scheduleCompliantMinutes / (float)totalScheduledMinutes) * 100.0;
-          historyData.add("scheduleEfficiencyPercentage", efficiency);
-        }
-      }
+      // Schedule efficiency logging REMOVED (AC Power Automation disabled)
 
       // Preserve automation_events subdirectory if it exists
       FirebaseJsonData automationEventsData;
@@ -705,10 +665,7 @@ void handleACCommand(String cmd, int unit, bool isAutomation) {
   if (isAutomation) {
     logAutomationEventToHistory();
   } else {
-    // Track manual changes for override logic
-    manualOverrideActive = true;
-    Firebase.RTDB.setBool(&fbdo, String(ROOM_ID) + "/manualOverrideActive", true);
-    Serial.println("[Manual Override] Manual AC change recorded, schedule override active until next schedule boundary");
+    // Manual override logic REMOVED (AC Power Automation disabled)
   }
 
   // Update Firebase based on unit
@@ -1064,195 +1021,4 @@ void runAutomation(float temp, float humidity) {
   }
 }
 
-// Schedule Efficiency Functions
-
-void loadScheduleFromFirebase() {
-  Serial.println("[Schedule] Loading schedule configuration from Firebase");
-  
-  // Load schedule enabled status
-  Firebase.RTDB.getBool(&fbdo, "/" + String(ROOM_ID) + "/schedule/enabled");
-  if (fbdo.httpCode() == FIREBASE_ERROR_HTTP_CODE_OK) {
-    scheduleEnabled = fbdo.boolData();
-    Serial.println("[Schedule] Schedule enabled: " + String(scheduleEnabled));
-  }
-  
-  // Load ON time
-  Firebase.RTDB.getString(&fbdo, "/" + String(ROOM_ID) + "/schedule/onTime");
-  if (fbdo.httpCode() == FIREBASE_ERROR_HTTP_CODE_OK) {
-    scheduleOnTime = fbdo.stringData();
-    Serial.println("[Schedule] ON time: " + scheduleOnTime);
-  }
-  
-  // Load OFF time
-  Firebase.RTDB.getString(&fbdo, "/" + String(ROOM_ID) + "/schedule/offTime");
-  if (fbdo.httpCode() == FIREBASE_ERROR_HTTP_CODE_OK) {
-    scheduleOffTime = fbdo.stringData();
-    Serial.println("[Schedule] OFF time: " + scheduleOffTime);
-  }
-}
-
-bool isWithinSchedule() {
-  if (!scheduleEnabled || scheduleOnTime.isEmpty() || scheduleOffTime.isEmpty()) {
-    return false; // No schedule configured, consider as "within schedule"
-  }
-  
-  time_t now = time(nullptr);
-  if (now < 1000000000) {
-    return false; // Time not synced
-  }
-  
-  struct tm* timeinfo = localtime(&now);
-  int currentHour = timeinfo->tm_hour;
-  int currentMinute = timeinfo->tm_min;
-  int currentTotalMinutes = currentHour * 60 + currentMinute;
-  
-  // Parse ON time (HH:MM)
-  int onHour = scheduleOnTime.substring(0, 2).toInt();
-  int onMinute = scheduleOnTime.substring(3, 5).toInt();
-  int onTotalMinutes = onHour * 60 + onMinute;
-  
-  // Parse OFF time (HH:MM)
-  int offHour = scheduleOffTime.substring(0, 2).toInt();
-  int offMinute = scheduleOffTime.substring(3, 5).toInt();
-  int offTotalMinutes = offHour * 60 + offMinute;
-  
-  // Check if current time is within scheduled ON period
-  if (onTotalMinutes <= offTotalMinutes) {
-    // Same day schedule (e.g., 08:00 to 17:00)
-    return (currentTotalMinutes >= onTotalMinutes && currentTotalMinutes < offTotalMinutes);
-  } else {
-    // Overnight schedule (e.g., 22:00 to 06:00)
-    return (currentTotalMinutes >= onTotalMinutes || currentTotalMinutes < offTotalMinutes);
-  }
-}
-
-void checkScheduleAdherence() {
-  const unsigned long SCHEDULE_CHECK_INTERVAL_MS = 60000; // Check every minute
-
-  if (millis() - lastScheduleCheckMillis < SCHEDULE_CHECK_INTERVAL_MS) {
-    return;
-  }
-  lastScheduleCheckMillis = millis();
-
-  // Reset counters at midnight
-  time_t now = time(nullptr);
-  if (now >= 1000000000) {
-    struct tm* timeinfo = localtime(&now);
-    if (timeinfo->tm_hour == 0 && timeinfo->tm_min == 0) {
-      resetDailyScheduleCounters();
-    }
-  }
-
-  if (!scheduleEnabled) {
-    return; // No schedule to track
-  }
-
-  // Get current AC state from Firebase
-  bool acIsOn = false;
-  #if DUAL_UNIT_MODE
-  Firebase.RTDB.getBool(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/ac");
-  if (fbdo.httpCode() == FIREBASE_ERROR_HTTP_CODE_OK) {
-    acIsOn = fbdo.boolData();
-  }
-  #else
-  Firebase.RTDB.getBool(&fbdo, "/" + String(ROOM_ID) + "/ac");
-  if (fbdo.httpCode() == FIREBASE_ERROR_HTTP_CODE_OK) {
-    acIsOn = fbdo.boolData();
-  }
-  #endif
-
-  bool withinSchedule = isWithinSchedule();
-
-  // Detect schedule boundary (ON/OFF transition)
-  if (withinSchedule != lastWithinSchedule) {
-    // Schedule boundary detected - clear manual override
-    if (manualOverrideActive) {
-      manualOverrideActive = false;
-      Firebase.RTDB.setBool(&fbdo, String(ROOM_ID) + "/manualOverrideActive", false);
-      Serial.println("[Manual Override] Schedule boundary detected, clearing manual override");
-    }
-    // Save the new schedule state to Firebase
-    Firebase.RTDB.setBool(&fbdo, String(ROOM_ID) + "/lastWithinSchedule", withinSchedule);
-    lastScheduleBoundaryMillis = millis();
-  }
-
-  // Check if manual override is active
-  if (manualOverrideActive) {
-    Serial.println("[Manual Override] Manual override active, skipping schedule-based control");
-    // Skip schedule-based AC control during manual override
-    lastWithinSchedule = withinSchedule; // Update to prevent false boundary detection later
-    return;
-  }
-
-  // Schedule-based AC control
-  if (withinSchedule != lastWithinSchedule) {
-    if (withinSchedule && !acIsOn) {
-      // Schedule started, turn AC on
-      Serial.println("[Schedule] Schedule started - Turning AC ON");
-      handleACCommand("POWER_ON", 0, true);
-      Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/ac", true);
-      #if DUAL_UNIT_MODE
-      Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/ac", true);
-      Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/ac", true);
-      #endif
-    } else if (!withinSchedule && acIsOn) {
-      // Schedule ended, turn AC off
-      Serial.println("[Schedule] Schedule ended - Turning AC OFF");
-      handleACCommand("POWER_OFF", 0, true);
-      Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/ac", false);
-      #if DUAL_UNIT_MODE
-      Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/ac", false);
-      Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/ac", false);
-      #endif
-    }
-    lastWithinSchedule = withinSchedule;
-  }
-
-  if (acIsOn) {
-    if (withinSchedule) {
-      scheduleCompliantMinutes++;
-      Serial.println("[Schedule] AC running within schedule - Compliant minutes: " + String(scheduleCompliantMinutes));
-    } else {
-      scheduleNonCompliantMinutes++;
-      Serial.println("[Schedule] AC running outside schedule - Non-compliant minutes: " + String(scheduleNonCompliantMinutes));
-    }
-  }
-
-  // Calculate total scheduled minutes for today
-  if (scheduleOnTime.length() >= 5 && scheduleOffTime.length() >= 5) {
-    int onHour = scheduleOnTime.substring(0, 2).toInt();
-    int onMinute = scheduleOnTime.substring(3, 5).toInt();
-    int offHour = scheduleOffTime.substring(0, 2).toInt();
-    int offMinute = scheduleOffTime.substring(3, 5).toInt();
-
-    int onTotal = onHour * 60 + onMinute;
-    int offTotal = offHour * 60 + offMinute;
-
-    if (onTotal <= offTotal) {
-      totalScheduledMinutes = offTotal - onTotal;
-    } else {
-      // Overnight schedule
-      totalScheduledMinutes = (24 * 60 - onTotal) + offTotal;
-    }
-  }
-
-  // Update schedule efficiency metrics in Firebase
-  FirebaseJson scheduleData;
-  scheduleData.add("compliantMinutes", scheduleCompliantMinutes);
-  scheduleData.add("nonCompliantMinutes", scheduleNonCompliantMinutes);
-  scheduleData.add("totalScheduledMinutes", totalScheduledMinutes);
-
-  if (totalScheduledMinutes > 0) {
-    float efficiency = ((float)scheduleCompliantMinutes / (float)totalScheduledMinutes) * 100.0;
-    scheduleData.add("efficiencyPercentage", efficiency);
-  }
-
-  Firebase.RTDB.setJSON(&fbdo, "/" + String(ROOM_ID) + "/schedule/efficiency", &scheduleData);
-}
-
-void resetDailyScheduleCounters() {
-  Serial.println("[Schedule] Resetting daily schedule counters");
-  scheduleCompliantMinutes = 0;
-  scheduleNonCompliantMinutes = 0;
-  totalScheduledMinutes = 0;
-}
+// Schedule Efficiency Functions - REMOVED (AC Power Automation disabled)
