@@ -744,9 +744,9 @@
         }
         
         function getDurationDisplay(roomPath, unit = null) {
-            // Firebase is authoritative - get state from Firebase data
-            const firebasePath = unit ? `${roomPath}/units/${unit}/ac_timestamp` : `${roomPath}/ac_timestamp`;
-            const timestamp = labsData[roomPath]?.units?.[unit]?.ac_timestamp || labsData[roomPath]?.ac_timestamp;
+            // Get cumulative online duration from Firebase
+            const onlineDurationPath = unit ? `${roomPath}/units/${unit}/online_duration` : `${roomPath}/online_duration`;
+            const onlineDuration = labsData[roomPath]?.units?.[unit]?.online_duration || labsData[roomPath]?.online_duration;
             
             // Get AC state from Firebase
             let isOn = false;
@@ -756,28 +756,16 @@
                 isOn = labsData[roomPath]?.ac === true || labsData[roomPath]?.ac === "ON" || labsData[roomPath]?.ac === 1;
             }
             
-            console.log(`[Duration] ${roomPath} ${unit || ''}: timestamp=${timestamp}, isOn=${isOn}`);
+            console.log(`[Duration] ${roomPath} ${unit || ''}: online_duration=${onlineDuration}, isOn=${isOn}`);
             
-            if (!timestamp) {
-                console.log(`[Duration] ${roomPath} ${unit || ''}: Missing timestamp, returning Unknown`);
-                return 'Unknown';
+            if (!onlineDuration) {
+                console.log(`[Duration] ${roomPath} ${unit || ''}: Missing online_duration, returning 0h`);
+                return '0h online';
             }
             
-            // Check if timestamp is older than 24 hours, reset if needed
-            const now = Date.now();
-            const hoursSinceTimestamp = (now - timestamp) / (1000 * 60 * 60);
-            
-            if (hoursSinceTimestamp >= 24) {
-                console.log(`[Duration] ${roomPath} ${unit || ''}: Timestamp is ${hoursSinceTimestamp.toFixed(1)}h old, resetting`);
-                // Reset timestamp to current time
-                const newTimestamp = now;
-                const updatePath = unit ? `${roomPath}/units/${unit}` : roomPath;
-                db.ref(`${updatePath}/ac_timestamp`).set(newTimestamp);
-                return 'Just now ' + (isOn ? 'online' : 'offline');
-            }
-            
-            const duration = formatDuration(timestamp);
-            const result = `${duration} ${isOn ? 'online' : 'offline'}`;
+            // Format the online duration (in seconds)
+            const duration = formatDuration(onlineDuration);
+            const result = `${duration} online`;
             console.log(`[Duration] ${roomPath} ${unit || ''}: Returning ${result}`);
             return result;
         }

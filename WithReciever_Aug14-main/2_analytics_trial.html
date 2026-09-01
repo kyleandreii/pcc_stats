@@ -691,15 +691,9 @@
 
                         <div class="flex items-center gap-2">
 
-                            <button id="back-to-live-temp" onclick="goToLive()" class="hidden bg-[#800000] hover:bg-[#600000] text-white px-3 py-1.5 rounded-lg font-black transition-all uppercase text-[10px] flex items-center gap-1">
-
-                                <i data-lucide="radio" class="w-3 h-3"></i> Back to Live
-
-                            </button>
-
                             <div class="flex items-center gap-2">
 
-                                <span id="date-label-temp" class="text-[10px] font-black text-gray-500 uppercase">Live</span>
+                                <span id="date-label-temp" class="text-[10px] font-black text-gray-500 uppercase">Today</span>
 
                                 <input type="date" id="date-picker-temp" class="text-[10px] font-black text-gray-600 bg-gray-100 border border-gray-200 rounded-lg px-2 py-1.5 cursor-pointer hover:bg-gray-200 transition-all" onchange="loadHistoricalData(this.value)">
 
@@ -711,7 +705,7 @@
 
                     <div class="h-72"><canvas id="tempChart"></canvas></div>
 
-                    <div id="timezone-label-temp" class="hidden text-[9px] text-gray-400 font-black uppercase tracking-wider mt-2 text-center">Times shown in Philippine Time (PHT, UTC+8)</div>
+                    <div id="timezone-label-temp" class="text-[9px] text-gray-400 font-black uppercase tracking-wider mt-2 text-center">Times shown in Philippine Time (PHT, UTC+8)</div>
 
                 </div>
 
@@ -723,15 +717,9 @@
 
                         <div class="flex items-center gap-2">
 
-                            <button id="back-to-live-hum" onclick="goToLive()" class="hidden bg-[#800000] hover:bg-[#600000] text-white px-3 py-1.5 rounded-lg font-black transition-all uppercase text-[10px] flex items-center gap-1">
-
-                                <i data-lucide="radio" class="w-3 h-3"></i> Back to Live
-
-                            </button>
-
                             <div class="flex items-center gap-2">
 
-                                <span id="date-label-hum" class="text-[10px] font-black text-gray-500 uppercase">Live</span>
+                                <span id="date-label-hum" class="text-[10px] font-black text-gray-500 uppercase">Today</span>
 
                                 <input type="date" id="date-picker-hum" class="text-[10px] font-black text-gray-600 bg-gray-100 border border-gray-200 rounded-lg px-2 py-1.5 cursor-pointer hover:bg-gray-200 transition-all" onchange="loadHistoricalData(this.value)">
 
@@ -743,7 +731,7 @@
 
                     <div class="h-72"><canvas id="humChart"></canvas></div>
 
-                    <div id="timezone-label-hum" class="hidden text-[9px] text-gray-400 font-black uppercase tracking-wider mt-2 text-center">Times shown in Philippine Time (PHT, UTC+8)</div>
+                    <div id="timezone-label-hum" class="text-[9px] text-gray-400 font-black uppercase tracking-wider mt-2 text-center">Times shown in Philippine Time (PHT, UTC+8)</div>
 
                 </div>
 
@@ -778,7 +766,7 @@
             <!-- Automation Performance Analysis -->
             <div class="card bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-12">
                 <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
-                    <h3 class="font-black text-gray-800 uppercase tracking-widest text-xs">Automation Performance Analysis</h3>
+                    <h3 class="font-black text-gray-800 uppercase tracking-widest text-xs">S.T.A.T.S. Performance Analysis</h3>
                     <div class="flex items-center gap-2">
                         <select id="automation-room-filter" class="text-[9px] bg-gray-100 text-gray-700 px-2 py-1 rounded-lg font-black uppercase border-none cursor-pointer">
                             <option value="all">All Rooms</option>
@@ -798,6 +786,42 @@
                 </div>
 
                 <div class="h-96"><canvas id="automationChart"></canvas></div>
+            </div>
+
+            <!-- Savings Summary Table -->
+            <div class="card bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-12">
+                <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+                    <h3 class="font-black text-gray-800 uppercase tracking-widest text-xs">Savings Summary</h3>
+                    <div class="flex items-center gap-2">
+                        <select id="savings-room-filter" class="text-[9px] bg-gray-100 text-gray-700 px-2 py-1 rounded-lg font-black uppercase border-none cursor-pointer">
+                            <option value="all">All Rooms</option>
+                        </select>
+                        <select id="savings-time-range" class="text-[9px] bg-gray-100 text-gray-700 px-2 py-1 rounded-lg font-black uppercase border-none cursor-pointer">
+                            <option value="day">Day</option>
+                            <option value="week">Week</option>
+                            <option value="month">Month</option>
+                            <option value="year">Year</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead>
+                            <tr class="border-b border-gray-200">
+                                <th class="text-[10px] font-black text-gray-500 uppercase tracking-wider py-3 px-4">Date</th>
+                                <th class="text-[10px] font-black text-gray-500 uppercase tracking-wider py-3 px-4">Room</th>
+                                <th class="text-[10px] font-black text-gray-500 uppercase tracking-wider py-3 px-4">Normal Cost (16°C)</th>
+                                <th class="text-[10px] font-black text-gray-500 uppercase tracking-wider py-3 px-4">Actual Cost</th>
+                                <th class="text-[10px] font-black text-gray-500 uppercase tracking-wider py-3 px-4">Savings</th>
+                            </tr>
+                        </thead>
+                        <tbody id="savings-table-body">
+                            <tr>
+                                <td colspan="5" class="text-center text-[10px] text-gray-400 py-8">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
 
@@ -899,10 +923,9 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
     
 
     // Historical view state
-
     let isHistoricalView = false;
-
     let liveListener = null;
+    let initialDataLoaded = false;
 
 
 
@@ -1088,8 +1111,11 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                                 targetTemp = (t1 + t2) / 2;
                             }
 
+                            // Use room-specific configuration for cost calculation
+                            const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
+                            
                             const hourlyCost = AirconCostCalculator.computeAirconCost(
-                                { aircon_type: 'non_inverter', duty_cycle: 0.65, rated_watts: 4020 },
+                                roomConfig,
                                 1,
                                 14.7833,
                                 targetTemp
@@ -1101,7 +1127,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                             // Savings data (fixed 16°C vs actual)
                             const fixed16Cost = AirconCostCalculator.computeAirconCost(
-                                { aircon_type: 'non_inverter', duty_cycle: 0.65, rated_watts: 4020 },
+                                roomConfig,
                                 1,
                                 14.7833,
                                 16
@@ -2676,7 +2702,125 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
     }
 
+    function populateSavingsRoomFilter() {
+        const select = document.getElementById('savings-room-filter');
+        select.innerHTML = '<option value="all">All Rooms</option>';
+        labKeys.forEach(room => {
+            const displayName = (labsData && labsData[room] && labsData[room].customRoomName) ? labsData[room].customRoomName : room.replace('_', ' ');
+            select.innerHTML += `<option value="${room}">${displayName}</option>`;
+        });
+    }
 
+    function loadSavingsData() {
+        const roomFilter = document.getElementById('savings-room-filter').value;
+        const timeRange = document.getElementById('savings-time-range').value;
+        const tableBody = document.getElementById('savings-table-body');
+        
+        tableBody.innerHTML = '<tr><td colspan="5" class="text-center text-[10px] text-gray-400 py-8">Loading...</td></tr>';
+
+        // Calculate date range based on time range
+        const now = new Date();
+        const dates = [];
+        
+        if (timeRange === 'day') {
+            dates.push(now.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' }));
+        } else if (timeRange === 'week') {
+            for (let i = 6; i >= 0; i--) {
+                const d = new Date();
+                d.setDate(d.getDate() - i);
+                dates.push(d.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' }));
+            }
+        } else if (timeRange === 'month') {
+            for (let i = 29; i >= 0; i--) {
+                const d = new Date();
+                d.setDate(d.getDate() - i);
+                dates.push(d.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' }));
+            }
+        } else if (timeRange === 'year') {
+            for (let i = 364; i >= 0; i--) {
+                const d = new Date();
+                d.setDate(d.getDate() - i);
+                dates.push(d.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' }));
+            }
+        }
+
+        // Fetch data for each date
+        const promises = dates.map(dateStr => {
+            const roomsToFetch = roomFilter === 'all' ? labKeys : [roomFilter];
+            const roomPromises = roomsToFetch.map(room => {
+                const path = `history/${room}/${dateStr}`;
+                return db.ref(path).once('value').then(snapshot => {
+                    const data = snapshot.val();
+                    return { room, dateStr, data };
+                });
+            });
+            return Promise.all(roomPromises);
+        });
+
+        Promise.all(promises).then(allResults => {
+            const tableRows = [];
+            
+            allResults.forEach(dateResults => {
+                dateResults.forEach(({ room, dateStr, data }) => {
+                    if (!data) return;
+
+                    const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
+                    let totalActualCost = 0;
+                    let totalNormalCost = 0;
+                    let totalHours = 0;
+
+                    Object.keys(data).sort().forEach(hour => {
+                        const hourData = data[hour];
+                        if (!hourData) return;
+
+                        let targetTemp = 24;
+                        if (hourData.targetTemp !== undefined && hourData.targetTemp !== null) {
+                            targetTemp = parseFloat(hourData.targetTemp);
+                        } else if (hourData.targetTemp1 !== undefined && hourData.targetTemp1 !== null) {
+                            const t1 = parseFloat(hourData.targetTemp1);
+                            const t2 = hourData.targetTemp2 !== undefined && hourData.targetTemp2 !== null ? parseFloat(hourData.targetTemp2) : t1;
+                            targetTemp = (t1 + t2) / 2;
+                        }
+
+                        // Calculate actual cost for this hour
+                        const hourlyActualCost = AirconCostCalculator.computeAirconCost(roomConfig, 1, ratePerKwh, targetTemp);
+                        totalActualCost += hourlyActualCost;
+
+                        // Calculate normal cost at 16°C for this hour
+                        const hourlyNormalCost = AirconCostCalculator.computeAirconCost(roomConfig, 1, ratePerKwh, 16);
+                        totalNormalCost += hourlyNormalCost;
+
+                        totalHours += 1;
+                    });
+
+                    if (totalHours > 0) {
+                        const savings = totalNormalCost - totalActualCost;
+                        const displayName = (labsData && labsData[room] && labsData[room].customRoomName) ? labsData[room].customRoomName : room.replace('_', ' ');
+                        const formattedDate = new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                        
+                        tableRows.push(`
+                            <tr class="border-b border-gray-100 hover:bg-gray-50">
+                                <td class="text-[10px] text-gray-700 py-3 px-4">${formattedDate}</td>
+                                <td class="text-[10px] text-gray-700 py-3 px-4">${displayName}</td>
+                                <td class="text-[10px] text-gray-700 py-3 px-4 font-bold">₱${totalNormalCost.toFixed(2)}</td>
+                                <td class="text-[10px] text-gray-700 py-3 px-4 font-bold">₱${totalActualCost.toFixed(2)}</td>
+                                <td class="text-[10px] py-3 px-4 font-bold ${savings >= 0 ? 'text-green-600' : 'text-red-600'}">₱${savings.toFixed(2)}</td>
+                            </tr>
+                        `);
+                    }
+                });
+            });
+
+            if (tableRows.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="5" class="text-center text-[10px] text-gray-400 py-8">No data available for selected period</td></tr>';
+            } else {
+                tableBody.innerHTML = tableRows.join('');
+            }
+        }).catch(error => {
+            console.error('[Savings Data] Error loading data:', error);
+            tableBody.innerHTML = '<tr><td colspan="5" class="text-center text-[10px] text-red-400 py-8">Error loading data</td></tr>';
+        });
+    }
 
     initCharts();
 
@@ -2708,25 +2852,10 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
     document.getElementById('export-date-from').addEventListener('change', loadAutomationData);
     document.getElementById('export-date-to').addEventListener('change', loadAutomationData);
     document.getElementById('automation-room-filter').addEventListener('change', loadAutomationData);
-    
-    // Populate room filter dropdown
-    function populateAutomationRoomFilter() {
-        const select = document.getElementById('automation-room-filter');
-        const roomKeys = Object.keys(labsData || {}).filter(key => key.startsWith("Room_")).sort();
-        
-        // Clear existing options except "All Rooms"
-        select.innerHTML = '<option value="all">All Rooms</option>';
-        
-        roomKeys.forEach(room => {
-            const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
-            const option = document.createElement('option');
-            option.value = room;
-            option.textContent = displayName;
-            select.appendChild(option);
-        });
-    }
 
-    
+    // Savings table event listeners
+    document.getElementById('savings-room-filter').addEventListener('change', loadSavingsData);
+    document.getElementById('savings-time-range').addEventListener('change', loadSavingsData);
 
     // Historical Data Loading Functions
 
@@ -2734,96 +2863,43 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
         if (!selectedDate) {
 
-            goToLive();
-
-            return;
-
+            // Default to today if no date selected
+            const today = new Date();
+            const todayStr = today.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+            selectedDate = todayStr;
         }
 
-        
-
-        console.log('[loadHistoricalData] Selected date from picker:', selectedDate);
-
-        console.log('[loadHistoricalData] Date type:', typeof selectedDate);
-
-        
+        console.log('[loadHistoricalData] Selected date:', selectedDate);
 
         // Sync both date pickers
-
         document.getElementById('date-picker-temp').value = selectedDate;
-
         document.getElementById('date-picker-hum').value = selectedDate;
 
-        
-
         // Update labels
-
-        const formattedDate = new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-
+        const today = new Date();
+        const todayStr = today.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+        const formattedDate = selectedDate === todayStr ? 'Today' : new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         document.getElementById('date-label-temp').innerText = formattedDate;
-
         document.getElementById('date-label-hum').innerText = formattedDate;
 
-        
-
-        // Show back to live buttons and timezone labels
-
-        document.getElementById('back-to-live-temp').classList.remove('hidden');
-
-        document.getElementById('back-to-live-hum').classList.remove('hidden');
-
-        document.getElementById('timezone-label-temp').classList.remove('hidden');
-
-        document.getElementById('timezone-label-hum').classList.remove('hidden');
-
-        
-
         // Pause live listener
-
         if (liveListener) {
-
             db.ref().off('value', liveListener);
-
             liveListener = null;
-
         }
-
-        
 
         isHistoricalView = true;
 
-
-
-        // Run diagnostic for the specific date mentioned in the bug report
-
-        if (selectedDate === '2026-08-07') {
-
-            diagnoseHistoryGaps(selectedDate);
-
-        }
-
-        
-
         // Fetch historical data from Firebase for each room that exists
-
         // Data structure: /history/Room_402/YYYY-MM-DD/HH:00
-
         const historicalPromises = labKeys.map(room => {
-
             const path = `history/${room}/${selectedDate}`;
-
             console.log(`[loadHistoricalData] Querying path: ${path}`);
-
             return db.ref(path).once('value').then(snapshot => {
-
                 const data = snapshot.val();
-
                 console.log(`[loadHistoricalData] Data for ${path}:`, data);
-
                 return { room, data };
-
             });
-
         });
 
         
@@ -2858,6 +2934,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             if (Object.keys(combinedData).length === 0) {
 
+                console.log('[loadHistoricalData] No combined data found, showing no data message');
                 showNoDataMessage();
 
                 return;
@@ -2881,26 +2958,16 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
     
 
     function renderHistoricalCharts(historicalData, dateKey) {
+        console.log('[renderHistoricalCharts] Rendering charts for date:', dateKey);
+        console.log('[renderHistoricalCharts] Historical data keys:', Object.keys(historicalData));
+        console.log('[renderHistoricalCharts] labKeys:', labKeys);
 
-        // Extract all hours for the selected date
-
-        const hours = Object.keys(historicalData).sort();
-
-        
-
-        if (hours.length === 0) {
-
-            showNoDataMessage();
-
-            return;
-
+        // Build consistent 24-hour timeline
+        const allHours = [];
+        for (let i = 0; i < 24; i++) {
+            allHours.push(`${String(i).padStart(2, '0')}:00`);
         }
-
-        
-
-        // Build timeline labels (hours) - convert to 12-hour format with AM/PM
-
-        const timeline = hours.map(h => formatHourKeyTo12Hour(h));
+        const timeline = allHours.map(h => formatHourKeyTo12Hour(h));
 
         
 
@@ -2920,22 +2987,16 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             
 
-            const tempData = hours.map(hour => {
-
+            const tempData = allHours.map(hour => {
                 const roomData = historicalData[hour]?.[room];
-
                 return roomData ? parseFloat(roomData.temperature) || 0 : null;
-
             });
 
             
 
-            const humData = hours.map(hour => {
-
+            const humData = allHours.map(hour => {
                 const roomData = historicalData[hour]?.[room];
-
                 return roomData ? parseFloat(roomData.humidity) || 0 : null;
-
             });
 
             
@@ -3128,7 +3189,33 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                 } else {
 
-                    console.log(`[Diagnosis] ${room} has complete data for ${dateStr}`);
+                    console.log(`[Analytics Firebase Listener] labsData keys:`, Object.keys(labsData));
+
+                    updateGlobalUI();
+
+                    renderLabList();
+
+                    // Load today's data by default on first load
+
+                    if (!initialDataLoaded && labKeys.length > 0) {
+
+                        initialDataLoaded = true;
+
+                        const today = new Date();
+
+                        const todayStr = today.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+
+                        document.getElementById('date-picker-temp').value = todayStr;
+
+                        document.getElementById('date-picker-hum').value = todayStr;
+
+                        loadHistoricalData(todayStr);
+
+                    }
+
+                    document.getElementById('date-label-temp').innerText = 'Live';
+
+                    document.getElementById('date-label-hum').innerText = 'Live';
 
                 }
 
@@ -3309,36 +3396,11 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             const allRoomKeys = Object.keys(data).filter(key => key.startsWith("Room_")).sort();
 
+            // Less strict filtering - include all Room_ keys that exist
             labKeys = allRoomKeys.filter(room => {
-
                 const roomData = data[room];
-
-                // Check if room has data in dailyAnalytics
-
-                if (dailyAnalytics.data[room] && Object.keys(dailyAnalytics.data[room]).length > 0) {
-
-                    return true;
-
-                }
-
-                // Check if room has live data (temperature or humidity)
-
-                if (roomData && (roomData.temperature !== undefined || roomData.humidity !== undefined)) {
-
-                    return true;
-
-                }
-
-                // Check if room has usage tracking data
-
-                if (roomUsage[room] && (roomUsage[room].totalMs > 0 || roomUsage[room].isActive)) {
-
-                    return true;
-
-                }
-
-                return false;
-
+                // Include room if it has any data at all
+                return roomData !== null && roomData !== undefined;
             });
 
             
@@ -3353,12 +3415,40 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             console.log('[Analytics Firebase Listener] Number of rooms found:', labKeys.length);
 
-            
+            // Load today's data by default on first load
+            if (!initialDataLoaded && labKeys.length > 0) {
+                initialDataLoaded = true;
+                const today = new Date();
+                const todayStr = today.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+                document.getElementById('date-picker-temp').value = todayStr;
+                document.getElementById('date-picker-hum').value = todayStr;
+                
+                // Populate savings room filter after labKeys is populated
+                populateSavingsRoomFilter();
+                
+                // Load historical data after a short delay to ensure charts are initialized
+                setTimeout(() => {
+                    loadHistoricalData(todayStr);
+                }, 500);
+                
+                // Load upper analytics data
+                setTimeout(() => {
+                    loadAnalyticsData();
+                }, 600);
+                
+                // Load automation chart data
+                setTimeout(() => {
+                    loadAutomationData();
+                }, 700);
+                
+                // Load savings data
+                setTimeout(() => {
+                    loadSavingsData();
+                }, 800);
+            }
 
             if (labKeys.length === 0) {
-
                 console.warn('[Analytics Firebase Listener] No Room_ keys found in data!');
-
             }
 
             let sumT = 0, currentAl = 0;
@@ -3841,23 +3931,19 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
     // Set period tab
 
     function setPeriodTab(period) {
-
-        if (periodTabCooldown) return;
-
+        console.log('[setPeriodTab] Called with period:', period);
+        if (periodTabCooldown) {
+            console.log('[setPeriodTab] Cooldown active, ignoring');
+            return;
+        }
         periodTabCooldown = true;
-
         currentPeriod = period;
-
+        console.log('[setPeriodTab] currentPeriod set to:', currentPeriod);
         document.querySelectorAll('[id^="period-"]').forEach(tab => tab.classList.remove('active'));
-
         document.getElementById(`period-${period}`).classList.add('active');
-
         updateDateDisplay();
-
         loadAnalyticsData();
-
         setTimeout(() => periodTabCooldown = false, COOLDOWN_MS);
-
     }
 
 
@@ -3865,25 +3951,18 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
     // Set metric tab
 
     function setMetricTab(metric) {
-
-        console.log('[Analytics] setMetricTab called with metric:', metric);
-
-        if (metricTabCooldown) return;
-
+        console.log('[setMetricTab] Called with metric:', metric);
+        if (metricTabCooldown) {
+            console.log('[setMetricTab] Cooldown active, ignoring');
+            return;
+        }
         metricTabCooldown = true;
-
         currentMetric = metric;
-
-        console.log('[Analytics] currentMetric set to:', currentMetric);
-
+        console.log('[setMetricTab] currentMetric set to:', currentMetric);
         document.querySelectorAll('[id^="metric-"]').forEach(tab => tab.classList.remove('active'));
-
         document.getElementById(`metric-${metric}`).classList.add('active');
-
         loadAnalyticsData();
-
         setTimeout(() => metricTabCooldown = false, COOLDOWN_MS);
-
     }
 
 
@@ -3891,10 +3970,13 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
     // Navigate date
 
     function navigateDate(direction) {
-
-        if (dateNavCooldown) return;
-
+        console.log('[navigateDate] Called with direction:', direction);
+        if (dateNavCooldown) {
+            console.log('[navigateDate] Cooldown active, ignoring');
+            return;
+        }
         dateNavCooldown = true;
+        console.log('[navigateDate] currentPeriod:', currentPeriod);
 
         if (currentPeriod === 'day') {
 
@@ -4404,8 +4486,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
         if (!labKeys || labKeys.length === 0) {
 
-            console.log('[Analytics] No rooms loaded yet');
-
+            console.log('[Analytics] No rooms loaded yet, retrying in 500ms...');
+            setTimeout(() => loadAnalyticsData(), 500);
             return;
 
         }

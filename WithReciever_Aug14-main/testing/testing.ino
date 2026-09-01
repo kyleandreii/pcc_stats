@@ -78,6 +78,13 @@ unsigned long lastAutomationEventTime = 0;  // Timestamp of last automation acti
 float lastAutomationEventPastTemp = 0.0;  // Temperature before automation
 float lastAutomationEventUpdatedTemp = 0.0;  // Temperature after automation
 
+// Online duration tracking variables
+unsigned long onlineDurationSeconds = 0;  // Cumulative online duration in seconds
+unsigned long onlineDurationSecondsUnit1 = 0;  // Cumulative online duration for unit 1
+unsigned long onlineDurationSecondsUnit2 = 0;  // Cumulative online duration for unit 2
+bool wasACOn = false;  // Previous AC state for tracking
+unsigned long lastOnlineCheckMillis = 0;  // Last time we checked online duration
+
 float MAX_HUMIDITY = 60.0;  // Default, will be updated from Firebase
 float MIN_HUMIDITY = 45.0;  // Default, will be updated from Firebase
 float humidityOccupiedThreshold = 60.0;  // From Firebase: automation/humidityOccupiedThreshold
@@ -240,6 +247,33 @@ void setup() {
   Firebase.RTDB.setJSON(&fbdo, "/" + String(ROOM_ID) + "/last_seen", &json);
   Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/online", true);
   Firebase.RTDB.setString(&fbdo, "/" + String(ROOM_ID) + "/device_room_id", ROOM_ID);
+
+  // Load online duration from Firebase
+  Firebase.RTDB.getInt(&fbdo, "/" + String(ROOM_ID) + "/online_duration");
+  if (fbdo.dataType() == "int") {
+    onlineDurationSeconds = fbdo.intData();
+    Serial.println("[Setup] Loaded online_duration from Firebase: " + String(onlineDurationSeconds) + " seconds");
+  } else {
+    Serial.println("[Setup] No online_duration found in Firebase, starting at 0");
+  }
+
+  #if DUAL_UNIT_MODE
+  Firebase.RTDB.getInt(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/online_duration");
+  if (fbdo.dataType() == "int") {
+    onlineDurationSecondsUnit1 = fbdo.intData();
+    Serial.println("[Setup] Loaded online_duration for unit 1 from Firebase: " + String(onlineDurationSecondsUnit1) + " seconds");
+  } else {
+    Serial.println("[Setup] No online_duration found for unit 1 in Firebase, starting at 0");
+  }
+
+  Firebase.RTDB.getInt(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/online_duration");
+  if (fbdo.dataType() == "int") {
+    onlineDurationSecondsUnit2 = fbdo.intData();
+    Serial.println("[Setup] Loaded online_duration for unit 2 from Firebase: " + String(onlineDurationSecondsUnit2) + " seconds");
+  } else {
+    Serial.println("[Setup] No online_duration found for unit 2 in Firebase, starting at 0");
+  }
+  #endif
 
   #if DUAL_UNIT_MODE
   // Only force AC to false on startup if manual override is not active
@@ -479,6 +513,47 @@ void loop() {
 
   if (!isnan(t) && !isnan(h)) {
     runAutomation(t, h);
+  }
+
+  // Track online duration - check every second
+  if (millis() - lastOnlineCheckMillis >= 1000) {
+    lastOnlineCheckMillis = millis();
+    
+    #if DUAL_UNIT_MODE
+    bool isUnit1On = false;
+    bool isUnit2On = false;
+    Firebase.RTDB.getBool(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/ac");
+    if (fbdo.dataType() == "boolean") {
+      isUnit1On = fbdo.boolData();
+    }
+    Firebase.RTDB.getBool(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/ac");
+    if (fbdo.dataType() == "boolean") {
+      isUnit2On = fbdo.boolData();
+    }
+    
+    if (isUnit1On) {
+      onlineDurationSecondsUnit1++;
+      Firebase.RTDB.setInt(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/online_duration", onlineDurationSecondsUnit1);
+    }
+    if (isUnit2On) {
+      onlineDurationSecondsUnit2++;
+      Firebase.RTDB.setInt(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/online_duration", onlineDurationSecondsUnit2);
+    }
+    // Total online duration is sum of both units
+    onlineDurationSeconds = onlineDurationSecondsUnit1 + onlineDurationSecondsUnit2;
+    Firebase.RTDB.setInt(&fbdo, "/" + String(ROOM_ID) + "/online_duration", onlineDurationSeconds);
+    #else
+    bool isACOn = false;
+    Firebase.RTDB.getBool(&fbdo, "/" + String(ROOM_ID) + "/ac");
+    if (fbdo.dataType() == "boolean") {
+      isACOn = fbdo.boolData();
+    }
+    
+    if (isACOn) {
+      onlineDurationSeconds++;
+      Firebase.RTDB.setInt(&fbdo, "/" + String(ROOM_ID) + "/online_duration", onlineDurationSeconds);
+    }
+    #endif
   }
 
   if (millis() - sendDataPrevMillis > 10000) {
