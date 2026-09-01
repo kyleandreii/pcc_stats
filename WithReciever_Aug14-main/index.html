@@ -3,8 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login | PCC S.T.A.T.S.</title>
-   
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
  
@@ -103,7 +101,7 @@
                         <input type="checkbox" id="stay-logged-in" class="h-4 w-4 text-maroon focus:ring-maroon border-gray-300 rounded transition-all">
                         <span class="ml-2 text-xs font-semibold text-gray-500 group-hover:text-gray-700">Stay logged in</span>
                     </label>
-                    <a href="#" id="forgot-password" class="text-xs font-bold text-maroon hover:underline decoration-2 underline-offset-4">Forgot Key?</a>
+                    <a href="#" id="forgot-password" class="text-xs font-bold text-maroon hover:underline decoration-2 underline-offset-4">Forgot Password?</a>
                 </div>
  
                 <div class="pt-2 space-y-3">
@@ -112,11 +110,6 @@
                         <span id="btn-text" class="flex items-center gap-2">
                             Sign In To System <i data-lucide="chevron-right" class="w-4 h-4"></i>
                         </span>
-                    </button>
- 
-                    <button type="button" id="register-btn"
-                        class="w-full flex justify-center py-3 px-4 border-2 border-gray-200 text-[10px] font-black rounded-2xl text-gray-500 bg-transparent hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700 active:scale-[0.98] focus:outline-none transition-all uppercase tracking-widest">
-                        <span id="reg-btn-text">Register New Account</span>
                     </button>
                 </div>
             </form>
@@ -132,7 +125,23 @@
             </div>
         </div>
     </div>
- 
+
+    <!-- Forgot Password Modal -->
+    <div id="forgot-password-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-8 transform transition-all">
+            <div class="text-center">
+                <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i data-lucide="mail" class="w-8 h-8 text-green-600"></i>
+                </div>
+                <h3 class="text-xl font-black text-gray-800 mb-2">Password Reset Sent</h3>
+                <p class="text-sm text-gray-600 mb-6">A password reset link has been sent to your email. Please check your inbox and follow the instructions.</p>
+                <button onclick="closeForgotPasswordModal()" class="w-full py-3 px-4 bg-maroon text-white font-black rounded-2xl hover:opacity-95 active:scale-[0.98] transition-all uppercase tracking-widest text-sm">
+                    Got It
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // --- 1. FIREBASE CONFIGURATION ---
         const firebaseConfig = {
@@ -148,9 +157,7 @@
  
         const loginForm = document.getElementById('login-form');
         const submitBtn = document.getElementById('submit-btn');
-        const registerBtn = document.getElementById('register-btn');
         const btnText = document.getElementById('btn-text');
-        const regBtnText = document.getElementById('reg-btn-text');
         const errorMsg = document.getElementById('error-msg');
         const successMsg = document.getElementById('success-msg');
         const forgotPasswordLink = document.getElementById('forgot-password');
@@ -206,70 +213,27 @@
                 window.location.href = "1_dashboard_trial.html";
             }
         });
- 
-        // --- 3. CREATE ACCOUNT (REGISTER) LOGIC ---
-        registerBtn.addEventListener('click', () => {
-            resetMessages();
-            const email = document.getElementById('email').value.trim();
-            const password = document.getElementById('password').value;
- 
-            if (!email || !password) {
-                errorMsg.innerText = "Please provide both Email and Password to register.";
-                errorMsg.classList.remove('hidden');
-                return;
-            }
- 
-            if (!email.endsWith('@pccnet.edu.ph')) {
-                errorMsg.innerText = "Registration Denied: Must use @pccnet.edu.ph domain.";
-                errorMsg.classList.remove('hidden');
-                return;
-            }
- 
-            if (password.length < 6) {
-                errorMsg.innerText = "Security Key must be at least 6 characters.";
-                errorMsg.classList.remove('hidden');
-                return;
-            }
- 
-            regBtnText.innerHTML = '<i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> Creating...';
-            registerBtn.disabled = true;
-            lucide.createIcons();
- 
-            auth.createUserWithEmailAndPassword(email, password)
-                .then(() => {
-                    successMsg.innerText = "Account Created Successfully! You may now sign in.";
-                    successMsg.classList.remove('hidden');
-                    regBtnText.innerText = "Register New Account";
-                    registerBtn.disabled = false;
-                })
-                .catch((error) => {
-                    console.error(error.code);
-                    if (error.code === 'auth/email-already-in-use') {
-                        errorMsg.innerText = "This email is already registered.";
-                    } else {
-                        errorMsg.innerText = "Registration failed. Please try again.";
-                    }
-                    errorMsg.classList.remove('hidden');
-                    regBtnText.innerText = "Register New Account";
-                    registerBtn.disabled = false;
-                });
-        });
- 
-        // --- 4. FORGOT PASSWORD LOGIC ---
+
+        // --- 3. FORGOT PASSWORD LOGIC ---
+        function closeForgotPasswordModal() {
+            document.getElementById('forgot-password-modal').classList.add('hidden');
+        }
+
         forgotPasswordLink.addEventListener('click', (e) => {
             e.preventDefault();
             resetMessages();
             const email = document.getElementById('email').value.trim();
- 
+
             if (!email || !email.endsWith('@pccnet.edu.ph')) {
                 errorMsg.innerText = "Please enter a valid institutional email first.";
                 errorMsg.classList.remove('hidden');
                 return;
             }
- 
+
             auth.sendPasswordResetEmail(email)
                 .then(() => {
-                    alert("A password reset link has been sent to " + email);
+                    document.getElementById('forgot-password-modal').classList.remove('hidden');
+                    lucide.createIcons();
                 })
                 .catch((error) => {
                     errorMsg.innerText = "Error: Could not send reset link.";

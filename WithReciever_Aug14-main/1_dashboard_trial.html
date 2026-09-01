@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="style.css">
     
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -252,10 +253,41 @@
             
             <label class="add-label">Room Number (e.g. 406)</label>
             <input type="text" id="newRoomLabel" placeholder="406" class="add-input">
+            
+            <label class="add-label">Unit Type</label>
+            <div class="flex gap-3 mb-4">
+                <button onclick="selectUnitType('single')" id="singleUnitBtn" class="flex-1 py-3 px-4 border-2 border-gray-200 rounded-xl font-black text-sm transition-all hover:border-[#800000] hover:text-[#800000]">
+                    Single Unit
+                </button>
+                <button onclick="selectUnitType('dual')" id="dualUnitBtn" class="flex-1 py-3 px-4 border-2 border-gray-200 rounded-xl font-black text-sm transition-all hover:border-[#800000] hover:text-[#800000]">
+                    Dual Unit
+                </button>
+            </div>
+            <input type="hidden" id="unitType" value="single">
 
             <button onclick="saveNewRoom()" class="w-full bg-[#800000] text-white font-black py-4 rounded-2xl shadow-lg hover:bg-[#600000] transition-all">
                 CREATE ROOM
             </button>
+        </div>
+    </div>
+
+    <div id="logoutModal" class="modal-overlay hidden" onclick="if(event.target === this) closeLogoutModal()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="text-center">
+                <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i data-lucide="log-out" class="w-8 h-8 text-red-600"></i>
+                </div>
+                <h3 class="text-xl font-black text-gray-800 mb-2">Confirm Logout</h3>
+                <p class="text-sm text-gray-600 mb-6">Are you sure you want to logout? You will need to sign in again to access the system.</p>
+                <div class="flex gap-3">
+                    <button onclick="closeLogoutModal()" class="flex-1 py-3 px-4 border-2 border-gray-200 text-gray-600 font-black rounded-2xl hover:bg-gray-50 transition-all uppercase tracking-widest text-sm">
+                        Cancel
+                    </button>
+                    <button onclick="logout()" class="flex-1 py-3 px-4 bg-[#800000] text-white font-black rounded-2xl hover:bg-[#600000] transition-all uppercase tracking-widest text-sm">
+                        Logout
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -696,6 +728,7 @@
         function saveNewRoom() {
             const id = document.getElementById('newRoomId').value.trim();
             const label = document.getElementById('newRoomLabel').value.trim();
+            const unitType = document.getElementById('unitType').value;
             
             if(!id || !label) {
                 Swal.fire({
@@ -739,6 +772,22 @@
                     specs: { building: "St. Joseph", floor: "4th Floor", acModel: "Standard", acType: "Split Type", cooling: "12,000 BTU", power: "1.2 kW", rating: "5 Star" }
                 };
                 
+                // Add units configuration based on unit type
+                if (unitType === 'dual') {
+                    newRoomData.units = {
+                        unit_1: {
+                            ac: false,
+                            ac_command: "POWER_OFF",
+                            online_duration: 0
+                        },
+                        unit_2: {
+                            ac: false,
+                            ac_command: "POWER_OFF",
+                            online_duration: 0
+                        }
+                    };
+                }
+                
                 db.ref(id).set(newRoomData).then(() => {
                     // Manually add the new room to local arrays for immediate display
                     if (!labKeys.includes(id)) {
@@ -751,13 +800,15 @@
                     
                     Swal.fire({
                         title: 'Room Created!',
-                        text: `Room "${id}" has been successfully added.`,
+                        text: `${newRoomData.roomName} (${unitType === 'dual' ? 'Dual Unit' : 'Single Unit'}) has been added successfully.`,
                         icon: 'success',
                         confirmButtonColor: '#800000'
                     });
                     document.getElementById('addRoomModal').style.display = 'none';
                     document.getElementById('newRoomId').value = "";
                     document.getElementById('newRoomLabel').value = "";
+                    // Reset unit type selection
+                    selectUnitType('single');
                     renderDashboard();
                 }).catch((error) => {
                     Swal.fire({
@@ -1000,10 +1051,47 @@
 
         function closeModal(e) { if (e.target.id === 'infoModal') document.getElementById('infoModal').style.display = 'none'; }
         function closeAddModal(e) { if (e.target.id === 'addRoomModal') document.getElementById('addRoomModal').style.display = 'none'; }
-        function confirmLogout() { 
-            if(confirm("Are you sure you want to logout?")) logout();
+        
+        function confirmLogout() {
+            document.getElementById('logoutModal').style.display = 'flex';
+            lucide.createIcons();
         }
-        function logout() { window.location.href = "login.html"; }
+        
+        function closeLogoutModal() {
+            document.getElementById('logoutModal').style.display = 'none';
+        }
+        
+        function selectUnitType(type) {
+            document.getElementById('unitType').value = type;
+            const singleBtn = document.getElementById('singleUnitBtn');
+            const dualBtn = document.getElementById('dualUnitBtn');
+            
+            if (type === 'single') {
+                singleBtn.classList.add('border-[#800000]', 'text-[#800000]', 'bg-[#800000]/5');
+                singleBtn.classList.remove('border-gray-200');
+                dualBtn.classList.remove('border-[#800000]', 'text-[#800000]', 'bg-[#800000]/5');
+                dualBtn.classList.add('border-gray-200');
+            } else {
+                dualBtn.classList.add('border-[#800000]', 'text-[#800000]', 'bg-[#800000]/5');
+                dualBtn.classList.remove('border-gray-200');
+                singleBtn.classList.remove('border-[#800000]', 'text-[#800000]', 'bg-[#800000]/5');
+                singleBtn.classList.add('border-gray-200');
+            }
+        }
+        
+        function logout() { 
+            console.log('[Logout] Attempting to sign out...');
+            firebase.auth().signOut()
+                .then(() => {
+                    console.log('[Logout] Sign out successful, redirecting to index.html');
+                    window.location.href = "index.html";
+                })
+                .catch((error) => {
+                    console.error('[Logout] Sign out error:', error);
+                    // Fallback: redirect anyway even if signOut fails
+                    window.location.href = "index.html";
+                });
+        }
 
         function renderDashboard() {
             if (renderInProgress) {
