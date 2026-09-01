@@ -781,14 +781,40 @@
                     <select id="automation-room-filter" class="text-[10px] bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg font-black uppercase border-none cursor-pointer">
                         <option value="all">All Rooms</option>
                     </select>
-                    <select id="automation-type-filter" class="text-[10px] bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg font-black uppercase border-none cursor-pointer">
-                        <option value="all">All Types</option>
-                        <option value="power">Power</option>
-                        <option value="humidity">Humidity</option>
-                        <option value="temperature">Temperature</option>
-                    </select>
                 </div>
-                <div id="automation-stats" class="flex flex-wrap gap-4 mb-4 text-[10px] font-black uppercase tracking-wider"></div>
+
+                <!-- Summary Metrics -->
+                <div id="performance-summary" class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+                    <div class="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-2xl border border-blue-200">
+                        <p class="text-[9px] font-bold text-blue-600 uppercase tracking-wider mb-1">Avg Temperature</p>
+                        <p id="summary-avg-temp" class="text-2xl font-black text-blue-800">--°C</p>
+                    </div>
+                    <div class="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-2xl border border-green-200">
+                        <p class="text-[9px] font-bold text-green-600 uppercase tracking-wider mb-1">Avg Humidity</p>
+                        <p id="summary-avg-humidity" class="text-2xl font-black text-green-800">--%</p>
+                    </div>
+                    <div class="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-2xl border border-purple-200">
+                        <p class="text-[9px] font-bold text-purple-600 uppercase tracking-wider mb-1">Automation Events</p>
+                        <p id="summary-automation-events" class="text-2xl font-black text-purple-800">--</p>
+                    </div>
+                    <div class="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-2xl border border-orange-200">
+                        <p class="text-[9px] font-bold text-orange-600 uppercase tracking-wider mb-1">Total Cost</p>
+                        <p id="summary-total-cost" class="text-2xl font-black text-orange-800">--</p>
+                    </div>
+                    <div class="bg-gradient-to-br from-emerald-50 to-emerald-100 p-4 rounded-2xl border border-emerald-200">
+                        <p class="text-[9px] font-bold text-emerald-600 uppercase tracking-wider mb-1">Savings</p>
+                        <p id="summary-savings" class="text-2xl font-black text-emerald-800">--</p>
+                    </div>
+                </div>
+
+                <!-- Toggle Buttons -->
+                <div class="flex flex-wrap gap-2 mb-4">
+                    <button id="toggle-temperature" class="text-[9px] bg-red-100 text-red-700 px-3 py-1.5 rounded-lg font-black uppercase border-none cursor-pointer hover:bg-red-200 transition-colors active">Temperature</button>
+                    <button id="toggle-humidity" class="text-[9px] bg-green-100 text-green-700 px-3 py-1.5 rounded-lg font-black uppercase border-none cursor-pointer hover:bg-green-200 transition-colors active">Humidity</button>
+                    <button id="toggle-cost" class="text-[9px] bg-orange-100 text-orange-700 px-3 py-1.5 rounded-lg font-black uppercase border-none cursor-pointer hover:bg-orange-200 transition-colors active">Cost</button>
+                    <button id="toggle-savings" class="text-[9px] bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-lg font-black uppercase border-none cursor-pointer hover:bg-emerald-200 transition-colors active">Savings</button>
+                </div>
+
                 <div class="h-80"><canvas id="automationChart"></canvas></div>
                 <div class="flex items-center justify-between mt-4">
                     <div id="time-range-indicator" class="text-[9px] text-gray-400 font-black uppercase tracking-wider"></div>
@@ -960,16 +986,140 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
     }
 
+    // Toggle button handlers for chart datasets
+    document.getElementById('toggle-temperature').addEventListener('click', function() {
+        this.classList.toggle('active');
+        toggleDataset('temperature', this.classList.contains('active'));
+    });
+    document.getElementById('toggle-humidity').addEventListener('click', function() {
+        this.classList.toggle('active');
+        toggleDataset('humidity', this.classList.contains('active'));
+    });
+    document.getElementById('toggle-cost').addEventListener('click', function() {
+        this.classList.toggle('active');
+        toggleDataset('cost', this.classList.contains('active'));
+    });
+    document.getElementById('toggle-savings').addEventListener('click', function() {
+        this.classList.toggle('active');
+        toggleDataset('savings', this.classList.contains('active'));
+    });
+
+    function toggleDataset(type, isVisible) {
+        const chart = automationChart;
+        if (!chart) return;
+        
+        chart.data.datasets.forEach((dataset, index) => {
+            if (dataset.label.toLowerCase().includes(type)) {
+                if (isVisible) {
+                    chart.show(index);
+                } else {
+                    chart.hide(index);
+                }
+            }
+        });
+        chart.update();
+    }
+
+    // Calculate savings: Fixed 16°C cost vs Temperature-based cost
+    async function calculateSavings(room, dateArray) {
+        let totalHours = 0;
+        let totalFixedCost = 0;
+        let totalTempBasedCost = 0;
+        let totalTemp = 0;
+        let totalHumidity = 0;
+        let tempCount = 0;
+        let humidityCount = 0;
+        let automationEventCount = 0;
+
+        for (const dateStr of dateArray) {
+            const path = `/history/${room}/${dateStr}`;
+            try {
+                const snapshot = await db.ref(path).once('value');
+                const dayData = snapshot.val();
+                
+                if (dayData) {
+                    Object.keys(dayData).forEach(hour => {
+                        const hourData = dayData[hour];
+                        if (hourData) {
+                            // Count automation events
+                            if (hourData.automation_events) {
+                                automationEventCount += Object.keys(hourData.automation_events).length;
+                            } else if (hourData.automationEvent) {
+                                automationEventCount++;
+                            }
+
+                            // Get temperature and humidity
+                            if (hourData.temperature !== undefined && hourData.temperature !== null) {
+                                totalTemp += parseFloat(hourData.temperature);
+                                tempCount++;
+                            }
+                            if (hourData.humidity !== undefined && hourData.humidity !== null) {
+                                totalHumidity += parseFloat(hourData.humidity);
+                                humidityCount++;
+                            }
+
+                            // Get target temperature for cost calculation
+                            let targetTemp = 24; // default
+                            if (hourData.targetTemp !== undefined && hourData.targetTemp !== null) {
+                                targetTemp = parseFloat(hourData.targetTemp);
+                            } else if (hourData.targetTemp1 !== undefined && hourData.targetTemp1 !== null) {
+                                // Dual unit - average both
+                                const t1 = parseFloat(hourData.targetTemp1);
+                                const t2 = hourData.targetTemp2 !== undefined && hourData.targetTemp2 !== null ? parseFloat(hourData.targetTemp2) : t1;
+                                targetTemp = (t1 + t2) / 2;
+                            }
+
+                            // Calculate cost for 1 hour at this target temp
+                            const hours = 1; // 1 hour per entry
+                            totalHours += hours;
+
+                            // Fixed 16°C cost (using rated watts with duty cycle)
+                            const fixed16Cost = AirconCostCalculator.computeAirconCost(
+                                { aircon_type: 'non_inverter', duty_cycle: 0.65, rated_watts: 4020 },
+                                hours,
+                                14.7833,
+                                16 // fixed 16°C
+                            );
+                            totalFixedCost += fixed16Cost;
+
+                            // Temperature-based cost (using actual target temp)
+                            const tempBasedCost = AirconCostCalculator.computeAirconCost(
+                                { aircon_type: 'non_inverter', duty_cycle: 0.65, rated_watts: 4020 },
+                                hours,
+                                14.7833,
+                                targetTemp // actual target temp
+                            );
+                            totalTempBasedCost += tempBasedCost;
+                        }
+                    });
+                }
+            } catch (e) {
+                console.error(`[Savings] Error calculating savings for ${path}:`, e);
+            }
+        }
+
+        const savings = totalFixedCost - totalTempBasedCost;
+        const savingsPercentage = totalFixedCost > 0 ? (savings / totalFixedCost) * 100 : 0;
+
+        return {
+            avgTemp: tempCount > 0 ? totalTemp / tempCount : 0,
+            avgHumidity: humidityCount > 0 ? totalHumidity / humidityCount : 0,
+            automationEvents: automationEventCount,
+            totalCost: totalTempBasedCost,
+            savings: savings,
+            savingsPercentage: savingsPercentage,
+            totalHours: totalHours
+        };
+    }
+
     async function loadAutomationData() {
         console.log('[Automation] Loading automation data...');
         const fromDateStr = document.getElementById('export-date-from').value;
         const toDateStr = document.getElementById('export-date-to').value;
         const roomFilter = document.getElementById('automation-room-filter').value;
-        
+
         console.log(`[Automation] Date range: ${fromDateStr} to ${toDateStr}`);
         console.log(`[Automation] Room filter: ${roomFilter}`);
-        const typeFilter = document.getElementById('automation-type-filter').value;
-        console.log(`[Automation] Type filter: ${typeFilter}`);
 
         const fromDate = new Date(fromDateStr);
         const toDate = new Date(toDateStr);
@@ -1101,72 +1251,200 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
             }
         }
         
-        console.log('[Automation] Final automation events:', automationEvents);
-        
-        // Update chart with different datasets for each automation type
-        const datasets = [];
-        const typeColors = {
-            power: { bg: '#EF4444', border: '#DC2626' },      // Red
-            humidity: { bg: '#10B981', border: '#059669' },   // Green
-            temperature: { bg: '#F59E0B', border: '#D97706' }  // Orange
-        };
-        
-        for (const room of filteredRooms) {
-            const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
+        console.log(`[Automation] Final automation events:`, automationEvents);
 
-            // Add datasets for each automation type (filtered by typeFilter)
-            for (const type of ['power', 'humidity', 'temperature']) {
-                if (typeFilter === 'all' || typeFilter === type) {
-                    if (automationEvents[room][type].length > 0) {
-                        // Sort data by time for line graph
-                        const sortedData = [...automationEvents[room][type]].sort((a, b) => a.x - b.x);
-                        datasets.push({
-                            label: `${displayName} (${type.charAt(0).toUpperCase() + type.slice(1)})`,
-                            data: sortedData,
-                            backgroundColor: typeColors[type].bg,
-                            borderColor: typeColors[type].border,
-                            borderWidth: 2,
-                            pointRadius: 6,
-                            pointHoverRadius: 10,
-                            pointBackgroundColor: typeColors[type].border,
-                            pointBorderColor: '#fff',
-                            pointBorderWidth: 2,
-                            tension: 0.3,
-                            fill: false
+        // Calculate savings and load performance data for summary metrics
+        let overallStats = {
+            avgTemp: 0,
+            avgHumidity: 0,
+            automationEvents: 0,
+            totalCost: 0,
+            savings: 0,
+            savingsPercentage: 0,
+            totalHours: 0
+        };
+
+        for (const room of filteredRooms) {
+            const roomStats = await calculateSavings(room, dateArray);
+            overallStats.avgTemp += roomStats.avgTemp;
+            overallStats.avgHumidity += roomStats.avgHumidity;
+            overallStats.automationEvents += roomStats.automationEvents;
+            overallStats.totalCost += roomStats.totalCost;
+            overallStats.savings += roomStats.savings;
+            overallStats.totalHours += roomStats.totalHours;
+        }
+
+        // Calculate averages
+        overallStats.avgTemp /= filteredRooms.length;
+        overallStats.avgHumidity /= filteredRooms.length;
+        overallStats.savingsPercentage = (overallStats.totalCost + overallStats.savings) > 0 ? (overallStats.savings / (overallStats.totalCost + overallStats.savings)) * 100 : 0;
+
+        // Update summary metrics
+        document.getElementById('summary-avg-temp').textContent = `${overallStats.avgTemp.toFixed(1)}°C`;
+        document.getElementById('summary-avg-humidity').textContent = `${overallStats.avgHumidity.toFixed(1)}%`;
+        document.getElementById('summary-automation-events').textContent = overallStats.automationEvents;
+        document.getElementById('summary-total-cost').textContent = `₱${overallStats.totalCost.toFixed(2)}`;
+        document.getElementById('summary-savings').textContent = `₱${overallStats.savings.toFixed(2)} (${overallStats.savingsPercentage.toFixed(1)}%)`;
+
+        // Load historical data for chart (temperature, humidity, cost, savings)
+        const chartData = {
+            temperature: [],
+            humidity: [],
+            cost: [],
+            savings: []
+        };
+
+        for (const dateStr of dateArray) {
+            for (const room of filteredRooms) {
+                const path = `/history/${room}/${dateStr}`;
+                try {
+                    const snapshot = await db.ref(path).once('value');
+                    const dayData = snapshot.val();
+
+                    if (dayData) {
+                        Object.keys(dayData).forEach(hour => {
+                            const hourData = dayData[hour];
+                            if (hourData) {
+                                const timestamp = new Date(dateStr).getTime() + (parseInt(hour) * 3600000);
+
+                                // Temperature data
+                                if (hourData.temperature !== undefined && hourData.temperature !== null) {
+                                    chartData.temperature.push({
+                                        x: timestamp,
+                                        y: parseFloat(hourData.temperature)
+                                    });
+                                }
+
+                                // Humidity data
+                                if (hourData.humidity !== undefined && hourData.humidity !== null) {
+                                    chartData.humidity.push({
+                                        x: timestamp,
+                                        y: parseFloat(hourData.humidity)
+                                    });
+                                }
+
+                                // Cost data (calculate for this hour)
+                                let targetTemp = 24;
+                                if (hourData.targetTemp !== undefined && hourData.targetTemp !== null) {
+                                    targetTemp = parseFloat(hourData.targetTemp);
+                                } else if (hourData.targetTemp1 !== undefined && hourData.targetTemp1 !== null) {
+                                    const t1 = parseFloat(hourData.targetTemp1);
+                                    const t2 = hourData.targetTemp2 !== undefined && hourData.targetTemp2 !== null ? parseFloat(hourData.targetTemp2) : t1;
+                                    targetTemp = (t1 + t2) / 2;
+                                }
+
+                                const hourlyCost = AirconCostCalculator.computeAirconCost(
+                                    { aircon_type: 'non_inverter', duty_cycle: 0.65, rated_watts: 4020 },
+                                    1,
+                                    14.7833,
+                                    targetTemp
+                                );
+                                chartData.cost.push({
+                                    x: timestamp,
+                                    y: hourlyCost
+                                });
+
+                                // Savings data (fixed 16°C vs actual)
+                                const fixed16Cost = AirconCostCalculator.computeAirconCost(
+                                    { aircon_type: 'non_inverter', duty_cycle: 0.65, rated_watts: 4020 },
+                                    1,
+                                    14.7833,
+                                    16
+                                );
+                                const hourlySavings = fixed16Cost - hourlyCost;
+                                chartData.savings.push({
+                                    x: timestamp,
+                                    y: hourlySavings
+                                });
+                            }
                         });
                     }
+                } catch (e) {
+                    console.error(`[Automation] Error fetching chart data for ${path}:`, e);
                 }
             }
         }
-        
+
+        // Sort chart data by timestamp
+        Object.keys(chartData).forEach(key => {
+            chartData[key].sort((a, b) => a.x - b.x);
+        });
+
+        // Update chart with new datasets
+        const datasets = [];
+        const displayName = roomFilter === 'all' ? 'All Rooms' : (labsData[roomFilter]?.customRoomName || roomFilter.replace('_', ' '));
+
+        // Temperature dataset (left axis)
+        if (chartData.temperature.length > 0) {
+            datasets.push({
+                label: 'Temperature',
+                data: chartData.temperature,
+                backgroundColor: '#EF4444',
+                borderColor: '#DC2626',
+                borderWidth: 2,
+                pointRadius: 4,
+                pointHoverRadius: 8,
+                tension: 0.3,
+                fill: false,
+                yAxisID: 'y'
+            });
+        }
+
+        // Humidity dataset (left axis)
+        if (chartData.humidity.length > 0) {
+            datasets.push({
+                label: 'Humidity',
+                data: chartData.humidity,
+                backgroundColor: '#10B981',
+                borderColor: '#059669',
+                borderWidth: 2,
+                pointRadius: 4,
+                pointHoverRadius: 8,
+                tension: 0.3,
+                fill: false,
+                yAxisID: 'y'
+            });
+        }
+
+        // Cost dataset (right axis)
+        if (chartData.cost.length > 0) {
+            datasets.push({
+                label: 'Cost',
+                data: chartData.cost,
+                backgroundColor: '#F59E0B',
+                borderColor: '#D97706',
+                borderWidth: 2,
+                pointRadius: 4,
+                pointHoverRadius: 8,
+                tension: 0.3,
+                fill: false,
+                yAxisID: 'y1'
+            });
+        }
+
+        // Savings dataset (right axis)
+        if (chartData.savings.length > 0) {
+            datasets.push({
+                label: 'Savings',
+                data: chartData.savings,
+                backgroundColor: '#10B981',
+                borderColor: '#059669',
+                borderWidth: 2,
+                pointRadius: 4,
+                pointHoverRadius: 8,
+                tension: 0.3,
+                fill: false,
+                yAxisID: 'y1'
+            });
+        }
+
         console.log(`[Automation] Total datasets: ${datasets.length}`);
         automationChart.data.datasets = datasets;
-        automationChart.update('active'); // Add animation
+        automationChart.update('active');
 
         // Update time range indicator
         const timeRangeIndicator = document.getElementById('time-range-indicator');
         timeRangeIndicator.textContent = `Time Range: ${fromDateStr} to ${toDateStr}`;
-
-        // Update data point counts
-        const statsContainer = document.getElementById('automation-stats');
-        let totalEvents = 0;
-        let powerCount = 0;
-        let humidityCount = 0;
-        let temperatureCount = 0;
-
-        for (const room of filteredRooms) {
-            powerCount += automationEvents[room].power.length;
-            humidityCount += automationEvents[room].humidity.length;
-            temperatureCount += automationEvents[room].temperature.length;
-        }
-        totalEvents = powerCount + humidityCount + temperatureCount;
-
-        statsContainer.innerHTML = `
-            <span class="text-gray-600">Total Events: ${totalEvents}</span>
-            <span class="text-red-600">Power: ${powerCount}</span>
-            <span class="text-green-600">Humidity: ${humidityCount}</span>
-            <span class="text-orange-600">Temperature: ${temperatureCount}</span>
-        `;
 
         // Show timezone label if there's data
         const timezoneLabel = document.getElementById('timezone-label-automation');
@@ -1449,6 +1727,10 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
                 plugins: {
                     legend: {
                         display: true,
@@ -1459,19 +1741,16 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                             pointStyle: 'circle',
                             padding: 20,
                             color: '#374151',
-                            generateLabels: function(chart) {
-                                const data = chart.data;
-                                if (data.labels.length && data.datasets.length) {
-                                    return data.datasets.map((dataset, i) => ({
-                                        text: dataset.label,
-                                        fillStyle: dataset.borderColor,
-                                        strokeStyle: dataset.borderColor,
-                                        lineWidth: 2,
-                                        hidden: !chart.isDatasetVisible(i),
-                                        datasetIndex: i
-                                    }));
+                            onClick: (e, legendItem, legend) => {
+                                const index = legendItem.datasetIndex;
+                                const ci = legend.chart;
+                                if (ci.isDatasetVisible(index)) {
+                                    ci.hide(index);
+                                    legendItem.hidden = true;
+                                } else {
+                                    ci.show(index);
+                                    legendItem.hidden = false;
                                 }
-                                return [];
                             }
                         }
                     },
@@ -1483,34 +1762,11 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                         cornerRadius: 8,
                         displayColors: true,
                         callbacks: {
-                            title: function(context) {
-                                const dataPoint = context[0].raw;
-                                const roomName = context[0].dataset.label.split('(')[0].trim();
-                                const eventType = context[0].dataset.label.split('(')[1].replace(')', '').trim();
-                                return `${roomName} - ${eventType} Automation`;
-                            },
                             label: function(context) {
-                                const dataPoint = context.raw;
-                                const time = new Date(context.parsed.x).toLocaleString('en-PH', {
-                                    timeZone: 'Asia/Manila',
-                                    hour: 'numeric',
-                                    minute: '2-digit',
-                                    hour12: true,
-                                    month: 'short',
-                                    day: 'numeric'
-                                });
-                                const description = context.raw.description || '';
-                                let tooltipLines = [`Time: ${time}`, `Description: ${description}`];
-
-                                // Add temperature data if available
-                                if (dataPoint.pastTemp !== undefined && dataPoint.pastTemp !== null) {
-                                    tooltipLines.push(`Past Temp: ${dataPoint.pastTemp.toFixed(1)}°C`);
-                                }
-                                if (dataPoint.updatedTemp !== undefined && dataPoint.updatedTemp !== null) {
-                                    tooltipLines.push(`Updated Temp: ${dataPoint.updatedTemp.toFixed(1)}°C`);
-                                }
-
-                                return tooltipLines;
+                                const label = context.dataset.label || '';
+                                const value = context.parsed.y;
+                                const unit = context.dataset.yAxisID === 'y' ? '°C/%' : '₱';
+                                return `${label}: ${value.toFixed(2)} ${unit}`;
                             }
                         }
                     }
@@ -1524,7 +1780,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                             font: { weight: 'bold' },
                             callback: function(value) {
                                 const date = new Date(value);
-                                return date.toLocaleTimeString('en-PH', { 
+                                return date.toLocaleTimeString('en-PH', {
                                     timeZone: 'Asia/Manila',
                                     hour: 'numeric',
                                     minute: '2-digit',
@@ -1534,9 +1790,25 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                         }
                     },
                     y: {
-                        display: false,
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        title: { display: true, text: 'Temperature (°C) / Humidity (%)', font: { weight: 'bold', size: 11 } },
                         min: 0,
-                        max: 10
+                        max: 100,
+                        grid: {
+                            drawOnChartArea: true
+                        }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        title: { display: true, text: 'Cost / Savings (₱)', font: { weight: 'bold', size: 11 } },
+                        min: 0,
+                        grid: {
+                            drawOnChartArea: false
+                        }
                     }
                 }
             }

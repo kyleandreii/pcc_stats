@@ -70,7 +70,7 @@ float maxTemp = 30.0;
 unsigned long sendDataPrevMillis = 0;
 
 bool automationEnabled = false;  // Controls humidity-based automation
-bool temperatureAutomationEnabled = true;  // Temperature safety always enabled
+bool temperatureAutomationEnabled = false;  // Temperature safety disabled
 unsigned long automationStartTime = 0;  // Timestamp when automation was last enabled
 String lastAutomationEvent = "";  // Description of last automation action
 String lastAutomationEventType = "";  // Type: "humidity", "temperature", "power"
@@ -96,7 +96,7 @@ unsigned long lastSerialLogMillis = 0;
 // Schedule Efficiency Tracking Variables
 String scheduleOnTime = "";  // Scheduled ON time (HH:MM format)
 String scheduleOffTime = ""; // Scheduled OFF time (HH:MM format)
-bool scheduleEnabled = false; // Whether schedule is enabled
+bool scheduleEnabled = false; // Schedule automation disabled
 unsigned long scheduleCompliantMinutes = 0;  // Minutes AC ran within schedule
 unsigned long scheduleNonCompliantMinutes = 0; // Minutes AC ran outside schedule
 unsigned long totalScheduledMinutes = 0; // Total minutes in scheduled ON period
