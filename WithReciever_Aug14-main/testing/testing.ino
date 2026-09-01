@@ -276,14 +276,10 @@ void setup() {
   #endif
 
   #if DUAL_UNIT_MODE
-  // Only force AC to false on startup if manual override is not active
-  if (!manualOverrideActive) {
-    Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/ac", false);
-    Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/ac", false);
-    Serial.println("[Setup] Manual override not active, forcing AC to false on startup");
-  } else {
-    Serial.println("[Setup] Manual override active, preserving current AC state on startup");
-  }
+  // Force AC to false on startup
+  Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/ac", false);
+  Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/ac", false);
+  Serial.println("[Setup] Forcing AC to false on startup");
   Firebase.RTDB.setString(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/ac_command", "IDLE");
   Firebase.RTDB.setString(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/ac_command", "IDLE");
   #endif

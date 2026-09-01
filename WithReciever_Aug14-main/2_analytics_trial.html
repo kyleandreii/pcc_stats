@@ -2702,8 +2702,19 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
     }
 
+    function populateAutomationRoomFilter() {
+        const select = document.getElementById('automation-room-filter');
+        if (!select) return;
+        select.innerHTML = '<option value="all">All Rooms</option>';
+        labKeys.forEach(room => {
+            const displayName = (labsData && labsData[room] && labsData[room].customRoomName) ? labsData[room].customRoomName : room.replace('_', ' ');
+            select.innerHTML += `<option value="${room}">${displayName}</option>`;
+        });
+    }
+
     function populateSavingsRoomFilter() {
         const select = document.getElementById('savings-room-filter');
+        if (!select) return;
         select.innerHTML = '<option value="all">All Rooms</option>';
         labKeys.forEach(room => {
             const displayName = (labsData && labsData[room] && labsData[room].customRoomName) ? labsData[room].customRoomName : room.replace('_', ' ');
@@ -2757,59 +2768,83 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
             return Promise.all(roomPromises);
         });
 
-        Promise.all(promises).then(allResults => {
+        Promise.all(promises).then(async allResults => {
             const tableRows = [];
             
-            allResults.forEach(dateResults => {
-                dateResults.forEach(({ room, dateStr, data }) => {
-                    if (!data) return;
+            for (const dateResults of allResults) {
+                for (const { room, dateStr, data } of dateResults) {
+                    if (!data) continue;
 
                     const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
-                    let totalActualCost = 0;
-                    let totalNormalCost = 0;
-                    let totalHours = 0;
+                    
+                    // Use same usage hours calculation as upper analytics
+                    let actualUsageHours = getUsageHoursForDate(room, dateStr);
+                    
+                    // If no hours from dailyAnalytics, use roomUsage (online duration tracking) for today
+                    if (actualUsageHours <= 0) {
+                        const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+                        if (dateStr === todayStr && roomUsage && roomUsage[room] && roomUsage[room].totalMs) {
+                            actualUsageHours = roomUsage[room].totalMs / (1000 * 60 * 60);
+                            console.log(`[Savings Data] ${room} ${dateStr} using roomUsage (online duration):`, actualUsageHours);
+                        } else {
+                            // For past dates, count data points as hours
+                            actualUsageHours = Object.keys(data).length;
+                            console.log(`[Savings Data] ${room} ${dateStr} using data point count as hours:`, actualUsageHours);
+                        }
+                    }
+                    
+                    console.log(`[Savings Data] ${room} ${dateStr} final usage hours:`, actualUsageHours);
+                    
+                    if (actualUsageHours <= 0) {
+                        console.log(`[Savings Data] Skipping ${room} ${dateStr} - no usage hours`);
+                        continue;
+                    }
 
+                    // Calculate average target temperature from historical data
+                    let targetTemp = 24;
+                    let tempSum = 0;
+                    let tempCount = 0;
+                    
                     Object.keys(data).sort().forEach(hour => {
                         const hourData = data[hour];
                         if (!hourData) return;
 
-                        let targetTemp = 24;
                         if (hourData.targetTemp !== undefined && hourData.targetTemp !== null) {
-                            targetTemp = parseFloat(hourData.targetTemp);
+                            tempSum += parseFloat(hourData.targetTemp);
+                            tempCount++;
                         } else if (hourData.targetTemp1 !== undefined && hourData.targetTemp1 !== null) {
                             const t1 = parseFloat(hourData.targetTemp1);
                             const t2 = hourData.targetTemp2 !== undefined && hourData.targetTemp2 !== null ? parseFloat(hourData.targetTemp2) : t1;
-                            targetTemp = (t1 + t2) / 2;
+                            tempSum += (t1 + t2) / 2;
+                            tempCount++;
                         }
-
-                        // Calculate actual cost for this hour
-                        const hourlyActualCost = AirconCostCalculator.computeAirconCost(roomConfig, 1, ratePerKwh, targetTemp);
-                        totalActualCost += hourlyActualCost;
-
-                        // Calculate normal cost at 16°C for this hour
-                        const hourlyNormalCost = AirconCostCalculator.computeAirconCost(roomConfig, 1, ratePerKwh, 16);
-                        totalNormalCost += hourlyNormalCost;
-
-                        totalHours += 1;
                     });
 
-                    if (totalHours > 0) {
-                        const savings = totalNormalCost - totalActualCost;
-                        const displayName = (labsData && labsData[room] && labsData[room].customRoomName) ? labsData[room].customRoomName : room.replace('_', ' ');
-                        const formattedDate = new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                        
-                        tableRows.push(`
-                            <tr class="border-b border-gray-100 hover:bg-gray-50">
-                                <td class="text-[10px] text-gray-700 py-3 px-4">${formattedDate}</td>
-                                <td class="text-[10px] text-gray-700 py-3 px-4">${displayName}</td>
-                                <td class="text-[10px] text-gray-700 py-3 px-4 font-bold">₱${totalNormalCost.toFixed(2)}</td>
-                                <td class="text-[10px] text-gray-700 py-3 px-4 font-bold">₱${totalActualCost.toFixed(2)}</td>
-                                <td class="text-[10px] py-3 px-4 font-bold ${savings >= 0 ? 'text-green-600' : 'text-red-600'}">₱${savings.toFixed(2)}</td>
-                            </tr>
-                        `);
+                    if (tempCount > 0) {
+                        targetTemp = tempSum / tempCount;
                     }
-                });
-            });
+
+                    // Calculate actual cost using actual usage hours
+                    const actualCost = AirconCostCalculator.computeAirconCost(roomConfig, actualUsageHours, ratePerKwh, targetTemp);
+
+                    // Calculate normal cost at 16°C using actual usage hours
+                    const normalCost = AirconCostCalculator.computeAirconCost(roomConfig, actualUsageHours, ratePerKwh, 16);
+
+                    const savings = normalCost - actualCost;
+                    const displayName = (labsData && labsData[room] && labsData[room].customRoomName) ? labsData[room].customRoomName : room.replace('_', ' ');
+                    const formattedDate = new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                    
+                    tableRows.push(`
+                        <tr class="border-b border-gray-100 hover:bg-gray-50">
+                            <td class="text-[10px] text-gray-700 py-3 px-4">${formattedDate}</td>
+                            <td class="text-[10px] text-gray-700 py-3 px-4">${displayName}</td>
+                            <td class="text-[10px] text-gray-700 py-3 px-4 font-bold">₱${normalCost.toFixed(2)}</td>
+                            <td class="text-[10px] text-gray-700 py-3 px-4 font-bold">₱${actualCost.toFixed(2)}</td>
+                            <td class="text-[10px] py-3 px-4 font-bold ${savings >= 0 ? 'text-green-600' : 'text-red-600'}">₱${savings.toFixed(2)}</td>
+                        </tr>
+                    `);
+                }
+            }
 
             if (tableRows.length === 0) {
                 tableBody.innerHTML = '<tr><td colspan="5" class="text-center text-[10px] text-gray-400 py-8">No data available for selected period</td></tr>';
@@ -2913,13 +2948,14 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
             results.forEach(({ room, data }) => {
 
                 if (data) {
-
+                    console.log(`[loadHistoricalData] Processing data for ${room}:`, data);
                     Object.keys(data).forEach(hour => {
-
+                        const hourData = data[hour];
+                        console.log(`[loadHistoricalData] Hour ${hour} data for ${room}:`, hourData);
+                        console.log(`[loadHistoricalData] Hour ${hour} temperature:`, hourData.temperature);
+                        console.log(`[loadHistoricalData] Hour ${hour} humidity:`, hourData.humidity);
                         if (!combinedData[hour]) combinedData[hour] = {};
-
                         combinedData[hour][room] = data[hour];
-
                     });
 
                 }
@@ -2965,7 +3001,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
         // Build consistent 24-hour timeline
         const allHours = [];
         for (let i = 0; i < 24; i++) {
-            allHours.push(`${String(i).padStart(2, '0')}:00`);
+            allHours.push(`${String(i).padStart(2, '0')}`);
         }
         const timeline = allHours.map(h => formatHourKeyTo12Hour(h));
 
@@ -2989,15 +3025,21 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             const tempData = allHours.map(hour => {
                 const roomData = historicalData[hour]?.[room];
-                return roomData ? parseFloat(roomData.temperature) || 0 : null;
+                const value = roomData ? parseFloat(roomData.temperature) || 0 : null;
+                return value;
             });
+
+            console.log(`[renderHistoricalCharts] ${room} tempData:`, tempData);
 
             
 
             const humData = allHours.map(hour => {
                 const roomData = historicalData[hour]?.[room];
-                return roomData ? parseFloat(roomData.humidity) || 0 : null;
+                const value = roomData ? parseFloat(roomData.humidity) || 0 : null;
+                return value;
             });
+
+            console.log(`[renderHistoricalCharts] ${room} humData:`, humData);
 
             
 
@@ -3069,18 +3111,16 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
         // Update charts with historical data
 
+        console.log('[renderHistoricalCharts] Updating tempChart with', tempDatasets.length, 'datasets');
         tempChart.data.labels = timeline;
-
         tempChart.data.datasets = tempDatasets;
-
         tempChart.update();
 
         
 
+        console.log('[renderHistoricalCharts] Updating humChart with', humDatasets.length, 'datasets');
         humChart.data.labels = timeline;
-
         humChart.data.datasets = humDatasets;
-
         humChart.update();
 
         
@@ -3389,9 +3429,6 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             labsData = data;
 
-            // Populate automation room filter dropdown
-            populateAutomationRoomFilter();
-
             // Filter to only include rooms that have actual data (either in dailyAnalytics or have live data)
 
             const allRoomKeys = Object.keys(data).filter(key => key.startsWith("Room_")).sort();
@@ -3423,7 +3460,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                 document.getElementById('date-picker-temp').value = todayStr;
                 document.getElementById('date-picker-hum').value = todayStr;
                 
-                // Populate savings room filter after labKeys is populated
+                // Populate room filters after labKeys is populated
+                populateAutomationRoomFilter();
                 populateSavingsRoomFilter();
                 
                 // Load historical data after a short delay to ensure charts are initialized
