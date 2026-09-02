@@ -1784,17 +1784,18 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
 
     function getUsageHoursForDate(room, dateStr) {
-
+        console.log(`[Usage Hours] Checking ${room} for ${dateStr}`);
+        console.log(`[Usage Hours] dailyAnalytics.data:`, dailyAnalytics.data);
+        
         // Try to get from dailyAnalytics first
-
         if (dailyAnalytics.data[room] && dailyAnalytics.data[room][dateStr]) {
-
-            return parseFloat(dailyAnalytics.data[room][dateStr]);
-
+            const hours = parseFloat(dailyAnalytics.data[room][dateStr]);
+            console.log(`[Usage Hours] Found in dailyAnalytics: ${hours} hours`);
+            return hours;
         }
-
+        
+        console.log(`[Usage Hours] Not found in dailyAnalytics, returning 0`);
         return 0;
-
     }
 
 
@@ -2772,7 +2773,13 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
             
             for (const dateResults of allResults) {
                 for (const { room, dateStr, data } of dateResults) {
-                    if (!data) continue;
+                    console.log(`[Savings Data] Processing ${room} for ${dateStr}`);
+                    console.log(`[Savings Data] Data keys:`, data ? Object.keys(data) : 'null');
+                    
+                    if (!data) {
+                        console.log(`[Savings Data] No data for ${room} ${dateStr}, skipping`);
+                        continue;
+                    }
 
                     const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
                     
