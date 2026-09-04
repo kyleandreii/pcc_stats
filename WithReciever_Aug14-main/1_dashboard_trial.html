@@ -851,6 +851,24 @@
             const timestamp = Date.now();
             const cmd = isChecked ? "ON" : "OFF";
             
+            // Set session start time in localStorage when AC is turned ON
+            const sessionKey = `${roomPath}_session_start`;
+            if (isChecked) {
+                const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+                const existingSession = localStorage.getItem(sessionKey);
+                if (existingSession) {
+                    const sessionDate = new Date(parseInt(existingSession)).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+                    if (sessionDate !== todayStr) {
+                        // Session is from previous day, reset it
+                        localStorage.setItem(sessionKey, Date.now().toString());
+                    }
+                } else {
+                    localStorage.setItem(sessionKey, Date.now().toString());
+                }
+            } else {
+                localStorage.removeItem(sessionKey);
+            }
+            
             // Set optimistic UI state to prevent immediate re-render conflicts
             pendingUpdates[roomPath] = isChecked;
             
@@ -888,6 +906,24 @@
             const cmd = isChecked ? "ON" : "OFF";
             console.log(`[Dashboard] Toggle ${unitPath} to ${isChecked ? 'ON' : 'OFF'}`);
             
+            // Set session start time in localStorage when AC is turned ON
+            const sessionKey = `${roomPath}_${unit}_session_start`;
+            if (isChecked) {
+                const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+                const existingSession = localStorage.getItem(sessionKey);
+                if (existingSession) {
+                    const sessionDate = new Date(parseInt(existingSession)).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+                    if (sessionDate !== todayStr) {
+                        // Session is from previous day, reset it
+                        localStorage.setItem(sessionKey, Date.now().toString());
+                    }
+                } else {
+                    localStorage.setItem(sessionKey, Date.now().toString());
+                }
+            } else {
+                localStorage.removeItem(sessionKey);
+            }
+            
             // Firebase is authoritative - update it directly for cross-device sync
             const timestamp = Date.now();
             
@@ -916,59 +952,128 @@
             if (!timestamp) return 'Unknown';
             const now = Date.now();
             const diff = now - parseInt(timestamp);
+            const days = Math.floor(diff / 86400000);
+            const hours = Math.floor((diff % 86400000) / 3600000);
+            const minutes = Math.floor((diff % 3600000) / 60000);
             
-            const seconds = Math.floor(diff / 1000);
-            const minutes = Math.floor(seconds / 60);
-            const hours = Math.floor(minutes / 60);
-            const days = Math.floor(hours / 24);
+            if (days > 0) return `${days}d ago`;
+            if (hours > 0) return `${hours}h ago`;
+            if (minutes > 0) return `${minutes}m ago`;
+            return 'Just now';
+        }
+        
+        function formatDuration(seconds) {
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
             
             if (days > 0) {
-                return `${days} day${days > 1 ? 's' : ''}`;
+                return `${days}d ${hours}h`;
             } else if (hours > 0) {
-                return `${hours} hour${hours > 1 ? 's' : ''}`;
+                return `${hours}h ${minutes}m`;
             } else if (minutes > 0) {
-                return `${minutes} min`;
+                return `${minutes}m`;
             } else {
-                return 'Just now';
+                return '0m';
             }
         }
         
-        function getDurationDisplay(roomPath, unit = null) {
-            // Get cumulative online duration from Firebase
-            const onlineDurationPath = unit ? `${roomPath}/units/${unit}/online_duration` : `${roomPath}/online_duration`;
-            const onlineDuration = labsData[roomPath]?.units?.[unit]?.online_duration || labsData[roomPath]?.online_duration;
+        async function getDurationDisplay(roomPath, unit = null) {
+            // Get today's date in YYYY-MM-DD format
+            const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
             
-            // Get AC state from Firebase
-            let isOn = false;
+            // Get current AC state
+            let isCurrentlyOn = false;
+            const roomData = labsData[roomPath];
+            
             if (unit) {
-                isOn = labsData[roomPath]?.units?.[unit]?.ac === true || labsData[roomPath]?.units?.[unit]?.ac === "ON";
+                // Specific unit requested
+                isCurrentlyOn = roomData?.units?.[unit]?.ac === true || roomData?.units?.[unit]?.ac === "ON";
             } else {
-                isOn = labsData[roomPath]?.ac === true || labsData[roomPath]?.ac === "ON" || labsData[roomPath]?.ac === 1;
+                // For single unit or total room duration
+                // Check if room has dual units
+                const isDualUnit = roomData?.units && (roomData.units.unit_1 || roomData.units.unit_2);
+                if (isDualUnit) {
+                    // For dual unit, duration tracks if ANY unit is ON
+                    const unit1On = roomData?.units?.unit_1?.ac === true || roomData?.units?.unit_1?.ac === "ON";
+                    const unit2On = roomData?.units?.unit_2?.ac === true || roomData?.units?.unit_2?.ac === "ON";
+                    isCurrentlyOn = unit1On || unit2On;
+                } else {
+                    // Single unit
+                    isCurrentlyOn = roomData?.ac === true || roomData?.ac === "ON" || roomData?.ac === 1;
+                }
             }
             
-            console.log(`[Duration] ${roomPath} ${unit || ''}: online_duration=${onlineDuration}, isOn=${isOn}`);
+            // Track session start time in localStorage
+            const sessionKey = unit ? `${roomPath}_${unit}_session_start` : `${roomPath}_session_start`;
+            let currentSessionSeconds = 0;
             
-            if (!onlineDuration) {
-                console.log(`[Duration] ${roomPath} ${unit || ''}: Missing online_duration, returning 0h`);
-                return '0h online';
+            if (isCurrentlyOn) {
+                const sessionStart = localStorage.getItem(sessionKey);
+                if (sessionStart) {
+                    // Check if session is from today
+                    const sessionDate = new Date(parseInt(sessionStart)).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+                    if (sessionDate === todayStr) {
+                        currentSessionSeconds = (Date.now() - parseInt(sessionStart)) / 1000;
+                    } else {
+                        // Session is from previous day, reset it
+                        localStorage.setItem(sessionKey, Date.now().toString());
+                        currentSessionSeconds = 0;
+                    }
+                } else {
+                    // No session start recorded, but AC is ON - start tracking now
+                    localStorage.setItem(sessionKey, Date.now().toString());
+                    currentSessionSeconds = 0;
+                }
+            } else {
+                // AC is OFF, clear session start
+                localStorage.removeItem(sessionKey);
             }
             
-            // Convert to number and handle potential string values
-            let durationNum = parseFloat(onlineDuration);
-            
-            // If value is very large (> 1 year in seconds), assume it's milliseconds and convert
-            if (durationNum > 31536000) {
-                console.log(`[Duration] ${roomPath} ${unit || ''}: Converting milliseconds to seconds (value: ${durationNum})`);
-                durationNum = durationNum / 1000;
+            // Get completed hours from historical data
+            let completedHours = 0;
+            try {
+                const historyPath = `history/${roomPath}/${todayStr}`;
+                const snapshot = await db.ref(historyPath).once('value');
+                const dayData = snapshot.val();
+                
+                if (dayData) {
+                    Object.keys(dayData).forEach(hour => {
+                        const hourData = dayData[hour];
+                        if (!hourData) return;
+                        
+                        let isOn = false;
+                        if (unit) {
+                            isOn = hourData.ac === true || hourData.ac === "ON" || hourData.ac === 1;
+                        } else {
+                            // For dual unit, count if any unit was ON
+                            const isDualUnit = hourData.targetTemp1 !== undefined || hourData.targetTemp2 !== undefined;
+                            if (isDualUnit) {
+                                const unit1On = hourData.ac === true || hourData.ac === "ON" || hourData.ac === 1;
+                                const unit2On = hourData.ac === true || hourData.ac === "ON" || hourData.ac === 1;
+                                isOn = unit1On || unit2On;
+                            } else {
+                                isOn = hourData.ac === true || hourData.ac === "ON" || hourData.ac === 1;
+                            }
+                        }
+                        
+                        if (isOn) {
+                            completedHours++;
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error(`[Duration] Error fetching history for ${roomPath}:`, error);
             }
             
-            console.log(`[Duration] ${roomPath} ${unit || ''}: Final duration in seconds: ${durationNum}`);
+            // Total duration = completed hours + current session
+            const totalSeconds = Math.round((completedHours * 3600) + currentSessionSeconds);
             
-            // Format the online duration (in seconds)
-            const duration = formatDuration(durationNum);
-            const result = `${duration} online`;
-            console.log(`[Duration] ${roomPath} ${unit || ''}: Returning ${result}`);
-            return result;
+            console.log(`[Duration] ${roomPath} ${unit || ''}: Completed: ${completedHours}h, Session: ${Math.floor(currentSessionSeconds/60)}m, Total: ${Math.floor(totalSeconds/60)}m`);
+            
+            // Format the duration
+            const duration = formatDuration(totalSeconds);
+            return `${duration} online today`;
         }
         
         // Test function for debugging - call from console: testGreenDot()
@@ -1019,6 +1124,11 @@
                     console.error(`[Dashboard] Failed to update Unit ${unit} target temp:`, error);
                 });
         }
+
+        // Periodic duration update (every 10 seconds) to show real-time session time
+        setInterval(() => {
+            renderDashboard();
+        }, 10000);
 
         function showInfo(roomIndex) {
             const data = latestData[roomIndex];
@@ -1093,7 +1203,7 @@
                 });
         }
 
-        function renderDashboard() {
+        async function renderDashboard() {
             if (renderInProgress) {
                 console.log('[renderDashboard] Already rendering, skipping this call');
                 return;
@@ -1112,7 +1222,22 @@
             if (labKeys.length === 0) {
                 console.log('[renderDashboard] ERROR: labKeys is empty, no rooms to render');
                 document.getElementById('lab-grid').innerHTML = '<div class="text-center py-8"><p class="text-gray-500">No rooms found. Please add a room first.</p></div>';
+                renderInProgress = false;
                 return;
+            }
+
+            // Pre-fetch durations for all rooms
+            const durationCache = {};
+            for (const roomPath of labKeys) {
+                const d = labsData[roomPath];
+                if (!d) continue;
+                
+                const isDualUnitRoom = d.units && (d.units.unit_1 || d.units.unit_2);
+                durationCache[roomPath] = await getDurationDisplay(roomPath);
+                if (isDualUnitRoom) {
+                    durationCache[`${roomPath}_unit_1`] = await getDurationDisplay(roomPath, 'unit_1');
+                    durationCache[`${roomPath}_unit_2`] = await getDurationDisplay(roomPath, 'unit_2');
+                }
             }
 
             // Use labKeys and labsData to render all rooms, including those without sensor data
@@ -1130,7 +1255,7 @@
                 const label = roomLabels[i];
                 const temp = d.temperature || 0;
                 // Invert humidity only if device has data, otherwise show 0
-                const hum = (d.humidity !== undefined && d.humidity !== null && d.humidity !== 0) ? 100 - d.humidity : 0;
+                const hum = (d.humidity !== undefined && d.humidity !== null && d.humidity !== 0) ? parseFloat((100 - d.humidity).toFixed(1)) : 0;
                 const minT = d.thresholds?.minTemp || 20;
                 const maxT = d.thresholds?.maxTemp || 30;
                 
@@ -1203,7 +1328,7 @@
                                     </label>
                                     <div class="flex flex-col items-center mt-1">
                                         <span class="text-[8px] font-bold text-gray-400 uppercase">AC Power</span>
-                                        <span class="text-[10px] font-bold text-[#800000] bg-[#800000]/10 px-3 py-1 rounded-lg shadow-sm">${getDurationDisplay(roomPath)}</span>
+                                        <span class="text-[10px] font-bold text-[#800000] bg-[#800000]/10 px-3 py-1 rounded-lg shadow-sm">${durationCache[roomPath] || '0h online today'}</span>
                                     </div>
                                 </div>
                                 ` : ''}
@@ -1240,7 +1365,7 @@
                                             <span class="neumorph-switch-slider"></span>
                                         </label>
                                     </div>
-                                    <p class="text-[10px] font-bold text-[#800000] text-center bg-[#800000]/10 px-3 py-1 rounded-lg shadow-sm">${getDurationDisplay(roomPath, 'unit_1')}</p>
+                                    <p class="text-[10px] font-bold text-[#800000] text-center bg-[#800000]/10 px-3 py-1 rounded-lg shadow-sm">${durationCache[`${roomPath}_unit_1`] || '0h online today'}</p>
                                 </div>
                                 <div class="neumorph-card p-4">
                                     <div class="flex justify-between items-center mb-2">
@@ -1250,7 +1375,7 @@
                                             <span class="neumorph-switch-slider"></span>
                                         </label>
                                     </div>
-                                    <p class="text-[10px] font-bold text-[#800000] text-center bg-[#800000]/10 px-3 py-1 rounded-lg shadow-sm">${getDurationDisplay(roomPath, 'unit_2')}</p>
+                                    <p class="text-[10px] font-bold text-[#800000] text-center bg-[#800000]/10 px-3 py-1 rounded-lg shadow-sm">${durationCache[`${roomPath}_unit_2`] || '0h online today'}</p>
                                 </div>
                             </div>
                             ` : ''}
