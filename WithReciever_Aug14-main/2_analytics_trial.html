@@ -886,8 +886,6 @@
 
     if (lastDateStored !== todayKey) {
 
-        localStorage.removeItem('roomUsage');
-
         localStorage.removeItem('alertCounters');
 
         localStorage.removeItem('trendHistory');
@@ -900,7 +898,7 @@
 
     let trendHistory = JSON.parse(localStorage.getItem('trendHistory')) || { timeline: [], temp: {}, hum: {} };
 
-    let roomUsage = JSON.parse(localStorage.getItem('roomUsage')) || {};
+    let roomUsage = {}; // Will be loaded from Firebase
 
     let alertCounters = JSON.parse(localStorage.getItem('alertCounters')) || {};
 
@@ -1846,9 +1844,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
 
 
-   // Setup live listener (replaced with function to support historical view)
-
-   setupLiveListener();
+   // Setup live listener will be called when Firebase connects
+   // (moved to connection status handler to ensure Firebase is ready)
 
 
 
@@ -1866,19 +1863,15 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
 
 
-    function getUsageHoursForDate(room, dateStr) {
+    async function getUsageHoursForDate(room, dateStr) {
         console.log(`[Usage Hours] Checking ${room} for ${dateStr}`);
-        console.log(`[Usage Hours] dailyAnalytics.data:`, dailyAnalytics.data);
         
-        // Try to get from dailyAnalytics first
-        if (dailyAnalytics.data[room] && dailyAnalytics.data[room][dateStr]) {
-            const hours = parseFloat(dailyAnalytics.data[room][dateStr]);
-            console.log(`[Usage Hours] Found in dailyAnalytics: ${hours} hours`);
-            return hours;
-        }
-        
-        console.log(`[Usage Hours] Not found in dailyAnalytics, returning 0`);
-        return 0;
+        // Always reconstruct from historical data for accurate hours
+        // dailyAnalytics.data may be stale or incorrect
+        console.log(`[Usage Hours] Reconstructing from history for accurate calculation`);
+        const reconstruction = await reconstructUsageFromHistory(room, dateStr);
+        console.log(`[Usage Hours] Reconstructed from history: ${reconstruction.hours} hours`);
+        return reconstruction.hours;
     }
 
 
@@ -2987,13 +2980,18 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
         document.getElementById('date-label-temp').innerText = formattedDate;
         document.getElementById('date-label-hum').innerText = formattedDate;
 
-        // Pause live listener
-        if (liveListener) {
-            db.ref().off('value', liveListener);
-            liveListener = null;
+        // Only pause live listener if loading historical data for a past date
+        // For today, keep live listener running to get room data
+        const isToday = selectedDate === todayStr;
+        if (!isToday) {
+            if (liveListener) {
+                db.ref().off('value', liveListener);
+                liveListener = null;
+            }
+            isHistoricalView = true;
+        } else {
+            isHistoricalView = false;
         }
-
-        isHistoricalView = true;
 
         // Fetch historical data from Firebase for each room that exists
         // Data structure: /history/Room_402/YYYY-MM-DD/HH:00
@@ -3468,9 +3466,35 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
     
 
+    // Load roomUsage from Firebase for analytics - sync with Dashboard
+    db.ref('analytics/roomUsage').on('value', (snapshot) => {
+        const usageData = snapshot.val();
+        if (usageData) {
+            roomUsage = usageData;
+            console.log('[Analytics] Loaded roomUsage from Firebase:', roomUsage);
+        }
+    });
+
+    // Check Firebase connection status and set up listener when connected
+    db.ref('.info/connected').on('value', (snap) => {
+        const connected = snap.val();
+        console.log('[Analytics] Firebase connection status:', connected ? 'CONNECTED' : 'DISCONNECTED');
+        
+        if (connected && !liveListener) {
+            console.log('[Analytics] Firebase connected, setting up live listener');
+            setupLiveListener();
+        }
+    });
+
+
+
     function setupLiveListener() {
 
+        console.log('[setupLiveListener] FUNCTION CALLED');
+
         if (liveListener) {
+
+            console.log('[setupLiveListener] Removing old listener');
 
             db.ref().off('value', liveListener);
 
@@ -3478,11 +3502,18 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
         
 
+        console.log('[setupLiveListener] Setting up new Firebase listener');
+
+        // Test with a specific path first to see if listener works
         liveListener = db.ref().on("value", (snap) => {
 
             console.log('[Analytics Firebase Listener] ===== START =====');
+            console.log('[Analytics Firebase Listener] isHistoricalView:', isHistoricalView);
             
-            if (isHistoricalView) return; // Don't process if in historical view
+            if (isHistoricalView) {
+                console.log('[Analytics Firebase Listener] Skipping due to historical view');
+                return;
+            }
 
             
 
@@ -3714,6 +3745,13 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             });
 
+            // Save to Firebase for cross-device sync (same as Dashboard)
+            labKeys.forEach(room => {
+                if (roomUsage[room]) {
+                    db.ref(`analytics/roomUsage/${room}`).set(roomUsage[room]);
+                }
+            });
+
 
 
             // Use shared utility for summary cards
@@ -3736,9 +3774,9 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             updateBarCharts();
 
-            tempChart.update('none');
-
-            humChart.update('none');
+            // Disabled live chart updates - using only hourly historical data
+            // tempChart.update('none');
+            // humChart.update('none');
 
             
 
@@ -3752,12 +3790,12 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
 
 
-            localStorage.setItem('roomUsage', JSON.stringify(roomUsage));
-
             localStorage.setItem('alertCounters', JSON.stringify(alertCounters));
 
             document.getElementById('last-update').innerText = "LIVE SYNC: " + new Date().toLocaleTimeString();
 
+        }, (error) => {
+            console.error('[Analytics Firebase Listener] Error:', error);
         });
 
     }
@@ -3860,10 +3898,6 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
     });
 
     
-
-    minuteUpdate(); // Initialize immediately with current time on page load
-
-    setInterval(minuteUpdate, 60000);
 
     // Load historical data after charts are initialized (for hourly view)
     setTimeout(() => {
@@ -4673,7 +4707,12 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
     async function loadDayView() {
 
-        const dateStr = currentDate.toISOString().split('T')[0];
+        const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+        
+        // Force currentDate to today for day view
+        currentDate = new Date();
+        
+        const dateStr = currentDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
 
         const dateLabel = currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
@@ -4685,6 +4724,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
         let totalValue = 0;
         console.log(`[Accumulation Debug] Starting totalValue:`, totalValue);
+        console.log(`[loadDayView] dateStr: ${dateStr}, todayStr: ${todayStr}, dateLabel: ${dateLabel}`);
 
 
 
@@ -4745,10 +4785,11 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
             // Use historical data for accurate daily usage calculation
             // online_duration accumulates across days, so we need to reconstruct from history
 
-            if (dateLabel === new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })) {
+            if (dateStr === todayStr) {
 
                 // Today: reconstruct from history to get accurate daily usage
-                const dateKey = currentDate.toISOString().split('T')[0];
+                const dateKey = dateStr;
+                console.log(`[loadDayView] Calling reconstructUsageFromHistory for ${room} with dateKey: ${dateKey}`);
                 const reconstruction = await reconstructUsageFromHistory(room, dateKey);
                 hours = reconstruction.hours;
                 

@@ -633,7 +633,7 @@
 
                         // Track AC usage for analytics - Firebase is authoritative
                         const now = Date.now();
-                        if (!roomUsage[key]) roomUsage[key] = { totalMs: 0, lastStart: null, isActive: false };
+                        const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
                         
                         // Check AC state - handle both single-unit and dual-unit rooms
                         let acOn = false;
@@ -643,6 +643,36 @@
                             const unit1On = (roomData.units?.unit_1?.ac === true || roomData.units?.unit_1?.ac === "ON" || roomData.units?.unit_1?.ac === 1);
                             const unit2On = (roomData.units?.unit_2?.ac === true || roomData.units?.unit_2?.ac === "ON" || roomData.units?.unit_2?.ac === 1);
                             acOn = unit1On || unit2On;
+                        }
+                        
+                        if (!roomUsage[key]) roomUsage[key] = { totalMs: 0, lastStart: null, isActive: false, lastResetDate: todayStr };
+                        
+                        // Check if it's a new day - reset daily counter
+                        if (roomUsage[key].lastResetDate !== todayStr) {
+                            console.log(`[Daily Reset] ${key}: New day detected (${roomUsage[key].lastResetDate} -> ${todayStr})`);
+                            
+                            // Save yesterday's total to dailyAnalytics before resetting
+                            const yesterdayMs = roomUsage[key].totalMs;
+                            const yesterdayHours = yesterdayMs / 3600000;
+                            const yesterdayDate = roomUsage[key].lastResetDate;
+                            
+                            if (yesterdayHours > 0) {
+                                console.log(`[Daily Reset] ${key}: Saving ${yesterdayHours.toFixed(2)}h from ${yesterdayDate} to dailyAnalytics`);
+                                db.ref(`analytics/dailyAnalytics/data/${key}/${yesterdayDate}`).set(yesterdayHours);
+                            }
+                            
+                            // Reset for new day
+                            roomUsage[key].totalMs = 0;
+                            roomUsage[key].lastResetDate = todayStr;
+                            
+                            // If AC is currently ON, set lastStart to now
+                            if (acOn) {
+                                roomUsage[key].lastStart = now;
+                                roomUsage[key].isActive = true;
+                            } else {
+                                roomUsage[key].lastStart = null;
+                                roomUsage[key].isActive = false;
+                            }
                         }
                         
                         if (acOn && !roomUsage[key].isActive) {
@@ -927,13 +957,19 @@
             // Firebase is authoritative - update it directly for cross-device sync
             const timestamp = Date.now();
             
+            // Set optimistic UI state to prevent immediate re-render conflicts
+            const pendingKey = `${roomPath}_${unit}`;
+            pendingUpdates[pendingKey] = isChecked;
+            
             // Update unit-specific Firebase path
             db.ref(unitPath).update({ ac: isChecked, ac_command: cmd, ac_timestamp: timestamp })
                 .then(() => {
                     console.log(`[Dashboard] Unit ${unit} update succeeded for ${roomPath}`);
+                    delete pendingUpdates[pendingKey];
                 })
                 .catch((error) => {
                     console.error(`[Dashboard] Failed to update Unit ${unit} for ${roomPath}:`, error);
+                    delete pendingUpdates[pendingKey];
                 });
             
             // Force immediate re-render to show the change
@@ -982,94 +1018,31 @@
             // Get today's date in YYYY-MM-DD format
             const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
             
-            // Get current AC state
-            let isCurrentlyOn = false;
-            const roomData = labsData[roomPath];
-            
+            // Use Firebase roomUsage for accurate duration tracking
+            let totalMs = 0;
             if (unit) {
-                // Specific unit requested
-                isCurrentlyOn = roomData?.units?.[unit]?.ac === true || roomData?.units?.[unit]?.ac === "ON";
-            } else {
-                // For single unit or total room duration
-                // Check if room has dual units
-                const isDualUnit = roomData?.units && (roomData.units.unit_1 || roomData.units.unit_2);
-                if (isDualUnit) {
-                    // For dual unit, duration tracks if ANY unit is ON
-                    const unit1On = roomData?.units?.unit_1?.ac === true || roomData?.units?.unit_1?.ac === "ON";
-                    const unit2On = roomData?.units?.unit_2?.ac === true || roomData?.units?.unit_2?.ac === "ON";
-                    isCurrentlyOn = unit1On || unit2On;
-                } else {
-                    // Single unit
-                    isCurrentlyOn = roomData?.ac === true || roomData?.ac === "ON" || roomData?.ac === 1;
-                }
-            }
-            
-            // Track session start time in localStorage
-            const sessionKey = unit ? `${roomPath}_${unit}_session_start` : `${roomPath}_session_start`;
-            let currentSessionSeconds = 0;
-            
-            if (isCurrentlyOn) {
-                const sessionStart = localStorage.getItem(sessionKey);
-                if (sessionStart) {
-                    // Check if session is from today
-                    const sessionDate = new Date(parseInt(sessionStart)).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
-                    if (sessionDate === todayStr) {
-                        currentSessionSeconds = (Date.now() - parseInt(sessionStart)) / 1000;
-                    } else {
-                        // Session is from previous day, reset it
-                        localStorage.setItem(sessionKey, Date.now().toString());
-                        currentSessionSeconds = 0;
+                // For individual units, use roomUsage from Firebase
+                const unitKey = `${roomPath}_${unit}`;
+                if (roomUsage[unitKey]) {
+                    totalMs = roomUsage[unitKey].totalMs || 0;
+                    if (roomUsage[unitKey].isActive) {
+                        totalMs += (Date.now() - roomUsage[unitKey].lastStart);
                     }
-                } else {
-                    // No session start recorded, but AC is ON - start tracking now
-                    localStorage.setItem(sessionKey, Date.now().toString());
-                    currentSessionSeconds = 0;
                 }
             } else {
-                // AC is OFF, clear session start
-                localStorage.removeItem(sessionKey);
-            }
-            
-            // Get completed hours from historical data
-            let completedHours = 0;
-            try {
-                const historyPath = `history/${roomPath}/${todayStr}`;
-                const snapshot = await db.ref(historyPath).once('value');
-                const dayData = snapshot.val();
-                
-                if (dayData) {
-                    Object.keys(dayData).forEach(hour => {
-                        const hourData = dayData[hour];
-                        if (!hourData) return;
-                        
-                        let isOn = false;
-                        if (unit) {
-                            isOn = hourData.ac === true || hourData.ac === "ON" || hourData.ac === 1;
-                        } else {
-                            // For dual unit, count if any unit was ON
-                            const isDualUnit = hourData.targetTemp1 !== undefined || hourData.targetTemp2 !== undefined;
-                            if (isDualUnit) {
-                                const unit1On = hourData.ac === true || hourData.ac === "ON" || hourData.ac === 1;
-                                const unit2On = hourData.ac === true || hourData.ac === "ON" || hourData.ac === 1;
-                                isOn = unit1On || unit2On;
-                            } else {
-                                isOn = hourData.ac === true || hourData.ac === "ON" || hourData.ac === 1;
-                            }
-                        }
-                        
-                        if (isOn) {
-                            completedHours++;
-                        }
-                    });
+                // For room-level, use roomUsage from Firebase
+                if (roomUsage[roomPath]) {
+                    totalMs = roomUsage[roomPath].totalMs || 0;
+                    if (roomUsage[roomPath].isActive) {
+                        totalMs += (Date.now() - roomUsage[roomPath].lastStart);
+                    }
                 }
-            } catch (error) {
-                console.error(`[Duration] Error fetching history for ${roomPath}:`, error);
             }
             
-            // Total duration = completed hours + current session
-            const totalSeconds = Math.round((completedHours * 3600) + currentSessionSeconds);
+            // Convert to seconds
+            const totalSeconds = Math.round(totalMs / 1000);
             
-            console.log(`[Duration] ${roomPath} ${unit || ''}: Completed: ${completedHours}h, Session: ${Math.floor(currentSessionSeconds/60)}m, Total: ${Math.floor(totalSeconds/60)}m`);
+            console.log(`[Duration] ${roomPath} ${unit || ''}: Total from Firebase: ${Math.floor(totalSeconds/60)}m`);
             
             // Format the duration
             const duration = formatDuration(totalSeconds);
@@ -1210,7 +1183,9 @@
             }
             renderInProgress = true;
             console.log('[renderDashboard] FUNCTION CALLED');
-            let sumT = 0, criticalCount = 0, gridHtml = "", activeRooms = 0;
+            
+            try {
+                let sumT = 0, criticalCount = 0, gridHtml = "", activeRooms = 0;
 
             console.log('[renderDashboard] latestData length:', latestData.length);
             console.log('[renderDashboard] labKeys length:', labKeys.length);
@@ -1279,7 +1254,10 @@
                 console.log(`[Dashboard] ${roomPath} - last_seen: ${lastSeen} (${lastSeen ? new Date(lastSeen).toISOString() : 'null'}), timeSinceLastSeen: ${Math.floor(timeSinceLastSeen/1000)}s, isOnline: ${isDeviceOnline}`);
                 
                 // Firebase is authoritative for AC state - use it directly for cross-device sync
-                const isPoweredOn = d.ac === true || d.ac === "ON" || d.ac === 1;
+                // But respect pending updates to prevent race conditions
+                const firebaseState = d.ac === true || d.ac === "ON" || d.ac === 1;
+                const isPoweredOn = pendingUpdates[roomPath] !== undefined ? pendingUpdates[roomPath] : firebaseState;
+                console.log(`[Dashboard] ${roomPath} - Firebase: ${d.ac}, Pending: ${pendingUpdates[roomPath]}, Using: ${isPoweredOn}`);
                 console.log(`[Dashboard] ${roomPath} - Using Firebase: ${d.ac}, isPoweredOn=${isPoweredOn}`);
                 console.log(`[Dashboard] ${roomPath} - Full room data:`, JSON.stringify(d));
                 
@@ -1298,8 +1276,10 @@
                     
                     // Check if this is a dual-unit room (has units object with unit_1 and unit_2)
                     const isDualUnitRoom = d.units && (d.units.unit_1 || d.units.unit_2);
-                    const unit1State = d.units?.unit_1?.ac === true || d.units?.unit_1?.ac === "ON" || d.units?.unit_1?.ac === 1;
-                    const unit2State = d.units?.unit_2?.ac === true || d.units?.unit_2?.ac === "ON" || d.units?.unit_2?.ac === 1;
+                    const unit1FirebaseState = d.units?.unit_1?.ac === true || d.units?.unit_1?.ac === "ON" || d.units?.unit_1?.ac === 1;
+                    const unit2FirebaseState = d.units?.unit_2?.ac === true || d.units?.unit_2?.ac === "ON" || d.units?.unit_2?.ac === 1;
+                    const unit1State = pendingUpdates[`${roomPath}_unit_1`] !== undefined ? pendingUpdates[`${roomPath}_unit_1`] : unit1FirebaseState;
+                    const unit2State = pendingUpdates[`${roomPath}_unit_2`] !== undefined ? pendingUpdates[`${roomPath}_unit_2`] : unit2FirebaseState;
                     
                     let statusClass = isTooHigh ? "border-status-high" : (isTooLow ? "border-status-low" : "border-status-normal");
                     const powerStyle = isPoweredOn ? statusClass : "border-gray-200 opacity-60 grayscale-[0.5]";
@@ -1416,6 +1396,10 @@
             
             renderInProgress = false;
             console.log('[renderDashboard] Render complete, flag reset');
+            } catch (error) {
+                console.error('[renderDashboard] Error during render:', error);
+                renderInProgress = false;
+            }
         }
 
         function watchDeviceOnline(roomId) {
