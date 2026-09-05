@@ -633,7 +633,7 @@
 
                         // Track AC usage for analytics - Firebase is authoritative
                         const now = Date.now();
-                        const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+                        if (!roomUsage[key]) roomUsage[key] = { totalMs: 0, lastStart: null, isActive: false };
                         
                         // Check AC state - handle both single-unit and dual-unit rooms
                         let acOn = false;
@@ -643,36 +643,6 @@
                             const unit1On = (roomData.units?.unit_1?.ac === true || roomData.units?.unit_1?.ac === "ON" || roomData.units?.unit_1?.ac === 1);
                             const unit2On = (roomData.units?.unit_2?.ac === true || roomData.units?.unit_2?.ac === "ON" || roomData.units?.unit_2?.ac === 1);
                             acOn = unit1On || unit2On;
-                        }
-                        
-                        if (!roomUsage[key]) roomUsage[key] = { totalMs: 0, lastStart: null, isActive: false, lastResetDate: todayStr };
-                        
-                        // Check if it's a new day - reset daily counter
-                        if (roomUsage[key].lastResetDate !== todayStr) {
-                            console.log(`[Daily Reset] ${key}: New day detected (${roomUsage[key].lastResetDate} -> ${todayStr})`);
-                            
-                            // Save yesterday's total to dailyAnalytics before resetting
-                            const yesterdayMs = roomUsage[key].totalMs;
-                            const yesterdayHours = yesterdayMs / 3600000;
-                            const yesterdayDate = roomUsage[key].lastResetDate;
-                            
-                            if (yesterdayHours > 0) {
-                                console.log(`[Daily Reset] ${key}: Saving ${yesterdayHours.toFixed(2)}h from ${yesterdayDate} to dailyAnalytics`);
-                                db.ref(`analytics/dailyAnalytics/data/${key}/${yesterdayDate}`).set(yesterdayHours);
-                            }
-                            
-                            // Reset for new day
-                            roomUsage[key].totalMs = 0;
-                            roomUsage[key].lastResetDate = todayStr;
-                            
-                            // If AC is currently ON, set lastStart to now
-                            if (acOn) {
-                                roomUsage[key].lastStart = now;
-                                roomUsage[key].isActive = true;
-                            } else {
-                                roomUsage[key].lastStart = null;
-                                roomUsage[key].isActive = false;
-                            }
                         }
                         
                         if (acOn && !roomUsage[key].isActive) {
