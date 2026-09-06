@@ -536,13 +536,78 @@
             console.log('[loadRoomsFromFirebase] FUNCTION CALLED - Starting Firebase connection...');
             
             // Load roomUsage from Firebase for analytics
+            let roomUsageLoaded = false;
             db.ref('analytics/roomUsage').on('value', (snapshot) => {
                 const usageData = snapshot.val();
                 if (usageData) {
                     roomUsage = usageData;
                     console.log('[loadRoomsFromFirebase] Loaded roomUsage from Firebase:', roomUsage);
+                    
+                    // Check and reset roomUsage if needed (for stale data on page load)
+                    if (labKeys.length > 0) {
+                        checkAndResetRoomUsage();
+                    }
                 }
+                roomUsageLoaded = true;
             });
+            
+            // Function to check and reset roomUsage if needed
+            function checkAndResetRoomUsage() {
+                const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+                const lastDateStored = localStorage.getItem('last_active_date');
+                let needsReset = false;
+                
+                console.log('[Dashboard Page Load] todayStr:', todayStr, 'lastDateStored:', lastDateStored);
+                console.log('[Dashboard Page Load] roomUsage:', roomUsage);
+                console.log('[Dashboard Page Load] labKeys:', labKeys);
+                
+                // If last active date is different from today, we need to reset
+                if (lastDateStored && lastDateStored !== todayStr) {
+                    console.log('[Dashboard Page Load] Date changed since last visit, resetting roomUsage');
+                    needsReset = true;
+                    
+                    // Save yesterday's data to Firebase before reset
+                    labKeys.forEach(room => {
+                        if (roomUsage[room] && roomUsage[room].totalMs > 0) {
+                            const yesterdayTotalMs = roomUsage[room].totalMs;
+                            const yesterdayTotalHours = yesterdayTotalMs / 3600000;
+                            
+                            console.log(`[Dashboard Page Load] ${room}: Saving ${yesterdayTotalHours.toFixed(2)}h to Firebase for ${lastDateStored}`);
+                            db.ref(`analytics/dailyAnalytics/${lastDateStored}/${room}/usageHours`).set(yesterdayTotalHours);
+                        }
+                    });
+                }
+                
+                // Also force reset if there's accumulated time but it's clearly from a previous session
+                if (!needsReset) {
+                    labKeys.forEach(room => {
+                        if (roomUsage[room] && roomUsage[room].totalMs > 0) {
+                            const hours = roomUsage[room].totalMs / 3600000;
+                            if (hours > 2) {
+                                console.log(`[Dashboard Page Load] ${room} has ${hours.toFixed(2)}h accumulated on page load, likely stale data. Resetting.`);
+                                needsReset = true;
+                            }
+                        }
+                    });
+                }
+                
+                if (needsReset) {
+                    labKeys.forEach(room => {
+                        if (roomUsage[room]) {
+                            roomUsage[room].totalMs = 0;
+                            roomUsage[room].lastStart = null;
+                            roomUsage[room].isActive = false;
+                            db.ref(`analytics/roomUsage/${room}`).set(roomUsage[room]);
+                        }
+                    });
+                    
+                    localStorage.removeItem('dailyAnalytics');
+                    localStorage.setItem('last_active_date', todayStr);
+                    
+                    console.log('[Dashboard Page Load] Reset complete, reloading dashboard');
+                    setTimeout(() => renderDashboard(), 500);
+                }
+            }
             
             // Test Firebase connection
             db.ref('.info/connected').on('value', (snapshot) => {
@@ -839,6 +904,7 @@
         const POWER_COOLDOWN_MS = 5000;
 
         function toggleAC(roomPath, isChecked) {
+            console.log(`[Dashboard] toggleAC called for ${roomPath}, isChecked: ${isChecked}`);
             if (powerButtonCooldown) {
                 console.log(`[Dashboard] Power button on cooldown, ignoring request`);
                 return;
@@ -850,6 +916,33 @@
             // Firebase is authoritative - update it directly for cross-device sync
             const timestamp = Date.now();
             const cmd = isChecked ? "ON" : "OFF";
+            
+            // Update roomUsage immediately when AC is toggled
+            const now = Date.now();
+            if (!roomUsage[roomPath]) roomUsage[roomPath] = { totalMs: 0, lastStart: null, isActive: false };
+            
+            console.log(`[Dashboard] Before update - roomUsage[${roomPath}]:`, roomUsage[roomPath]);
+            
+            if (isChecked) {
+                // AC turned ON - start tracking
+                if (!roomUsage[roomPath].isActive) {
+                    roomUsage[roomPath].lastStart = now;
+                    roomUsage[roomPath].isActive = true;
+                    console.log(`[Dashboard] Started tracking usage for ${roomPath}, lastStart: ${roomUsage[roomPath].lastStart}`);
+                }
+            } else {
+                // AC turned OFF - stop tracking and accumulate time
+                if (roomUsage[roomPath].isActive) {
+                    roomUsage[roomPath].totalMs += (now - roomUsage[roomPath].lastStart);
+                    roomUsage[roomPath].isActive = false;
+                    console.log(`[Dashboard] Stopped tracking usage for ${roomPath}, accumulated: ${roomUsage[roomPath].totalMs}ms`);
+                }
+            }
+            
+            console.log(`[Dashboard] After update - roomUsage[${roomPath}]:`, roomUsage[roomPath]);
+            
+            // Save to Firebase immediately
+            db.ref(`analytics/roomUsage/${roomPath}`).set(roomUsage[roomPath]);
             
             // Set session start time in localStorage when AC is turned ON
             const sessionKey = `${roomPath}_session_start`;
@@ -905,6 +998,30 @@
             const unitPath = `${roomPath}/units/${unit}`;
             const cmd = isChecked ? "ON" : "OFF";
             console.log(`[Dashboard] Toggle ${unitPath} to ${isChecked ? 'ON' : 'OFF'}`);
+            
+            // Update roomUsage immediately when unit AC is toggled
+            const now = Date.now();
+            const unitKey = `${roomPath}_${unit}`;
+            if (!roomUsage[unitKey]) roomUsage[unitKey] = { totalMs: 0, lastStart: null, isActive: false };
+            
+            if (isChecked) {
+                // Unit AC turned ON - start tracking
+                if (!roomUsage[unitKey].isActive) {
+                    roomUsage[unitKey].lastStart = now;
+                    roomUsage[unitKey].isActive = true;
+                    console.log(`[Dashboard] Started tracking usage for ${unitKey}`);
+                }
+            } else {
+                // Unit AC turned OFF - stop tracking and accumulate time
+                if (roomUsage[unitKey].isActive) {
+                    roomUsage[unitKey].totalMs += (now - roomUsage[unitKey].lastStart);
+                    roomUsage[unitKey].isActive = false;
+                    console.log(`[Dashboard] Stopped tracking usage for ${unitKey}, accumulated: ${roomUsage[unitKey].totalMs}ms`);
+                }
+            }
+            
+            // Save to Firebase immediately
+            db.ref(`analytics/roomUsage/${unitKey}`).set(roomUsage[unitKey]);
             
             // Set session start time in localStorage when AC is turned ON
             const sessionKey = `${roomPath}_${unit}_session_start`;
@@ -985,14 +1102,17 @@
         }
         
         async function getDurationDisplay(roomPath, unit = null) {
+            console.log(`[Duration] getDurationDisplay called for ${roomPath}, unit: ${unit}`);
             // Get today's date in YYYY-MM-DD format
             const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
             
             // Use Firebase roomUsage for accurate duration tracking
             let totalMs = 0;
+            
             if (unit) {
                 // For individual units, use roomUsage from Firebase
                 const unitKey = `${roomPath}_${unit}`;
+                console.log(`[Duration] Unit mode - unitKey: ${unitKey}, roomUsage[unitKey]:`, roomUsage[unitKey]);
                 if (roomUsage[unitKey]) {
                     totalMs = roomUsage[unitKey].totalMs || 0;
                     if (roomUsage[unitKey].isActive) {
@@ -1000,11 +1120,42 @@
                     }
                 }
             } else {
-                // For room-level, use roomUsage from Firebase
-                if (roomUsage[roomPath]) {
-                    totalMs = roomUsage[roomPath].totalMs || 0;
-                    if (roomUsage[roomPath].isActive) {
-                        totalMs += (Date.now() - roomUsage[roomPath].lastStart);
+                // For room-level, check if it's a dual-unit room
+                const roomData = labsData[roomPath];
+                console.log(`[Duration] Room mode - roomData:`, roomData);
+                const isDualUnitRoom = roomData && roomData.units && (roomData.units.unit_1 || roomData.units.unit_2);
+                console.log(`[Duration] isDualUnitRoom: ${isDualUnitRoom}`);
+                
+                if (isDualUnitRoom) {
+                    // Aggregate both units' durations
+                    if (roomData.units.unit_1) {
+                        const unit1Key = `${roomPath}_unit_1`;
+                        console.log(`[Duration] Processing unit_1 - unit1Key: ${unit1Key}, roomUsage[unit1Key]:`, roomUsage[unit1Key]);
+                        if (roomUsage[unit1Key]) {
+                            totalMs += roomUsage[unit1Key].totalMs || 0;
+                            if (roomUsage[unit1Key].isActive) {
+                                totalMs += (Date.now() - roomUsage[unit1Key].lastStart);
+                            }
+                        }
+                    }
+                    if (roomData.units.unit_2) {
+                        const unit2Key = `${roomPath}_unit_2`;
+                        console.log(`[Duration] Processing unit_2 - unit2Key: ${unit2Key}, roomUsage[unit2Key]:`, roomUsage[unit2Key]);
+                        if (roomUsage[unit2Key]) {
+                            totalMs += roomUsage[unit2Key].totalMs || 0;
+                            if (roomUsage[unit2Key].isActive) {
+                                totalMs += (Date.now() - roomUsage[unit2Key].lastStart);
+                            }
+                        }
+                    }
+                } else {
+                    // Single-unit room, use room-level roomUsage
+                    console.log(`[Duration] Single unit mode - roomUsage[${roomPath}]:`, roomUsage[roomPath]);
+                    if (roomUsage[roomPath]) {
+                        totalMs = roomUsage[roomPath].totalMs || 0;
+                        if (roomUsage[roomPath].isActive) {
+                            totalMs += (Date.now() - roomUsage[roomPath].lastStart);
+                        }
                     }
                 }
             }
@@ -1012,7 +1163,7 @@
             // Convert to seconds
             const totalSeconds = Math.round(totalMs / 1000);
             
-            console.log(`[Duration] ${roomPath} ${unit || ''}: Total from Firebase: ${Math.floor(totalSeconds/60)}m`);
+            console.log(`[Duration] ${roomPath} ${unit || ''}: Total from Firebase: ${Math.floor(totalSeconds/60)}m, totalMs: ${totalMs}`);
             
             // Format the duration
             const duration = formatDuration(totalSeconds);
@@ -1054,14 +1205,16 @@
             const currentData = labsData[roomPath];
             const currentTarget = currentData?.units?.[unit]?.targetTemp || 24;
             const newVal = currentTarget + change;
-            if (newVal < 16 || newVal > 30) return;
+            // Allow IR transmission at limits (16 and 30) - don't return early
+            // Just clamp the value if it goes beyond limits
+            const clampedVal = Math.max(16, Math.min(30, newVal));
             
             const cmd = change > 0 ? "TEMP_UP" : "TEMP_DOWN";
-            console.log(`[Dashboard] Adjust ${unitPath} target temp to ${newVal}°C (${cmd})`);
+            console.log(`[Dashboard] Adjust ${unitPath} target temp to ${clampedVal}°C (${cmd})`);
             
-            db.ref(unitPath).update({ targetTemp: newVal, ac_command: cmd })
+            db.ref(unitPath).update({ targetTemp: clampedVal, ac_command: cmd })
                 .then(() => {
-                    console.log(`[Dashboard] Unit ${unit} target temp updated to ${newVal}°C`);
+                    console.log(`[Dashboard] Unit ${unit} target temp updated to ${clampedVal}°C`);
                 })
                 .catch((error) => {
                     console.error(`[Dashboard] Failed to update Unit ${unit} target temp:`, error);
@@ -1072,6 +1225,41 @@
         setInterval(() => {
             renderDashboard();
         }, 10000);
+
+        // Midnight reset for daily usage tracking
+        let lastDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+        
+        setInterval(() => {
+            const currentDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+            
+            if (currentDate !== lastDate) {
+                console.log(`[Midnight Reset] Date changed from ${lastDate} to ${currentDate}`);
+                
+                // Save yesterday's totals to historical data before resetting
+                labKeys.forEach(room => {
+                    if (roomUsage[room] && roomUsage[room].totalMs > 0) {
+                        const yesterdayTotalMs = roomUsage[room].totalMs;
+                        const yesterdayTotalSeconds = Math.round(yesterdayTotalMs / 1000);
+                        const yesterdayTotalHours = yesterdayTotalSeconds / 3600;
+                        
+                        console.log(`[Midnight Reset] ${room}: Saving ${yesterdayTotalHours.toFixed(2)}h to history for ${lastDate}`);
+                        
+                        // Save to historical daily analytics
+                        db.ref(`analytics/dailyAnalytics/${lastDate}/${room}/usageHours`).set(yesterdayTotalHours);
+                        
+                        // Reset for new day
+                        roomUsage[room].totalMs = 0;
+                        roomUsage[room].lastStart = null;
+                        roomUsage[room].isActive = false;
+                        
+                        // Update Firebase
+                        db.ref(`analytics/roomUsage/${room}`).set(roomUsage[room]);
+                    }
+                });
+                
+                lastDate = currentDate;
+            }
+        }, 60000); // Check every minute
 
         function showInfo(roomIndex) {
             const data = latestData[roomIndex];

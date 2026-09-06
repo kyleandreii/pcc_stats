@@ -404,7 +404,7 @@
 
                 <div class="flex items-center justify-center gap-6 mb-6">
 
-                    <button onclick="navigateDate(-1)" class="neumorph-btn p-2 rounded-full transition-all">
+                    <button id="nav-left" class="neumorph-btn p-2 rounded-full transition-all relative z-10">
 
                         <i data-lucide="chevron-left" class="w-6 h-6 text-gray-600"></i>
 
@@ -416,7 +416,7 @@
 
                     </button>
 
-                    <button onclick="navigateDate(1)" class="neumorph-btn p-2 rounded-full transition-all">
+                    <button id="nav-right" class="neumorph-btn p-2 rounded-full transition-all relative z-10">
 
                         <i data-lucide="chevron-right" class="w-6 h-6 text-gray-600"></i>
 
@@ -508,7 +508,13 @@
 
             <div class="card bg-white p-8 rounded-3xl shadow-sm border border-gray-100 mb-8">
 
-                <h3 id="summary-title" class="font-black text-gray-800 uppercase tracking-widest text-xs mb-6">Daily Total Cost</h3>
+                <div class="flex items-center justify-between mb-6">
+                    <h3 id="summary-title" class="font-black text-gray-800 uppercase tracking-widest text-xs">Daily Total Cost</h3>
+                    <div class="flex items-center gap-2">
+                        <span id="date-label-summary" class="text-[10px] font-black text-gray-500 uppercase">Today</span>
+                        <input type="date" id="date-picker-summary" class="text-[10px] font-black text-gray-600 bg-gray-100 border border-gray-200 rounded-lg px-2 py-1.5 cursor-pointer hover:bg-gray-200 transition-all relative z-10" onchange="console.log('Date picker summary changed to:', this.value); loadAnalyticsData()">
+                    </div>
+                </div>
 
                 <div class="text-center mb-6">
 
@@ -692,7 +698,7 @@
 
                                 <span id="date-label-temp" class="text-[10px] font-black text-gray-500 uppercase">Today</span>
 
-                                <input type="date" id="date-picker-temp" class="text-[10px] font-black text-gray-600 bg-gray-100 border border-gray-200 rounded-lg px-2 py-1.5 cursor-pointer hover:bg-gray-200 transition-all" onchange="loadHistoricalData(this.value)">
+                                <input type="date" id="date-picker-temp" class="text-[10px] font-black text-gray-600 bg-gray-100 border border-gray-200 rounded-lg px-2 py-1.5 cursor-pointer hover:bg-gray-200 transition-all relative z-10" onclick="console.log('Date picker temp clicked')" onchange="console.log('Date picker temp changed to:', this.value); loadHistoricalData(this.value)">
 
                             </div>
 
@@ -718,7 +724,7 @@
 
                                 <span id="date-label-hum" class="text-[10px] font-black text-gray-500 uppercase">Today</span>
 
-                                <input type="date" id="date-picker-hum" class="text-[10px] font-black text-gray-600 bg-gray-100 border border-gray-200 rounded-lg px-2 py-1.5 cursor-pointer hover:bg-gray-200 transition-all" onchange="loadHistoricalData(this.value)">
+                                <input type="date" id="date-picker-hum" class="text-[10px] font-black text-gray-600 bg-gray-100 border border-gray-200 rounded-lg px-2 py-1.5 cursor-pointer hover:bg-gray-200 transition-all relative z-10" onclick="console.log('Date picker hum clicked')" onchange="console.log('Date picker hum changed to:', this.value); loadHistoricalData(this.value)">
 
                             </div>
 
@@ -857,7 +863,6 @@
     // Cooldown tracking - moved to top to prevent initialization errors
     let periodTabCooldown = false;
     let metricTabCooldown = false;
-    let dateNavCooldown = false;
     const COOLDOWN_MS = 500;
 
 
@@ -889,6 +894,8 @@
         localStorage.removeItem('alertCounters');
 
         localStorage.removeItem('trendHistory');
+        
+        localStorage.removeItem('dailyAnalytics');
 
         localStorage.setItem('last_active_date', todayKey);
 
@@ -922,6 +929,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
     let isHistoricalView = false;
     let liveListener = null;
     let initialDataLoaded = false;
+    let chartsInitialized = false;
 
 
 
@@ -1866,12 +1874,28 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
     async function getUsageHoursForDate(room, dateStr) {
         console.log(`[Usage Hours] Checking ${room} for ${dateStr}`);
         
-        // Always reconstruct from historical data for accurate hours
-        // dailyAnalytics.data may be stale or incorrect
-        console.log(`[Usage Hours] Reconstructing from history for accurate calculation`);
-        const reconstruction = await reconstructUsageFromHistory(room, dateStr);
-        console.log(`[Usage Hours] Reconstructed from history: ${reconstruction.hours} hours`);
-        return reconstruction.hours;
+        const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+        const isToday = dateStr === todayStr;
+        
+        if (isToday) {
+            // For today, use Firebase roomUsage for accurate real-time tracking
+            let totalMs = 0;
+            if (roomUsage[room]) {
+                totalMs = roomUsage[room].totalMs || 0;
+                if (roomUsage[room].isActive) {
+                    totalMs += (Date.now() - roomUsage[room].lastStart);
+                }
+            }
+            const hours = totalMs / 3600000;
+            console.log(`[Usage Hours] ${room} (today): ${hours.toFixed(2)} hours from Firebase roomUsage`);
+            return hours;
+        } else {
+            // For past dates, use historical daily analytics
+            const snapshot = await db.ref(`analytics/dailyAnalytics/${dateStr}/${room}/usageHours`).once('value');
+            const hours = snapshot.val() || 0;
+            console.log(`[Usage Hours] ${room} (${dateStr}): ${hours} hours from historical daily analytics`);
+            return hours;
+        }
     }
 
 
@@ -2845,7 +2869,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                     
                     // Use same usage hours calculation as upper analytics
                     // online_duration accumulates across days, so reconstruct from history for accurate daily usage
-                    let actualUsageHours = getUsageHoursForDate(room, dateStr);
+                    let actualUsageHours = await getUsageHoursForDate(room, dateStr);
                     console.log(`[Savings Data] ${room} ${dateStr} usage hours from getUsageHoursForDate:`, actualUsageHours);
                     
                     // If no hours from dailyAnalytics, reconstruct from history
@@ -3014,9 +3038,10 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
             const combinedData = {};
 
             results.forEach(({ room, data }) => {
-
+                console.log(`[loadHistoricalData] Processing result for ${room}:`, data);
+                
                 if (data) {
-                    console.log(`[loadHistoricalData] Processing data for ${room}:`, data);
+                    console.log(`[loadHistoricalData] Data exists for ${room}, keys:`, Object.keys(data));
                     Object.keys(data).forEach(hour => {
                         const hourData = data[hour];
                         console.log(`[loadHistoricalData] Hour ${hour} data for ${room}:`, hourData);
@@ -3025,7 +3050,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                         if (!combinedData[hour]) combinedData[hour] = {};
                         combinedData[hour][room] = data[hour];
                     });
-
+                } else {
+                    console.log(`[loadHistoricalData] No data for ${room}`);
                 }
 
             });
@@ -3464,17 +3490,6 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
     }
 
-    
-
-    // Load roomUsage from Firebase for analytics - sync with Dashboard
-    db.ref('analytics/roomUsage').on('value', (snapshot) => {
-        const usageData = snapshot.val();
-        if (usageData) {
-            roomUsage = usageData;
-            console.log('[Analytics] Loaded roomUsage from Firebase:', roomUsage);
-        }
-    });
-
     // Check Firebase connection status and set up listener when connected
     db.ref('.info/connected').on('value', (snap) => {
         const connected = snap.val();
@@ -3485,6 +3500,92 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
             setupLiveListener();
         }
     });
+
+    // Load roomUsage from Firebase for analytics - sync with Dashboard
+    db.ref('analytics/roomUsage').on('value', (snapshot) => {
+        const usageData = snapshot.val();
+        if (usageData) {
+            roomUsage = usageData;
+            console.log('[Analytics] Loaded roomUsage from Firebase:', roomUsage);
+            
+            // Defer the reset check until labKeys is populated
+            if (labKeys.length > 0) {
+                checkAndResetRoomUsage();
+            }
+        }
+    });
+    
+    // Function to check and reset roomUsage if needed
+    function checkAndResetRoomUsage() {
+        const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+        const lastDateStored = localStorage.getItem('last_active_date');
+        let needsReset = false;
+        
+        console.log('[Analytics Page Load] todayStr:', todayStr, 'lastDateStored:', lastDateStored);
+        console.log('[Analytics Page Load] roomUsage:', roomUsage);
+        console.log('[Analytics Page Load] labKeys:', labKeys);
+        
+        // If last active date is different from today, we need to reset
+        if (lastDateStored && lastDateStored !== todayStr) {
+            console.log('[Analytics Page Load] Date changed since last visit, resetting roomUsage');
+            needsReset = true;
+            
+            // Save yesterday's data to Firebase before reset
+            labKeys.forEach(room => {
+                if (roomUsage[room] && roomUsage[room].totalMs > 0) {
+                    const yesterdayTotalMs = roomUsage[room].totalMs;
+                    const yesterdayTotalHours = yesterdayTotalMs / 3600000;
+                    
+                    console.log(`[Analytics Page Load] ${room}: Saving ${yesterdayTotalHours.toFixed(2)}h to Firebase for ${lastDateStored}`);
+                    db.ref(`analytics/dailyAnalytics/${lastDateStored}/${room}/usageHours`).set(yesterdayTotalHours);
+                }
+            });
+        }
+        
+        // Also force reset if there's accumulated time but it's clearly from a previous session
+        // (e.g., if totalMs is very large like 3+ hours but the page just loaded)
+        if (!needsReset) {
+            labKeys.forEach(room => {
+                if (roomUsage[room] && roomUsage[room].totalMs > 0) {
+                    const hours = roomUsage[room].totalMs / 3600000;
+                    // If there's more than 2 hours accumulated but the page just loaded, it's likely stale
+                    if (hours > 2) {
+                        console.log(`[Analytics Page Load] ${room} has ${hours.toFixed(2)}h accumulated on page load, likely stale data. Resetting.`);
+                        needsReset = true;
+                    }
+                }
+            });
+        }
+        
+        if (needsReset) {
+            labKeys.forEach(room => {
+                if (roomUsage[room]) {
+                    roomUsage[room].totalMs = 0;
+                    roomUsage[room].lastStart = null;
+                    roomUsage[room].isActive = false;
+                    db.ref(`analytics/roomUsage/${room}`).set(roomUsage[room]);
+                }
+            });
+            
+            // Clear localStorage dailyAnalytics
+            localStorage.removeItem('dailyAnalytics');
+            
+            // Update last active date
+            localStorage.setItem('last_active_date', todayStr);
+            
+            console.log('[Analytics Page Load] Reset complete, reloading analytics data');
+            // Reload analytics data after reset
+            setTimeout(() => loadAnalyticsData(), 500);
+        }
+    }
+
+    // Force setup live listener after a delay if not already set
+    setTimeout(() => {
+        if (!liveListener) {
+            console.log('[Analytics] Forcing live listener setup (timeout fallback)');
+            setupLiveListener();
+        }
+    }, 3000);
 
 
 
@@ -3559,12 +3660,21 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                 initialDataLoaded = true;
                 const today = new Date();
                 const todayStr = today.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
-                document.getElementById('date-picker-temp').value = todayStr;
-                document.getElementById('date-picker-hum').value = todayStr;
+                
+                // Only set date pickers if they're empty (don't overwrite user selection)
+                if (!document.getElementById('date-picker-temp').value) {
+                    document.getElementById('date-picker-temp').value = todayStr;
+                }
+                if (!document.getElementById('date-picker-hum').value) {
+                    document.getElementById('date-picker-hum').value = todayStr;
+                }
                 
                 // Populate room filters after labKeys is populated
                 populateAutomationRoomFilter();
                 populateSavingsRoomFilter();
+                
+                // Check and reset roomUsage if needed (for stale data on page load)
+                checkAndResetRoomUsage();
                 
                 // Load historical data after a short delay to ensure charts are initialized
                 setTimeout(() => {
@@ -3774,9 +3884,14 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             updateBarCharts();
 
-            // Disabled live chart updates - using only hourly historical data
-            // tempChart.update('none');
-            // humChart.update('none');
+            // Only update charts on initial load to populate data
+            // After that, rely on historical data to prevent minute-by-minute updates
+            if (!chartsInitialized) {
+                tempChart.update('none');
+                humChart.update('none');
+                chartsInitialized = true;
+                console.log('[Analytics Firebase Listener] Charts initialized with initial data');
+            }
 
             
 
@@ -3905,7 +4020,74 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
         loadHistoricalData(todayStr);
     }, 2000);
 
+    // Load savings data
+    setTimeout(() => {
+        loadSavingsData();
+    }, 2500);
+
     setInterval(secondUpdate, 1000);
+
+    // Midnight reset for daily usage tracking (Analytics page)
+    let lastDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+    
+    setInterval(() => {
+        const currentDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+        
+        if (currentDate !== lastDate) {
+            console.log(`[Analytics Midnight Reset] Date changed from ${lastDate} to ${currentDate}`);
+            
+            // Save yesterday's daily analytics totals to Firebase before reset
+            labKeys.forEach(room => {
+                if (roomUsage[room] && roomUsage[room].totalMs > 0) {
+                    const yesterdayTotalMs = roomUsage[room].totalMs;
+                    const yesterdayTotalSeconds = Math.round(yesterdayTotalMs / 1000);
+                    const yesterdayTotalHours = yesterdayTotalSeconds / 3600;
+                    
+                    console.log(`[Analytics Midnight Reset] ${room}: Saving ${yesterdayTotalHours.toFixed(2)}h to Firebase for ${lastDate}`);
+                    
+                    // Save to historical daily analytics
+                    db.ref(`analytics/dailyAnalytics/${lastDate}/${room}/usageHours`).set(yesterdayTotalHours);
+                    
+                    // Reset for new day
+                    roomUsage[room].totalMs = 0;
+                    roomUsage[room].lastStart = null;
+                    roomUsage[room].isActive = false;
+                    
+                    // Update Firebase
+                    db.ref(`analytics/roomUsage/${room}`).set(roomUsage[room]);
+                }
+            });
+            
+            // Clear localStorage dailyAnalytics to ensure fresh data for new day
+            localStorage.removeItem('dailyAnalytics');
+            
+            // Update currentDate to the new day
+            currentDate = new Date();
+            
+            // Reset date pickers to today
+            const todayStr = currentDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+            const datePickerTemp = document.getElementById('date-picker-temp');
+            const datePickerHum = document.getElementById('date-picker-hum');
+            const datePickerSummary = document.getElementById('date-picker-summary');
+            
+            if (datePickerTemp) datePickerTemp.value = todayStr;
+            if (datePickerHum) datePickerHum.value = todayStr;
+            if (datePickerSummary) datePickerSummary.value = todayStr;
+            
+            // Update labels
+            document.getElementById('date-label-temp').innerText = 'Today';
+            document.getElementById('date-label-hum').innerText = 'Today';
+            document.getElementById('date-label-summary').innerText = 'Today';
+            
+            // Reload analytics data for the new day (after date pickers are reset)
+            loadAnalyticsData();
+            
+            // Reload historical data for today
+            loadHistoricalData(todayStr);
+            
+            lastDate = currentDate;
+        }
+    }, 60000); // Check every minute
 
     // Periodic update for real-time session tracking (every 10 seconds)
     setInterval(() => {
@@ -4132,12 +4314,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
     function navigateDate(direction) {
         console.log('[navigateDate] Called with direction:', direction);
-        if (dateNavCooldown) {
-            console.log('[navigateDate] Cooldown active, ignoring');
-            return;
-        }
-        dateNavCooldown = true;
         console.log('[navigateDate] currentPeriod:', currentPeriod);
+        console.log('[navigateDate] currentDate before:', currentDate);
 
         if (currentPeriod === 'day') {
 
@@ -4157,11 +4335,23 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
         }
 
+        console.log('[navigateDate] currentDate after:', currentDate);
+
         updateDateDisplay();
 
         loadAnalyticsData();
 
-        setTimeout(() => dateNavCooldown = false, COOLDOWN_MS);
+        // Sync summary date picker with current date
+        const today = new Date();
+        const todayStr = today.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+        const currentDateStr = currentDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+        const datePickerSummary = document.getElementById('date-picker-summary');
+        if (datePickerSummary) {
+            datePickerSummary.value = currentDateStr;
+            const formattedDate = currentDateStr === todayStr ? 'Today' : currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            document.getElementById('date-label-summary').innerText = formattedDate;
+            console.log('[navigateDate] Updated date picker to:', currentDateStr);
+        }
 
     }
 
@@ -4782,140 +4972,59 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
             console.log(`[Live Cost Verification] Target Temp: ${targetTemp}`);
 
 
-            // Use historical data for accurate daily usage calculation
-            // online_duration accumulates across days, so we need to reconstruct from history
+            // Use Firebase roomUsage for accurate daily usage calculation
+            // For today, use real-time tracking from roomUsage
+            // For past dates, use historical daily analytics saved at midnight
 
+            hours = await getUsageHoursForDate(room, dateStr);
+            
+            console.log(`[loadDayView] ${room}: ${hours.toFixed(2)} hours from ${dateStr === todayStr ? 'Firebase roomUsage (today)' : 'historical daily analytics'}`);
+
+            // Get historical average target temperature from today's history for accurate cost calculation
             if (dateStr === todayStr) {
-
-                // Today: reconstruct from history to get accurate daily usage
-                const dateKey = dateStr;
-                console.log(`[loadDayView] Calling reconstructUsageFromHistory for ${room} with dateKey: ${dateKey}`);
-                const reconstruction = await reconstructUsageFromHistory(room, dateKey);
-                hours = reconstruction.hours;
-                
-                console.log(`[loadDayView] ${room} (today): reconstructed ${hours} hours from history`);
-
-                // Use historical targetTemp if available, otherwise fall back to current
-                if (reconstruction.targetTemp !== null && reconstruction.targetTemp !== undefined) {
-                    if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
-                        targetTemp = {
-                            unit_1: reconstruction.targetTemp1 || targetTemp.unit_1,
-                            unit_2: reconstruction.targetTemp2 || targetTemp.unit_2
-                        };
-                    } else {
-                        targetTemp = reconstruction.targetTemp;
-                    }
-                }
-
-                // Get historical average target temperature from today's history for accurate cost calculation
-                const snapshot = await db.ref(`history/${room}/${dateKey}`).once('value');
+                const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
                 const hourData = snapshot.val();
 
-                    if (hourData) {
-                        console.log(`[loadDayView] ${room} (today): roomConfig.units:`, roomConfig.units);
-                        console.log(`[loadDayView] ${room} (today): roomConfig.units.unit_1:`, roomConfig.units?.unit_1);
-                        console.log(`[loadDayView] ${room} (today): roomConfig.units.unit_2:`, roomConfig.units?.unit_2);
+                if (hourData) {
+                    console.log(`[loadDayView] ${room} (today): roomConfig.units:`, roomConfig.units);
+                    console.log(`[loadDayView] ${room} (today): roomConfig.units.unit_1:`, roomConfig.units?.unit_1);
+                    console.log(`[loadDayView] ${room} (today): roomConfig.units.unit_2:`, roomConfig.units?.unit_2);
 
-                        // Check if historical data has dual unit format (targetTemp1, targetTemp2)
-                        const hasDualUnitData = Object.values(hourData).some(h => h.targetTemp1 !== undefined || h.targetTemp2 !== undefined);
-                        console.log(`[loadDayView] ${room} (today): hasDualUnitData:`, hasDualUnitData);
+                    // Check if historical data has dual unit format (targetTemp1, targetTemp2)
+                    const hasDualUnitData = Object.values(hourData).some(h => h.targetTemp1 !== undefined || h.targetTemp2 !== undefined);
+                    console.log(`[loadDayView] ${room} (today): hasDualUnitData:`, hasDualUnitData);
 
-                        if (hasDualUnitData || (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2))) {
-                            // For dual unit, get average target temp for each unit
-                            // ESP32 logs as targetTemp1 and targetTemp2 directly in hourData
-                            const unit1TargetTemps = Object.values(hourData).map(h => h.targetTemp1).filter(t => t !== undefined && t !== null);
-                            const unit2TargetTemps = Object.values(hourData).map(h => h.targetTemp2).filter(t => t !== undefined && t !== null);
-                            console.log(`[loadDayView] ${room} (today): unit1TargetTemps array:`, unit1TargetTemps);
-                            console.log(`[loadDayView] ${room} (today): unit2TargetTemps array:`, unit2TargetTemps);
+                    if (hasDualUnitData || (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2))) {
+                        // For dual unit, get average target temp for each unit
+                        // ESP32 logs as targetTemp1 and targetTemp2 directly in hourData
+                        const unit1TargetTemps = Object.values(hourData).map(h => h.targetTemp1).filter(t => t !== undefined && t !== null);
+                        const unit2TargetTemps = Object.values(hourData).map(h => h.targetTemp2).filter(t => t !== undefined && t !== null);
+                        console.log(`[loadDayView] ${room} (today): unit1TargetTemps array:`, unit1TargetTemps);
+                        console.log(`[loadDayView] ${room} (today): unit2TargetTemps array:`, unit2TargetTemps);
 
-                            // If roomConfig has dual unit setup, use object format
-                            if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
-                                targetTemp = {
-                                    unit_1: unit1TargetTemps.length > 0 ? (unit1TargetTemps.reduce((a, b) => a + b, 0) / unit1TargetTemps.length) : targetTemp.unit_1,
-                                    unit_2: unit2TargetTemps.length > 0 ? (unit2TargetTemps.reduce((a, b) => a + b, 0) / unit2TargetTemps.length) : targetTemp.unit_2
-                                };
-                            } else {
-                                // If roomConfig is single unit but historical data has dual unit format, average both units
-                                const allTemps = [...unit1TargetTemps, ...unit2TargetTemps];
-                                targetTemp = allTemps.length > 0 ? (allTemps.reduce((a, b) => a + b, 0) / allTemps.length) : targetTemp;
-                                console.log(`[loadDayView] ${room} (today): averaged dual unit temps to single value:`, targetTemp);
-                            }
-                        } else {
-                            // For single unit, get average target temp
-                            const targetTemps = Object.values(hourData).map(h => h.targetTemp).filter(t => t !== undefined && t !== null);
-                            console.log(`[loadDayView] ${room} (today): targetTemps array:`, targetTemps);
-                            targetTemp = targetTemps.length > 0 ? (targetTemps.reduce((a, b) => a + b, 0) / targetTemps.length) : targetTemp;
-                        }
-                        console.log(`[loadDayView] ${room} (today): historical avg targetTemp: ${targetTemp}`);
-                    }
-
-            } else {
-
-                // Historical: use dailyAnalytics.data first
-
-                hours = dailyAnalytics.data[room]?.[dateLabel] || 0;
-
-                
-
-                // If dailyAnalytics has no value or 0, try to reconstruct from history
-
-                if (hours === 0) {
-
-                    console.log(`[loadDayView] ${room} on ${dateLabel}: dailyAnalytics has 0, attempting reconstruction from history`);
-
-                    // Convert dateLabel ("Aug 13") to dateKey ("2026-08-13") for history path
-
-                    const dateKey = currentDate.toISOString().split('T')[0];
-
-                    const reconstruction = await reconstructUsageFromHistory(room, dateKey);
-                    hours = reconstruction.hours;
-                    
-                    // Use historical targetTemp if available, otherwise fall back to current
-                    if (reconstruction.targetTemp !== null && reconstruction.targetTemp !== undefined) {
+                        // If roomConfig has dual unit setup, use object format
                         if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
-                            targetTemp = {
-                                unit_1: reconstruction.targetTemp1 || targetTemp.unit_1,
-                                unit_2: reconstruction.targetTemp2 || targetTemp.unit_2
-                            };
-                        } else {
-                            targetTemp = reconstruction.targetTemp;
-                        }
-                    }
-
-                    console.log(`[loadDayView] ${room} on ${dateLabel}: reconstructed ${hours} hours from history, targetTemp: ${targetTemp}`);
-
-                } else {
-
-                    console.log(`[loadDayView] ${room} on ${dateLabel}: ${hours} hours from dailyAnalytics`);
-
-                    // Get historical average target temperature from Firebase for accurate cost calculation
-                    const dateKey = currentDate.toISOString().split('T')[0];
-                    const snapshot = await db.ref(`history/${room}/${dateKey}`).once('value');
-                    const hourData = snapshot.val();
-
-                    if (hourData) {
-                        if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
-                            // For dual unit, get average target temp for each unit
-                            // ESP32 logs as targetTemp1 and targetTemp2 directly in hourData
-                            const unit1TargetTemps = Object.values(hourData).map(h => h.targetTemp1).filter(t => t !== undefined && t !== null);
-                            const unit2TargetTemps = Object.values(hourData).map(h => h.targetTemp2).filter(t => t !== undefined && t !== null);
                             targetTemp = {
                                 unit_1: unit1TargetTemps.length > 0 ? (unit1TargetTemps.reduce((a, b) => a + b, 0) / unit1TargetTemps.length) : targetTemp.unit_1,
                                 unit_2: unit2TargetTemps.length > 0 ? (unit2TargetTemps.reduce((a, b) => a + b, 0) / unit2TargetTemps.length) : targetTemp.unit_2
                             };
                         } else {
-                            // For single unit, get average target temp
-                            const targetTemps = Object.values(hourData).map(h => h.targetTemp).filter(t => t !== undefined && t !== null);
-                            targetTemp = targetTemps.length > 0 ? (targetTemps.reduce((a, b) => a + b, 0) / targetTemps.length) : targetTemp;
+                            // If roomConfig is single unit but historical data has dual unit format, average both units
+                            const allTemps = [...unit1TargetTemps, ...unit2TargetTemps];
+                            targetTemp = allTemps.length > 0 ? (allTemps.reduce((a, b) => a + b, 0) / allTemps.length) : targetTemp;
+                            console.log(`[loadDayView] ${room} (today): averaged dual unit temps to single value:`, targetTemp);
                         }
-                        console.log(`[loadDayView] ${room} on ${dateLabel}: historical avg targetTemp: ${targetTemp}`);
+                    } else {
+                        // For single unit, get average target temp
+                        const targetTemps = Object.values(hourData).map(h => h.targetTemp).filter(t => t !== undefined && t !== null);
+                        console.log(`[loadDayView] ${room} (today): targetTemps array:`, targetTemps);
+                        targetTemp = targetTemps.length > 0 ? (targetTemps.reduce((a, b) => a + b, 0) / targetTemps.length) : targetTemp;
                     }
-
+                    console.log(`[loadDayView] ${room} (today): historical avg targetTemp: ${targetTemp}`);
                 }
-
             }
 
-
+            // Calculate value based on current metric
 
             if (currentMetric === 'cost') {
 
@@ -5047,14 +5156,13 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
             let prevValue = 0;
 
             if (currentMetric === 'cost') {
-
-                const prevHours = dailyAnalytics.data[room]?.[prevDateLabel] || 0;
-
+                const prevDateStr = prevDate.toISOString().split('T')[0];
+                const prevHours = await getUsageHoursForDate(room, prevDateStr);
                 prevValue = AirconCostCalculator.computeAirconCost(airconConfig[room], prevHours, ratePerKwh, targetTemp);
 
             } else if (currentMetric === 'usage') {
-
-                prevValue = dailyAnalytics.data[room]?.[prevDateLabel] || 0;
+                const prevDateStr = prevDate.toISOString().split('T')[0];
+                prevValue = await getUsageHoursForDate(room, prevDateStr);
 
             } else if (currentMetric === 'schedule') {
                 // Load previous day schedule efficiency from Firebase
@@ -5231,8 +5339,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
             for (const room of labKeys) {
 
                 if (currentMetric === 'cost') {
-
-                    const hours = dailyAnalytics.data[room]?.[prevDateLabel] || 0;
+                    const prevDateStr = prevDate.toISOString().split('T')[0];
+                    const hours = await getUsageHoursForDate(room, prevDateStr);
                     const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
                     let targetTemp;
                     if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
@@ -5246,8 +5354,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                     previousValue += AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh, targetTemp);
 
                 } else if (currentMetric === 'usage') {
-
-                    previousValue += dailyAnalytics.data[room]?.[prevDateLabel] || 0;
+                    const prevDateStr = prevDate.toISOString().split('T')[0];
+                    previousValue += await getUsageHoursForDate(room, prevDateStr);
 
                 } else if (currentMetric === 'schedule') {
                     // Load schedule efficiency for comparison
@@ -5322,8 +5430,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                 for (const room of labKeys) {
 
                     if (currentMetric === 'cost') {
-
-                        const hours = dailyAnalytics.data[room]?.[dateLabel] || 0;
+                        const dateStr = d.toISOString().split('T')[0];
+                        const hours = await getUsageHoursForDate(room, dateStr);
                         const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
                         let targetTemp;
                         if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
@@ -5337,8 +5445,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                         previousValue += AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh, targetTemp);
 
                     } else if (currentMetric === 'usage') {
-
-                        previousValue += dailyAnalytics.data[room]?.[dateLabel] || 0;
+                        const dateStr = d.toISOString().split('T')[0];
+                        previousValue += await getUsageHoursForDate(room, dateStr);
 
                     } else if (currentMetric === 'schedule') {
                         // For weekly comparison, we'll use current schedule efficiency as a placeholder
@@ -5414,8 +5522,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                 for (const room of labKeys) {
 
                     if (currentMetric === 'cost') {
-
-                        const hours = dailyAnalytics.data[room]?.[dateLabel] || 0;
+                        const dateStr = d.toISOString().split('T')[0];
+                        const hours = await getUsageHoursForDate(room, dateStr);
                         const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
                         let targetTemp;
                         if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
@@ -5429,8 +5537,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                         previousValue += AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh, targetTemp);
 
                     } else if (currentMetric === 'usage') {
-
-                        previousValue += dailyAnalytics.data[room]?.[dateLabel] || 0;
+                        const dateStr = d.toISOString().split('T')[0];
+                        previousValue += await getUsageHoursForDate(room, dateStr);
 
                     } else if (currentMetric === 'schedule') {
                         // For monthly comparison, use current schedule efficiency distributed across days
@@ -5505,8 +5613,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                     for (const room of labKeys) {
 
                         if (currentMetric === 'cost') {
-
-                            const hours = dailyAnalytics.data[room]?.[dateLabel] || 0;
+                            const dateStr = d.toISOString().split('T')[0];
+                            const hours = await getUsageHoursForDate(room, dateStr);
                             const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
                             let targetTemp;
                             if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
@@ -5520,8 +5628,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                             previousValue += AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh, targetTemp);
 
                         } else if (currentMetric === 'usage') {
-
-                            previousValue += dailyAnalytics.data[room]?.[dateLabel] || 0;
+                            const dateStr = d.toISOString().split('T')[0];
+                            previousValue += await getUsageHoursForDate(room, dateStr);
 
                         } else if (currentMetric === 'schedule') {
                             // For yearly comparison, use current schedule efficiency distributed across days
@@ -5825,14 +5933,10 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                 let hours = 0;
 
-                
-
-                // Use dailyAnalytics.data for cost/usage
-
+                // Load usage hours from Firebase for the selected date
+                const dateStr = d.toISOString().split('T')[0];
                 if (currentMetric === 'cost' || currentMetric === 'usage') {
-
-                    hours = dailyAnalytics.data[room]?.[dateLabel] || 0;
-
+                    hours = await getUsageHoursForDate(room, dateStr);
                 }
 
 
@@ -5975,11 +6079,12 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                 let value = 0;
 
                 if (currentMetric === 'cost') {
-                    const hours = dailyAnalytics.data[room]?.[dateLabel] || 0;
+                    // Load usage hours from Firebase for the selected date
+                    const dateStr = d.toISOString().split('T')[0];
+                    const hours = await getUsageHoursForDate(room, dateStr);
                     const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
 
                     // Get historical average target temperature from Firebase
-                    const dateStr = d.toISOString().split('T')[0];
                     const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
                     const hourData = snapshot.val();
 
@@ -6001,8 +6106,9 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                     value = AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh, targetTemp);
 
                 } else if (currentMetric === 'usage') {
-
-                    value = dailyAnalytics.data[room]?.[dateLabel] || 0;
+                    // Load usage hours from Firebase for the selected date
+                    const dateStr = d.toISOString().split('T')[0];
+                    value = await getUsageHoursForDate(room, dateStr);
 
                 } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
 
@@ -6191,14 +6297,10 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                 let hours = 0;
 
-                
-
-                // Use dailyAnalytics.data for cost/usage
-
+                // Load usage hours from Firebase for the selected date
+                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                 if (currentMetric === 'cost' || currentMetric === 'usage') {
-
-                    hours = dailyAnalytics.data[room]?.[dateLabel] || 0;
-
+                    hours = await getUsageHoursForDate(room, dateStr);
                 }
 
 
@@ -6326,12 +6428,12 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                 const d = new Date(prevMonth.getFullYear(), prevMonth.getMonth(), day);
 
-                const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-
                 let value = 0;
 
                 if (currentMetric === 'cost') {
-                    const hours = dailyAnalytics.data[room]?.[dateLabel] || 0;
+                    // Load usage hours from Firebase for the selected date
+                    const dateStr = d.toISOString().split('T')[0];
+                    const hours = await getUsageHoursForDate(room, dateStr);
                     const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
                     let targetTemp;
                     if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
@@ -6345,8 +6447,9 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                     value = AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh, targetTemp);
 
                 } else if (currentMetric === 'usage') {
-
-                    value = dailyAnalytics.data[room]?.[dateLabel] || 0;
+                    // Load usage hours from Firebase for the selected date
+                    const dateStr = d.toISOString().split('T')[0];
+                    value = await getUsageHoursForDate(room, dateStr);
 
                 } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
 
@@ -6537,14 +6640,10 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                     let hours = 0;
 
-                    
-
-                    // Use dailyAnalytics.data for cost/usage
-
+                    // Load usage hours from Firebase for the selected date
+                    const dateStr = d.toISOString().split('T')[0];
                     if (currentMetric === 'cost' || currentMetric === 'usage') {
-
-                        hours = dailyAnalytics.data[room]?.[dateLabel] || 0;
-
+                        hours = await getUsageHoursForDate(room, dateStr);
                     }
 
 
@@ -6674,6 +6773,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                     let value = 0;
 
                     if (currentMetric === 'cost') {
+                        const dateStr = d.toISOString().split('T')[0];
+                        const hours = await getUsageHoursForDate(room, dateStr);
                         const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
                         let targetTemp;
                         if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
@@ -6684,12 +6785,11 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                         } else {
                             targetTemp = labsData[room]?.targetTemp;
                         }
-                        const hours = dailyAnalytics.data[room]?.[dateLabel] || 0;
                         value = AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh, targetTemp);
 
                     } else if (currentMetric === 'usage') {
-
-                        value = dailyAnalytics.data[room]?.[dateLabel] || 0;
+                        const dateStr = d.toISOString().split('T')[0];
+                        value = await getUsageHoursForDate(room, dateStr);
 
                     } else if (currentMetric === 'temperature' || currentMetric === 'humidity') {
 
@@ -6825,7 +6925,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
 
 
-        // Aggregate data for each room from dailyAnalytics.data
+        // Aggregate data for each room from Firebase for the selected date range
 
         for (let i = 0; i < labKeys.length; i++) {
 
@@ -6837,54 +6937,30 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             if (currentMetric === 'cost' || currentMetric === 'usage') {
 
-                // Use dailyAnalytics.data for cost/usage
-
-                const roomDailyData = dailyAnalytics.data[room];
-
-                if (roomDailyData) {
-
-                    const dates = Object.keys(roomDailyData);
-
-                    if (dates.length > 0 && (startDate === 'No data' || dates[0] < startDate)) {
-
-                        startDate = dates[0];
-
-                    }
-
+                // Load usage hours from Firebase for the selected date range
+                const exportStartDate = new Date(document.getElementById('export-start-date').value);
+                const exportEndDate = new Date(document.getElementById('export-end-date').value);
+                
+                for (let d = new Date(exportStartDate); d <= exportEndDate; d.setDate(d.getDate() + 1)) {
+                    const dateStr = d.toISOString().split('T')[0];
+                    const hours = await getUsageHoursForDate(room, dateStr);
                     
-
-                    for (const dateLabel of dates) {
-
-                        const hours = roomDailyData[dateLabel] || 0;
-
-                        
-
-                        if (currentMetric === 'cost') {
-                            const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
-                            let targetTemp;
-                            if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
-                                targetTemp = {
-                                    unit_1: labsData[room]?.units?.unit_1?.targetTemp,
-                                    unit_2: labsData[room]?.units?.unit_2?.targetTemp
-                                };
-                            } else {
-                                targetTemp = labsData[room]?.targetTemp;
-                            }
-                            console.log('[Cost Calculator] Computing cost for', { room, dateLabel, hours, ratePerKwh });
-                            console.log('[Cost Calculator] airconConfig[room]:', airconConfig[room]);
-
-                            roomTotal += AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh, targetTemp);
-
-                            console.log('[Cost Calculator] Cost for', { room, dateLabel, hours, ratePerKwh }, 'is', roomTotal);
-
-                        } else if (currentMetric === 'usage') {
-
-                            roomTotal += hours;
-
+                    if (currentMetric === 'cost') {
+                        const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
+                        let targetTemp;
+                        if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
+                            targetTemp = {
+                                unit_1: labsData[room]?.units?.unit_1?.targetTemp,
+                                unit_2: labsData[room]?.units?.unit_2?.targetTemp
+                            };
+                        } else {
+                            targetTemp = labsData[room]?.targetTemp;
                         }
+                        roomTotal += AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh, targetTemp);
 
+                    } else if (currentMetric === 'usage') {
+                        roomTotal += hours;
                     }
-
                 }
 
             } else {
@@ -7047,9 +7123,56 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
         updateDateDisplay();
 
-        // Initialize date inputs with default values (last 7 days to today)
+        // Initialize date pickers with today's date
         const today = new Date();
-        // Use local date components to avoid timezone issues
+        const todayStr = today.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+        
+        const datePickerTemp = document.getElementById('date-picker-temp');
+        const datePickerHum = document.getElementById('date-picker-hum');
+        
+        if (datePickerTemp) {
+            datePickerTemp.value = todayStr;
+            datePickerTemp.min = '2020-01-01';
+            datePickerTemp.max = '2030-12-31';
+            console.log(`[Date Init] Set date picker temp to: ${todayStr}`);
+            console.log(`[Date Init] Date picker temp min: ${datePickerTemp.min}, max: ${datePickerTemp.max}`);
+            datePickerTemp.addEventListener('click', () => console.log('Date picker temp clicked via addEventListener'));
+            datePickerTemp.addEventListener('change', () => console.log('Date picker temp changed to:', datePickerTemp.value));
+        }
+        
+        if (datePickerHum) {
+            datePickerHum.value = todayStr;
+            datePickerHum.min = '2020-01-01';
+            datePickerHum.max = '2030-12-31';
+            console.log(`[Date Init] Set date picker hum to: ${todayStr}`);
+            console.log(`[Date Init] Date picker hum min: ${datePickerHum.min}, max: ${datePickerHum.max}`);
+            datePickerHum.addEventListener('click', () => console.log('Date picker hum clicked via addEventListener'));
+            datePickerHum.addEventListener('change', () => console.log('Date picker hum changed to:', datePickerHum.value));
+        }
+        
+        // Initialize summary date picker for Cost/Usage/Schedule
+        const datePickerSummary = document.getElementById('date-picker-summary');
+        if (datePickerSummary) {
+            datePickerSummary.value = todayStr;
+            datePickerSummary.min = '2020-01-01';
+            datePickerSummary.max = '2030-12-31';
+            console.log(`[Date Init] Set date picker summary to: ${todayStr}`);
+            console.log(`[Date Init] Date picker summary min: ${datePickerSummary.min}, max: ${datePickerSummary.max}`);
+            datePickerSummary.addEventListener('click', () => console.log('Date picker summary clicked via addEventListener'));
+            datePickerSummary.addEventListener('change', () => {
+                console.log('Date picker summary changed to:', datePickerSummary.value);
+                const selectedDate = datePickerSummary.value;
+                const today = new Date();
+                const todayStr = today.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+                const formattedDate = selectedDate === todayStr ? 'Today' : new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                document.getElementById('date-label-summary').innerText = formattedDate;
+                // Update currentDate to match the selected date
+                currentDate = new Date(selectedDate + 'T00:00:00');
+                loadAnalyticsData();
+            });
+        }
+
+        // Initialize date inputs with default values (last 7 days to today)
         const localToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
         const sevenDaysAgo = new Date(localToday);
         sevenDaysAgo.setDate(localToday.getDate() - 7);
@@ -7066,6 +7189,26 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
         document.getElementById('export-date-to').value = formatDate(localToday);
         
         console.log(`[Date Init] Set date range: ${formatDate(sevenDaysAgo)} to ${formatDate(localToday)}`);
+
+        // Add event listeners for date navigation arrow buttons
+        const navLeft = document.getElementById('nav-left');
+        const navRight = document.getElementById('nav-right');
+        
+        if (navLeft) {
+            navLeft.addEventListener('click', () => {
+                console.log('[Nav Left] Button clicked');
+                navigateDate(-1);
+            });
+            console.log('[Date Init] Added event listener for nav-left button');
+        }
+        
+        if (navRight) {
+            navRight.addEventListener('click', () => {
+                console.log('[Nav Right] Button clicked');
+                navigateDate(1);
+            });
+            console.log('[Date Init] Added event listener for nav-right button');
+        }
 
         
 
