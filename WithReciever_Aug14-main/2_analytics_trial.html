@@ -4899,8 +4899,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
         const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
         
-        // Force currentDate to today for day view
-        currentDate = new Date();
+        // Use existing currentDate instead of forcing it to today
+        // currentDate = new Date(); // REMOVED: This was resetting date to today every time
         
         const dateStr = currentDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
 

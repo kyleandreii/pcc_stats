@@ -1123,7 +1123,7 @@
                 // For room-level, check if it's a dual-unit room
                 const roomData = labsData[roomPath];
                 console.log(`[Duration] Room mode - roomData:`, roomData);
-                const isDualUnitRoom = roomData && roomData.units && (roomData.units.unit_1 || roomData.units.unit_2);
+                const isDualUnitRoom = !!(roomData && roomData.units && (roomData.units.unit_1 || roomData.units.unit_2));
                 console.log(`[Duration] isDualUnitRoom: ${isDualUnitRoom}`);
                 
                 if (isDualUnitRoom) {
@@ -1131,6 +1131,11 @@
                     if (roomData.units.unit_1) {
                         const unit1Key = `${roomPath}_unit_1`;
                         console.log(`[Duration] Processing unit_1 - unit1Key: ${unit1Key}, roomUsage[unit1Key]:`, roomUsage[unit1Key]);
+                        // Initialize unit-level roomUsage if not exists
+                        if (!roomUsage[unit1Key]) {
+                            roomUsage[unit1Key] = { totalMs: 0, lastStart: null, isActive: false };
+                            console.log(`[Duration] Initialized roomUsage for ${unit1Key}`);
+                        }
                         if (roomUsage[unit1Key]) {
                             totalMs += roomUsage[unit1Key].totalMs || 0;
                             if (roomUsage[unit1Key].isActive) {
@@ -1141,6 +1146,11 @@
                     if (roomData.units.unit_2) {
                         const unit2Key = `${roomPath}_unit_2`;
                         console.log(`[Duration] Processing unit_2 - unit2Key: ${unit2Key}, roomUsage[unit2Key]:`, roomUsage[unit2Key]);
+                        // Initialize unit-level roomUsage if not exists
+                        if (!roomUsage[unit2Key]) {
+                            roomUsage[unit2Key] = { totalMs: 0, lastStart: null, isActive: false };
+                            console.log(`[Duration] Initialized roomUsage for ${unit2Key}`);
+                        }
                         if (roomUsage[unit2Key]) {
                             totalMs += roomUsage[unit2Key].totalMs || 0;
                             if (roomUsage[unit2Key].isActive) {
