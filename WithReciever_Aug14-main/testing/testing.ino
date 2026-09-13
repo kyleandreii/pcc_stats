@@ -10,14 +10,22 @@
 #include <IRsend.h>
 #include <time.h>
 #include <Preferences.h>
+#include <ArduinoOTA.h>
 
 #define OLED_SDA 21
 #define OLED_SCL 22
 
-#define WIFI_SSID "BA1D616R8"
-#define WIFI_PASSWORD "GM6AA4X8rm128!"
+#define WIFI_SSID "ALT"
+#define WIFI_PASSWORD "baDge7Es"
 #define DATABASE_SECRET "DvhZNBNmaFVHMFSup70ezVZlEVHWwO87OrGK4Td7"
 #define DATABASE_URL "https://pcc-stats-default-rtdb.asia-southeast1.firebasedatabase.app/"
+
+// Password required for wireless (OTA) reflashing from Arduino IDE - change
+// this per-device if you want each room to require a different password,
+// or leave it the same across all rooms for simplicity. Without a password,
+// anyone on the same WiFi network could push arbitrary firmware to this
+// device's IR-controlled relay/AC hardware.
+#define OTA_PASSWORD "pccstats-ota-2026"
 
 // CHANGE THIS TO YOUR ROOM ID (e.g., "Room_1", "Room_402", "Room_403", etc.)
 #define ROOM_ID "Room_1"
@@ -47,6 +55,30 @@ const int rawOffLen = sizeof(rawOff) / sizeof(rawOff[0]);
 const int rawTempUpLen = sizeof(rawTempUp) / sizeof(rawTempUp[0]);
 const int rawTempDownLen = sizeof(rawTempDown) / sizeof(rawTempDown[0]);
 
+// --- Dynamic IR Code Library ---
+// The codes actually transmitted live in these RAM buffers, not the
+// compiled-in arrays above directly. They're initialized from those
+// compiled-in codes, then refreshed from Firebase at
+// /irRemoteLibrary/{ROOM_ID}/{command}/rawData (the Remote Library page) on
+// boot and periodically after that. This means updating or replacing an
+// AC's IR codes via the Remote Library no longer requires reflashing this
+// device - only a brand new physical room still needs an initial flash.
+// If Firebase has nothing (offline, or never captured), the last codes
+// cached in flash (Preferences) are used; if there's no cache either, the
+// compiled-in codes above are the final fallback, so this device is never
+// left with zero usable codes.
+#define MAX_IR_CODE_LEN 400
+uint16_t irCodeOn[MAX_IR_CODE_LEN];
+uint16_t irCodeOff[MAX_IR_CODE_LEN];
+uint16_t irCodeTempUp[MAX_IR_CODE_LEN];
+uint16_t irCodeTempDown[MAX_IR_CODE_LEN];
+size_t irCodeOnLen = 0;
+size_t irCodeOffLen = 0;
+size_t irCodeTempUpLen = 0;
+size_t irCodeTempDownLen = 0;
+const unsigned long IR_LIBRARY_REFRESH_MS = 900000; // 15 minutes
+unsigned long lastIRLibraryRefreshMillis = 0;
+
 FirebaseData fbdo;
 FirebaseData stream;
 FirebaseAuth auth;
@@ -69,7 +101,7 @@ float maxTemp = 30.0;
 unsigned long sendDataPrevMillis = 0;
 
 bool automationEnabled = false;  // Controls humidity-based automation
-bool temperatureAutomationEnabled = false;  // Temperature safety disabled
+bool temperatureAutomationEnabled = true;  // Temperature safety is always active (see Settings UI)
 unsigned long automationStartTime = 0;  // Timestamp when automation was last enabled
 String lastAutomationEvent = "";  // Description of last automation action
 String lastAutomationEventType = "";  // Type: "humidity", "temperature", "power"
@@ -93,7 +125,6 @@ const unsigned long STEP_PRESS_DELAY_MS = 400;
 const unsigned long IR_SEND_COOLDOWN_MS = 60000; // 1 minute cooldown between IR sends
 const unsigned long SERIAL_LOG_THROTTLE_MS = 5000; // 5 seconds between serial logs
 
-unsigned long lastAutomationCheckMillis = 0;
 unsigned long lastTempAutomationCheckMillis = 0;
 unsigned long lastHumidityAutomationCheckMillis = 0;
 unsigned long lastIRSendMillis = 0;
@@ -106,6 +137,12 @@ void logAutomationEventToHistory();
 void updateOLED(float currentTemp);
 void runAutomation(float temp, float humidity);
 void handleIRReceiver();
+void showBootStatus(const char* line1, const char* line2 = "");
+void loadDefaultIRCodes();
+void loadIRCodesFromPreferences();
+void saveIRCodesToPreferences();
+void loadIRCodesFromLibrary(bool cacheOnSuccess);
+bool loadIRCodeArrayFromJson(FirebaseJson &json, const char* path, uint16_t* outBuf, size_t &outLen);
 
 void setup() {
   Serial.begin(115200);
@@ -115,6 +152,11 @@ void setup() {
   preferences.begin("pcc-automation", false);
   automationEnabled = preferences.getBool("automationEnabled", false);
   Serial.println("Loaded automation enabled state from Preferences: " + String(automationEnabled));
+
+  // Start with the compiled-in codes, then overlay whatever was last cached
+  // from Firebase - guarantees usable IR codes even before WiFi connects.
+  loadDefaultIRCodes();
+  loadIRCodesFromPreferences();
 
   Wire.begin(OLED_SDA, OLED_SCL);
   irsend.begin();
@@ -131,13 +173,47 @@ void setup() {
     for (;;);
   }
 
+  showBootStatus("Connecting WiFi...");
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
   }
   Serial.println("WiFi connected");
 
+  // Wireless (OTA) reflashing - once this is running, Arduino IDE shows this
+  // device as a network port ("esp32-Room_X at <ip>") instead of needing a
+  // USB cable for future uploads. USB still works as a fallback; this is
+  // additive, not a replacement.
+  String otaHostname = "esp32-" + String(ROOM_ID);
+  ArduinoOTA.setHostname(otaHostname.c_str());
+  ArduinoOTA.setPassword(OTA_PASSWORD);
+
+  ArduinoOTA.onStart([]() {
+    String type = (ArduinoOTA.getCommand() == U_FLASH) ? "sketch" : "filesystem";
+    Serial.println("[OTA] Update starting: " + type);
+    showBootStatus("OTA Update...", "Do not power off");
+  });
+  ArduinoOTA.onEnd([]() {
+    Serial.println("\n[OTA] Update complete, rebooting...");
+    showBootStatus("Update complete", "Rebooting...");
+  });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    Serial.printf("[OTA] Progress: %u%%\r", (progress * 100) / total);
+  });
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.printf("[OTA] Error[%u]: ", error);
+    if (error == OTA_AUTH_ERROR) Serial.println("Auth failed");
+    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin failed");
+    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect failed");
+    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive failed");
+    else if (error == OTA_END_ERROR) Serial.println("End failed");
+  });
+
+  ArduinoOTA.begin();
+  Serial.println("[OTA] Ready - hostname: " + otaHostname);
+
   // Configure NTP time
+  showBootStatus("WiFi connected", "Syncing time...");
   configTime(8 * 3600, 0, "pool.ntp.org", "time.nist.gov");
   Serial.println("Waiting for NTP time sync...");
   
@@ -162,6 +238,7 @@ void setup() {
     Serial.print(asctime(timeinfo));
   }
 
+  showBootStatus("Time synced", "Connecting Firebase...");
   config.signer.tokens.legacy_token = DATABASE_SECRET;
   config.database_url = DATABASE_URL;
   Firebase.begin(&config, &auth);
@@ -175,69 +252,96 @@ void setup() {
     Serial.println("Stream path: /" + String(ROOM_ID));
   }
 
-  Firebase.RTDB.getBool(&fbdo, "/" + String(ROOM_ID) + "/automation/enabled");
-  if (fbdo.httpCode() == FIREBASE_ERROR_HTTP_CODE_OK) {
-    automationEnabled = fbdo.boolData();
-    preferences.putBool("automationEnabled", automationEnabled);
-    Serial.println("Synced automation enabled state from Firebase: " + String(automationEnabled));
-    if (automationEnabled) {
-      Serial.println("✅ [Setup] Humidity automation is ENABLED");
+  // Load all room config (automation flags/thresholds + online duration) in a
+  // single request instead of 8 separate sequential GET calls - each one was
+  // a full network round trip, and they were the biggest contributor to the
+  // long delay between "WiFi connected" and the OLED showing anything useful.
+  showBootStatus("Firebase ready", "Loading config...");
+  Serial.println("[Setup] Loading room configuration in a single request...");
+  if (Firebase.RTDB.getJSON(&fbdo, "/" + String(ROOM_ID))) {
+    FirebaseJson &roomJson = fbdo.jsonObject();
+    FirebaseJsonData jsonData;
+
+    if (roomJson.get(jsonData, "automation/enabled")) {
+      automationEnabled = jsonData.boolValue;
+      preferences.putBool("automationEnabled", automationEnabled);
+      Serial.println("Synced automation enabled state from Firebase: " + String(automationEnabled));
+      Serial.println(automationEnabled ? "✅ [Setup] Humidity automation is ENABLED" : "❌ [Setup] Humidity automation is DISABLED");
     } else {
-      Serial.println("❌ [Setup] Humidity automation is DISABLED");
+      Serial.println("⚠️ [Setup] No automation/enabled in Firebase, using default: " + String(automationEnabled));
     }
-  } else {
-    Serial.println("⚠️ [Setup] Failed to read automation enabled state from Firebase. HTTP code: " + String(fbdo.httpCode()));
-  }
 
-  Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/automation/humidityOccupiedThreshold");
-  if (fbdo.httpCode() == FIREBASE_ERROR_HTTP_CODE_OK) {
-    float threshold = fbdo.floatData();
-    if (threshold > 0) {
-      humidityOccupiedThreshold = threshold;
-      MAX_HUMIDITY = threshold;
-      Serial.println("Synced humidity occupied threshold from Firebase: " + String(humidityOccupiedThreshold) + "%");
+    if (roomJson.get(jsonData, "automation/humidityOccupiedThreshold")) {
+      float threshold = jsonData.floatValue;
+      if (threshold > 0) {
+        humidityOccupiedThreshold = threshold;
+        MAX_HUMIDITY = threshold;
+        Serial.println("Synced humidity occupied threshold from Firebase: " + String(humidityOccupiedThreshold) + "%");
+      }
     } else {
-      Serial.println("⚠️ [Setup] Firebase humidity occupied threshold is 0 or invalid, using default: " + String(MAX_HUMIDITY) + "%");
+      Serial.println("⚠️ [Setup] No humidity occupied threshold in Firebase, using default: " + String(MAX_HUMIDITY) + "%");
     }
-  } else {
-    Serial.println("⚠️ [Setup] Failed to read humidity occupied threshold from Firebase. HTTP code: " + String(fbdo.httpCode()) + ", using default: " + String(MAX_HUMIDITY) + "%");
-  }
 
-  Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/automation/humidityEmptyThreshold");
-  if (fbdo.httpCode() == FIREBASE_ERROR_HTTP_CODE_OK) {
-    float threshold = fbdo.floatData();
-    if (threshold > 0) {
-      humidityEmptyThreshold = threshold;
-      MIN_HUMIDITY = threshold;
-      Serial.println("Synced humidity empty threshold from Firebase: " + String(humidityEmptyThreshold) + "%");
+    if (roomJson.get(jsonData, "automation/humidityEmptyThreshold")) {
+      float threshold = jsonData.floatValue;
+      if (threshold > 0) {
+        humidityEmptyThreshold = threshold;
+        MIN_HUMIDITY = threshold;
+        Serial.println("Synced humidity empty threshold from Firebase: " + String(humidityEmptyThreshold) + "%");
+      }
     } else {
-      Serial.println("⚠️ [Setup] Firebase humidity empty threshold is 0 or invalid, using default: " + String(MIN_HUMIDITY) + "%");
+      Serial.println("⚠️ [Setup] No humidity empty threshold in Firebase, using default: " + String(MIN_HUMIDITY) + "%");
     }
+
+    if (roomJson.get(jsonData, "thresholds/minTemp")) {
+      float temp = jsonData.floatValue;
+      if (temp > 0) {
+        minTemp = temp;
+        Serial.println("Synced minTemp from Firebase: " + String(minTemp) + "°C");
+      }
+    }
+
+    if (roomJson.get(jsonData, "thresholds/maxTemp")) {
+      float temp = jsonData.floatValue;
+      if (temp > 0) {
+        maxTemp = temp;
+        Serial.println("Synced maxTemp from Firebase: " + String(maxTemp) + "°C");
+      }
+    }
+
+    if (roomJson.get(jsonData, "online_duration")) {
+      onlineDurationSeconds = jsonData.intValue;
+      Serial.println("[Setup] Loaded online_duration from Firebase: " + String(onlineDurationSeconds) + " seconds");
+    } else {
+      Serial.println("[Setup] No online_duration found in Firebase, starting at 0");
+    }
+
+    #if DUAL_UNIT_MODE
+    if (roomJson.get(jsonData, "units/unit_1/online_duration")) {
+      onlineDurationSecondsUnit1 = jsonData.intValue;
+      Serial.println("[Setup] Loaded online_duration for unit 1 from Firebase: " + String(onlineDurationSecondsUnit1) + " seconds");
+    } else {
+      Serial.println("[Setup] No online_duration found for unit 1 in Firebase, starting at 0");
+    }
+
+    if (roomJson.get(jsonData, "units/unit_2/online_duration")) {
+      onlineDurationSecondsUnit2 = jsonData.intValue;
+      Serial.println("[Setup] Loaded online_duration for unit 2 from Firebase: " + String(onlineDurationSecondsUnit2) + " seconds");
+    } else {
+      Serial.println("[Setup] No online_duration found for unit 2 in Firebase, starting at 0");
+    }
+    #endif
   } else {
-    Serial.println("⚠️ [Setup] Failed to read humidity empty threshold from Firebase. HTTP code: " + String(fbdo.httpCode()) + ", using default: " + String(MIN_HUMIDITY) + "%");
-  }
-
-  Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/thresholds/minTemp");
-  if (fbdo.httpCode() == FIREBASE_ERROR_HTTP_CODE_OK) {
-    float temp = fbdo.floatData();
-    if (temp > 0) {
-      minTemp = temp;
-      Serial.println("Synced minTemp from Firebase: " + String(minTemp) + "°C");
-    }
-  }
-
-  Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/thresholds/maxTemp");
-  if (fbdo.httpCode() == FIREBASE_ERROR_HTTP_CODE_OK) {
-    float temp = fbdo.floatData();
-    if (temp > 0) {
-      maxTemp = temp;
-      Serial.println("Synced maxTemp from Firebase: " + String(maxTemp) + "°C");
-    }
+    Serial.println("⚠️ [Setup] Failed to load room configuration from Firebase: " + fbdo.errorReason());
+    Serial.println("[Setup] Using default thresholds and automation settings");
   }
 
   // Schedule configuration loading REMOVED (AC Power Automation disabled)
 
-  Serial.println("[Setup] Temperature Safety Automation: DISABLED");
+  showBootStatus("Config loaded", "Loading IR codes...");
+  loadIRCodesFromLibrary(true);
+
+  Serial.println("[Setup] Temperature Safety Automation: ENABLED (always active)");
   Serial.println("[Setup] Automation Interval: " + String(AUTOMATION_INTERVAL_MS / 1000) + " seconds");
   Serial.println("[Setup] IR Send Cooldown: " + String(IR_SEND_COOLDOWN_MS / 1000) + " seconds");
 
@@ -247,44 +351,31 @@ void setup() {
   Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/online", true);
   Firebase.RTDB.setString(&fbdo, "/" + String(ROOM_ID) + "/device_room_id", ROOM_ID);
 
-  // Load online duration from Firebase
-  Firebase.RTDB.getInt(&fbdo, "/" + String(ROOM_ID) + "/online_duration");
-  if (fbdo.dataType() == "int") {
-    onlineDurationSeconds = fbdo.intData();
-    Serial.println("[Setup] Loaded online_duration from Firebase: " + String(onlineDurationSeconds) + " seconds");
-  } else {
-    Serial.println("[Setup] No online_duration found in Firebase, starting at 0");
-  }
-
   #if DUAL_UNIT_MODE
-  Firebase.RTDB.getInt(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/online_duration");
-  if (fbdo.dataType() == "int") {
-    onlineDurationSecondsUnit1 = fbdo.intData();
-    Serial.println("[Setup] Loaded online_duration for unit 1 from Firebase: " + String(onlineDurationSecondsUnit1) + " seconds");
-  } else {
-    Serial.println("[Setup] No online_duration found for unit 1 in Firebase, starting at 0");
-  }
-
-  Firebase.RTDB.getInt(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/online_duration");
-  if (fbdo.dataType() == "int") {
-    onlineDurationSecondsUnit2 = fbdo.intData();
-    Serial.println("[Setup] Loaded online_duration for unit 2 from Firebase: " + String(onlineDurationSecondsUnit2) + " seconds");
-  } else {
-    Serial.println("[Setup] No online_duration found for unit 2 in Firebase, starting at 0");
-  }
-  #endif
-
-  #if DUAL_UNIT_MODE
-  // Force AC to false on startup
-  Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/ac", false);
-  Firebase.RTDB.setBool(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/ac", false);
-  Serial.println("[Setup] Forcing AC to false on startup");
+  // Firebase is authoritative for AC state - do NOT force it to false here.
+  // Forcing it off on every boot silently turned the dashboard power switch
+  // off (with no IR sent) whenever the ESP32 rebooted (WiFi drop, brownout,
+  // watchdog reset, etc.), which looked like the switch randomly turning off.
+  // Just clear any stale in-flight command so it isn't re-applied on boot.
   Firebase.RTDB.setString(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/ac_command", "IDLE");
   Firebase.RTDB.setString(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/ac_command", "IDLE");
+  Serial.println("[Setup] Preserving existing AC state from Firebase (not forcing off)");
   #endif
+
+  showBootStatus("Setup complete", "Starting...");
+  Serial.println("=== Setup complete ===");
 }
 
 void loop() {
+  // Serviced first, every iteration, so a pending OTA upload gets picked up
+  // promptly rather than waiting behind sensor reads/Firebase calls. Note:
+  // the long delay(20000) steps inside the humidity automation below (and
+  // similar blocking waits) still block this from running for their
+  // duration - if an OTA upload happens to start during one of those, it
+  // will likely time out. Not expected to matter in practice since uploads
+  // are infrequent and short, but worth knowing if an upload ever stalls.
+  ArduinoOTA.handle();
+
   static unsigned long lastLoopLog = 0;
   if (millis() - lastLoopLog > 60000) {
     Serial.println("[Loop] ESP32 is running, millis: " + String(millis()));
@@ -504,6 +595,15 @@ void loop() {
 
   handleIRReceiver();
 
+  // Pick up any IR code changes saved to the Remote Library without needing
+  // a reflash - a plain periodic re-fetch rather than a second permanent
+  // Firebase stream, since code changes are rare and this is simpler and
+  // more robust. A saved change takes up to IR_LIBRARY_REFRESH_MS to apply.
+  if (millis() - lastIRLibraryRefreshMillis > IR_LIBRARY_REFRESH_MS) {
+    lastIRLibraryRefreshMillis = millis();
+    loadIRCodesFromLibrary(true);
+  }
+
   // Schedule adherence check REMOVED (AC Power Automation disabled)
 
   if (!isnan(t) && !isnan(h)) {
@@ -665,6 +765,24 @@ void loop() {
   }
 }
 
+// Shows a boot-stage message on the OLED so the screen isn't just blank while
+// setup() works through WiFi/NTP/Firebase - previously the display showed
+// nothing at all until loop() started, which looked frozen even after the
+// serial monitor already confirmed WiFi was connected.
+void showBootStatus(const char* line1, const char* line2) {
+  display.clearDisplay();
+  display.fillScreen(SSD1306_WHITE);
+  display.setTextColor(SSD1306_BLACK);
+  display.setTextSize(1);
+  display.setCursor(5, 25);
+  display.print(line1);
+  if (line2 && line2[0] != '\0') {
+    display.setCursor(5, 40);
+    display.print(line2);
+  }
+  display.display();
+}
+
 void updateOLED(float currentTemp) {
   display.clearDisplay();
 
@@ -701,6 +819,120 @@ void updateOLED(float currentTemp) {
   display.display();
 }
 
+// Copies the compiled-in codes into the active buffers, so there is always
+// a known-good code to send even before Firebase/Preferences have anything.
+void loadDefaultIRCodes() {
+  memcpy_P(irCodeOn, rawOn, sizeof(rawOn));
+  irCodeOnLen = rawOnLen;
+  memcpy_P(irCodeOff, rawOff, sizeof(rawOff));
+  irCodeOffLen = rawOffLen;
+  memcpy_P(irCodeTempUp, rawTempUp, sizeof(rawTempUp));
+  irCodeTempUpLen = rawTempUpLen;
+  memcpy_P(irCodeTempDown, rawTempDown, sizeof(rawTempDown));
+  irCodeTempDownLen = rawTempDownLen;
+  Serial.println("[IR Library] Loaded compiled-in default codes");
+}
+
+void saveIRCodesToPreferences() {
+  preferences.putBytes("irCodeOn", irCodeOn, irCodeOnLen * sizeof(uint16_t));
+  preferences.putUInt("irCodeOnLen", irCodeOnLen);
+  preferences.putBytes("irCodeOff", irCodeOff, irCodeOffLen * sizeof(uint16_t));
+  preferences.putUInt("irCodeOffLen", irCodeOffLen);
+  preferences.putBytes("irCodeTUp", irCodeTempUp, irCodeTempUpLen * sizeof(uint16_t));
+  preferences.putUInt("irCodeTUpLen", irCodeTempUpLen);
+  preferences.putBytes("irCodeTDn", irCodeTempDown, irCodeTempDownLen * sizeof(uint16_t));
+  preferences.putUInt("irCodeTDnLen", irCodeTempDownLen);
+  Serial.println("[IR Library] Cached current codes to flash");
+}
+
+// Overlays whatever was last successfully cached from Firebase, if any -
+// used at boot before WiFi/Firebase are available yet.
+void loadIRCodesFromPreferences() {
+  size_t len = preferences.getUInt("irCodeOnLen", 0);
+  if (len > 0 && len <= MAX_IR_CODE_LEN) {
+    preferences.getBytes("irCodeOn", irCodeOn, len * sizeof(uint16_t));
+    irCodeOnLen = len;
+  }
+  len = preferences.getUInt("irCodeOffLen", 0);
+  if (len > 0 && len <= MAX_IR_CODE_LEN) {
+    preferences.getBytes("irCodeOff", irCodeOff, len * sizeof(uint16_t));
+    irCodeOffLen = len;
+  }
+  len = preferences.getUInt("irCodeTUpLen", 0);
+  if (len > 0 && len <= MAX_IR_CODE_LEN) {
+    preferences.getBytes("irCodeTUp", irCodeTempUp, len * sizeof(uint16_t));
+    irCodeTempUpLen = len;
+  }
+  len = preferences.getUInt("irCodeTDnLen", 0);
+  if (len > 0 && len <= MAX_IR_CODE_LEN) {
+    preferences.getBytes("irCodeTDn", irCodeTempDown, len * sizeof(uint16_t));
+    irCodeTempDownLen = len;
+  }
+  Serial.println("[IR Library] Overlaid cached codes from flash (if any)");
+}
+
+// Reads one command's rawData array out of an already-fetched library JSON
+// object (e.g. "acOn/rawData") into outBuf/outLen. Returns false (leaving
+// outBuf/outLen untouched) if the path is missing, empty, or too long.
+bool loadIRCodeArrayFromJson(FirebaseJson &json, const char* path, uint16_t* outBuf, size_t &outLen) {
+  FirebaseJsonData jsonData;
+  if (!json.get(jsonData, path)) return false;
+
+  FirebaseJsonArray arr;
+  if (!jsonData.getArray(arr)) return false;
+
+  size_t count = arr.size();
+  if (count == 0 || count > MAX_IR_CODE_LEN) {
+    Serial.println("[IR Library] " + String(path) + " has invalid length (" + String(count) + "), ignoring");
+    return false;
+  }
+
+  FirebaseJsonData item;
+  for (size_t i = 0; i < count; i++) {
+    arr.get(item, i);
+    outBuf[i] = (uint16_t)item.intValue;
+  }
+  outLen = count;
+  return true;
+}
+
+// Fetches this room's 4 IR commands from the Remote Library in one request
+// and overlays whatever's valid onto the active buffers. Anything missing
+// or invalid just leaves the current code (Firebase/Preferences/compiled-in,
+// whichever was already active) in place rather than clearing it.
+void loadIRCodesFromLibrary(bool cacheOnSuccess) {
+  Serial.println("[IR Library] Fetching IR codes for " + String(ROOM_ID) + " from Remote Library...");
+
+  if (!Firebase.RTDB.getJSON(&fbdo, "/irRemoteLibrary/" + String(ROOM_ID))) {
+    Serial.println("[IR Library] No library data for this room yet, keeping current codes. " + fbdo.errorReason());
+    return;
+  }
+
+  FirebaseJson &libJson = fbdo.jsonObject();
+  bool anyLoaded = false;
+
+  if (loadIRCodeArrayFromJson(libJson, "acOn/rawData", irCodeOn, irCodeOnLen)) {
+    Serial.println("[IR Library] Loaded acOn (" + String(irCodeOnLen) + " values)");
+    anyLoaded = true;
+  }
+  if (loadIRCodeArrayFromJson(libJson, "acOff/rawData", irCodeOff, irCodeOffLen)) {
+    Serial.println("[IR Library] Loaded acOff (" + String(irCodeOffLen) + " values)");
+    anyLoaded = true;
+  }
+  if (loadIRCodeArrayFromJson(libJson, "temperatureUp/rawData", irCodeTempUp, irCodeTempUpLen)) {
+    Serial.println("[IR Library] Loaded temperatureUp (" + String(irCodeTempUpLen) + " values)");
+    anyLoaded = true;
+  }
+  if (loadIRCodeArrayFromJson(libJson, "temperatureDown/rawData", irCodeTempDown, irCodeTempDownLen)) {
+    Serial.println("[IR Library] Loaded temperatureDown (" + String(irCodeTempDownLen) + " values)");
+    anyLoaded = true;
+  }
+
+  if (anyLoaded && cacheOnSuccess) {
+    saveIRCodesToPreferences();
+  }
+}
+
 void handleACCommand(String cmd, int unit, bool isAutomation) {
   Serial.println("🎮 AC Command: " + cmd + " (Unit " + String(unit) + ") " + (isAutomation ? "[Automation]" : "[Manual]"));
 
@@ -720,29 +952,37 @@ void handleACCommand(String cmd, int unit, bool isAutomation) {
   Serial.println("🎮 Using IRsend instance on pin " + String(pin));
   
   if (cmd == "ON") {
-    uint16_t on_buf[rawOnLen];
-    memcpy_P(on_buf, rawOn, sizeof(rawOn));
-    Serial.println("🎮 Sending ON signal...");
-    irSender->sendRaw(on_buf, rawOnLen, kFrequency);
-    Serial.println("✓ ON sent on pin " + String(pin));
+    if (irCodeOnLen == 0) {
+      Serial.println("⚠️ No ON code loaded - skipping IR send");
+    } else {
+      Serial.println("🎮 Sending ON signal...");
+      irSender->sendRaw(irCodeOn, irCodeOnLen, kFrequency);
+      Serial.println("✓ ON sent on pin " + String(pin));
+    }
   } else if (cmd == "OFF") {
-    uint16_t off_buf[rawOffLen];
-    memcpy_P(off_buf, rawOff, sizeof(rawOff));
-    Serial.println("🎮 Sending OFF signal...");
-    irSender->sendRaw(off_buf, rawOffLen, kFrequency);
-    Serial.println("✓ OFF sent on pin " + String(pin));
+    if (irCodeOffLen == 0) {
+      Serial.println("⚠️ No OFF code loaded - skipping IR send");
+    } else {
+      Serial.println("🎮 Sending OFF signal...");
+      irSender->sendRaw(irCodeOff, irCodeOffLen, kFrequency);
+      Serial.println("✓ OFF sent on pin " + String(pin));
+    }
   } else if (cmd == "TEMP_UP") {
-    uint16_t up_buf[rawTempUpLen];
-    memcpy_P(up_buf, rawTempUp, sizeof(rawTempUp));
-    Serial.println("🎮 Sending TEMP_UP signal...");
-    irSender->sendRaw(up_buf, rawTempUpLen, kFrequency);
-    Serial.println("✓ TEMP_UP sent on pin " + String(pin));
+    if (irCodeTempUpLen == 0) {
+      Serial.println("⚠️ No TEMP_UP code loaded - skipping IR send");
+    } else {
+      Serial.println("🎮 Sending TEMP_UP signal...");
+      irSender->sendRaw(irCodeTempUp, irCodeTempUpLen, kFrequency);
+      Serial.println("✓ TEMP_UP sent on pin " + String(pin));
+    }
   } else if (cmd == "TEMP_DOWN") {
-    uint16_t down_buf[rawTempDownLen];
-    memcpy_P(down_buf, rawTempDown, sizeof(rawTempDown));
-    Serial.println("🎮 Sending TEMP_DOWN signal...");
-    irSender->sendRaw(down_buf, rawTempDownLen, kFrequency);
-    Serial.println("✓ TEMP_DOWN sent on pin " + String(pin));
+    if (irCodeTempDownLen == 0) {
+      Serial.println("⚠️ No TEMP_DOWN code loaded - skipping IR send");
+    } else {
+      Serial.println("🎮 Sending TEMP_DOWN signal...");
+      irSender->sendRaw(irCodeTempDown, irCodeTempDownLen, kFrequency);
+      Serial.println("✓ TEMP_DOWN sent on pin " + String(pin));
+    }
   } else {
     Serial.println("⚠️ Unknown command: " + cmd);
   }
@@ -853,10 +1093,19 @@ void handleIRReceiver() {
 void runAutomation(float temp, float humidity) {
   static unsigned long lastDebugLog = 0;
   if (millis() - lastDebugLog > 60000) {
+    // lastAutomationCheckMillis is never updated (leftover from the removed
+    // schedule-based automation), so it was only ever showing device uptime,
+    // mislabeled as "time since last check". Report the real per-automation
+    // countdowns instead - these are the actual gates in the code below.
+    unsigned long tempElapsed = millis() - lastTempAutomationCheckMillis;
+    unsigned long humElapsed = millis() - lastHumidityAutomationCheckMillis;
+    unsigned long tempRemaining = (tempElapsed < AUTOMATION_INTERVAL_MS) ? (AUTOMATION_INTERVAL_MS - tempElapsed) / 1000 : 0;
+    unsigned long humRemaining = (humElapsed < AUTOMATION_INTERVAL_MS) ? (AUTOMATION_INTERVAL_MS - humElapsed) / 1000 : 0;
     Serial.print("[Automation Debug] Humidity Enabled: "); Serial.print(automationEnabled);
     Serial.print(", Temp Enabled: "); Serial.print(temperatureAutomationEnabled);
-    Serial.print(", Time since last check: "); Serial.print((millis() - lastAutomationCheckMillis) / 1000);
-    Serial.println(" seconds");
+    Serial.print(", Next temp check in: "); Serial.print(tempRemaining);
+    Serial.print("s, Next humidity check in: "); Serial.print(humRemaining);
+    Serial.println("s");
     lastDebugLog = millis();
   }
 
@@ -879,18 +1128,18 @@ void runAutomation(float temp, float humidity) {
         if (timeSinceLastIR < IR_SEND_COOLDOWN_MS) {
           unsigned long cooldownRemaining = (IR_SEND_COOLDOWN_MS - timeSinceLastIR) / 1000;
           Serial.print("Cooldown active, "); Serial.print(cooldownRemaining); Serial.println(" seconds remaining");
+        } else if (irCodeTempDownLen == 0) {
+          Serial.println("⚠️ No TEMP_DOWN code loaded - skipping automation IR send");
         } else {
-          uint16_t down_buf[rawTempDownLen];
-          memcpy_P(down_buf, rawTempDown, sizeof(rawTempDown));
           Serial.print("Sending TEMP_DOWN on pin "); Serial.println(kIrLedPin);
           #if DUAL_UNIT_MODE
           Serial.println("Sending to Unit 1 (pin 4)");
-          irsend.sendRaw(down_buf, rawTempDownLen, kFrequency);
+          irsend.sendRaw(irCodeTempDown, irCodeTempDownLen, kFrequency);
           delay(100);
           Serial.println("Sending to Unit 2 (pin 5)");
-          irsend2.sendRaw(down_buf, rawTempDownLen, kFrequency);
+          irsend2.sendRaw(irCodeTempDown, irCodeTempDownLen, kFrequency);
           #else
-          irsend.sendRaw(down_buf, rawTempDownLen, kFrequency);
+          irsend.sendRaw(irCodeTempDown, irCodeTempDownLen, kFrequency);
           #endif
           Serial.println("TEMP_DOWN sent successfully");
           lastIRSendMillis = millis();
@@ -927,18 +1176,18 @@ void runAutomation(float temp, float humidity) {
         if (timeSinceLastIR < IR_SEND_COOLDOWN_MS) {
           unsigned long cooldownRemaining = (IR_SEND_COOLDOWN_MS - timeSinceLastIR) / 1000;
           Serial.print("Cooldown active, "); Serial.print(cooldownRemaining); Serial.println(" seconds remaining");
+        } else if (irCodeTempUpLen == 0) {
+          Serial.println("⚠️ No TEMP_UP code loaded - skipping automation IR send");
         } else {
-          uint16_t up_buf[rawTempUpLen];
-          memcpy_P(up_buf, rawTempUp, sizeof(rawTempUp));
           Serial.print("Sending TEMP_UP on pin "); Serial.println(kIrLedPin);
           #if DUAL_UNIT_MODE
           Serial.println("Sending to Unit 1 (pin 4)");
-          irsend.sendRaw(up_buf, rawTempUpLen, kFrequency);
+          irsend.sendRaw(irCodeTempUp, irCodeTempUpLen, kFrequency);
           delay(100);
           Serial.println("Sending to Unit 2 (pin 5)");
-          irsend2.sendRaw(up_buf, rawTempUpLen, kFrequency);
+          irsend2.sendRaw(irCodeTempUp, irCodeTempUpLen, kFrequency);
           #else
-          irsend.sendRaw(up_buf, rawTempUpLen, kFrequency);
+          irsend.sendRaw(irCodeTempUp, irCodeTempUpLen, kFrequency);
           #endif
           Serial.println("TEMP_UP sent successfully");
           lastIRSendMillis = millis();
@@ -1051,8 +1300,15 @@ void runAutomation(float temp, float humidity) {
     if (timeSinceLastIR < IR_SEND_COOLDOWN_MS) {
       unsigned long cooldownRemaining = (IR_SEND_COOLDOWN_MS - timeSinceLastIR) / 1000;
       Serial.print("Cooldown active, "); Serial.print(cooldownRemaining); Serial.println(" seconds remaining");
-      Serial.println("Logging automation event to history despite cooldown");
-      logAutomationEventToHistory();
+      Serial.println("Skipping automation event log - no IR was actually sent");
+      // Clear the pending event without logging it to Firebase history, since no
+      // IR was transmitted. Logging here previously made the analytics page show
+      // an automation event even though the AC never received the command.
+      lastAutomationEvent = "";
+      lastAutomationEventType = "";
+      lastAutomationEventTime = 0;
+      lastAutomationEventPastTemp = 0.0;
+      lastAutomationEventUpdatedTemp = 0.0;
       return;
     }
     Serial.println("No cooldown active, proceeding with IR commands");
@@ -1060,35 +1316,37 @@ void runAutomation(float temp, float humidity) {
     float difference = targetTemp - temp;
     int steps = (int)round(abs(difference));
     Serial.print("Adjusting temp by "); Serial.print(difference, 1); Serial.print("°C ("); Serial.print(steps); Serial.println(" steps)");
+
+    if ((difference > 0 && irCodeTempUpLen == 0) || (difference <= 0 && irCodeTempDownLen == 0)) {
+      Serial.println("⚠️ No " + String(difference > 0 ? "TEMP_UP" : "TEMP_DOWN") + " code loaded - skipping automation IR send");
+      return;
+    }
+
     Serial.println("Starting IR transmission...");
 
     for (int i = 0; i < steps; i++) {
       if (difference > 0) {
-        uint16_t up_buf[rawTempUpLen];
-        memcpy_P(up_buf, rawTempUp, sizeof(rawTempUp));
         Serial.print("Step "); Serial.print(i + 1); Serial.print("/"); Serial.print(steps); Serial.print(": Sending TEMP UP on pin "); Serial.println(kIrLedPin);
         #if DUAL_UNIT_MODE
         Serial.println("  -> Unit 1 (pin 4)");
-        irsend.sendRaw(up_buf, rawTempUpLen, kFrequency);
+        irsend.sendRaw(irCodeTempUp, irCodeTempUpLen, kFrequency);
         delay(100);
         Serial.println("  -> Unit 2 (pin 5)");
-        irsend2.sendRaw(up_buf, rawTempUpLen, kFrequency);
+        irsend2.sendRaw(irCodeTempUp, irCodeTempUpLen, kFrequency);
         #else
-        irsend.sendRaw(up_buf, rawTempUpLen, kFrequency);
+        irsend.sendRaw(irCodeTempUp, irCodeTempUpLen, kFrequency);
         #endif
         Serial.println("TEMP UP sent");
       } else {
-        uint16_t down_buf[rawTempDownLen];
-        memcpy_P(down_buf, rawTempDown, sizeof(rawTempDown));
         Serial.print("Step "); Serial.print(i + 1); Serial.print("/"); Serial.print(steps); Serial.print(": Sending TEMP DOWN on pin "); Serial.println(kIrLedPin);
         #if DUAL_UNIT_MODE
         Serial.println("  -> Unit 1 (pin 4)");
-        irsend.sendRaw(down_buf, rawTempDownLen, kFrequency);
+        irsend.sendRaw(irCodeTempDown, irCodeTempDownLen, kFrequency);
         delay(100);
         Serial.println("  -> Unit 2 (pin 5)");
-        irsend2.sendRaw(down_buf, rawTempDownLen, kFrequency);
+        irsend2.sendRaw(irCodeTempDown, irCodeTempDownLen, kFrequency);
         #else
-        irsend.sendRaw(down_buf, rawTempDownLen, kFrequency);
+        irsend.sendRaw(irCodeTempDown, irCodeTempDownLen, kFrequency);
         #endif
         Serial.println("TEMP DOWN sent");
       }

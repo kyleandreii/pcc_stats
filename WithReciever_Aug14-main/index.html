@@ -188,7 +188,7 @@
             lucide.createIcons();
 
             // Set auth persistence based on checkbox
-            const persistenceType = stayLoggedIn ? firebase.auth.Auth.Persistence.LOCAL : firebase.auth.Auth.Session;
+            const persistenceType = stayLoggedIn ? firebase.auth.Auth.Persistence.LOCAL : firebase.auth.Auth.Persistence.SESSION;
             auth.setPersistence(persistenceType)
                 .then(() => {
                     return auth.signInWithEmailAndPassword(email, password);

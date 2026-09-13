@@ -881,6 +881,14 @@
 
     const db = firebase.database();
 
+    // Show a toast for any new alert (device offline, occupancy change)
+    // pushed to Firebase while this page is open - see shared-utils.js.
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => notificationSystem.watchFirebaseAlerts(db));
+    } else {
+        notificationSystem.watchFirebaseAlerts(db);
+    }
+
 
 
     const todayKey = new Date().toLocaleDateString('en-CA');
@@ -1202,7 +1210,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
         // Update chart with new datasets
         const datasets = [];
-        const displayName = roomFilter === 'all' ? 'All Rooms' : (labsData[roomFilter]?.customRoomName || roomFilter.replace('_', ' '));
+        const displayName = roomFilter === 'all' ? 'All Rooms' : getRoomDisplayName(roomFilter, labsData[roomFilter]);
 
         // Temperature dataset (left axis)
         if (chartData.temperature.length > 0) {
@@ -1786,7 +1794,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             Object.keys(trendHistory.temp).forEach((room, index) => {
 
-                const displayName = room.replace('_', ' ');
+                const displayName = getRoomDisplayName(room, labsData[room]);
 
                 const color = palette[index % palette.length];
 
@@ -1859,7 +1867,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
     function updateBarCharts() {
 
-        const labels = labKeys.map(k => labsData[k].customRoomName || k.replace('_', ' '));
+        const labels = labKeys.map(k => getRoomDisplayName(k, labsData[k]));
 
         alertChart.data.labels = labels;
 
@@ -2420,7 +2428,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             for (const room of labKeys || []) {
 
-                const displayName = (labsData && labsData[room] && labsData[room].customRoomName) ? labsData[room].customRoomName : room.replace('_', ' ');
+                const displayName = getRoomDisplayName(room, labsData[room]);
 
                 const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
 
@@ -2546,7 +2554,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                 for (const room of labKeys || []) {
 
-                    const displayName = (labsData && labsData[room] && labsData[room].customRoomName) ? labsData[room].customRoomName : room.replace('_', ' ');
+                    const displayName = getRoomDisplayName(room, labsData[room]);
 
                     const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
 
@@ -2665,7 +2673,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                             if (entry) {
 
-                                const displayName = (labsData && labsData[room] && labsData[room].customRoomName) ? labsData[room].customRoomName : room.replace('_', ' ');
+                                const displayName = getRoomDisplayName(room, labsData[room]);
 
                                 const temp = parseFloat(entry.temperature) || 0;
 
@@ -2723,7 +2731,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             for (const room of labKeys || []) {
 
-                const displayName = (labsData && labsData[room] && labsData[room].customRoomName) ? labsData[room].customRoomName : room.replace('_', ' ');
+                const displayName = getRoomDisplayName(room, labsData[room]);
 
                 const alertCountRoom = (alertCounters && alertCounters[room]) ? alertCounters[room] : 0;
 
@@ -2790,7 +2798,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
         if (!select) return;
         select.innerHTML = '<option value="all">All Rooms</option>';
         labKeys.forEach(room => {
-            const displayName = (labsData && labsData[room] && labsData[room].customRoomName) ? labsData[room].customRoomName : room.replace('_', ' ');
+            const displayName = getRoomDisplayName(room, labsData[room]);
             select.innerHTML += `<option value="${room}">${displayName}</option>`;
         });
     }
@@ -2800,7 +2808,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
         if (!select) return;
         select.innerHTML = '<option value="all">All Rooms</option>';
         labKeys.forEach(room => {
-            const displayName = (labsData && labsData[room] && labsData[room].customRoomName) ? labsData[room].customRoomName : room.replace('_', ' ');
+            const displayName = getRoomDisplayName(room, labsData[room]);
             select.innerHTML += `<option value="${room}">${displayName}</option>`;
         });
     }
@@ -2918,7 +2926,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                     const normalCost = AirconCostCalculator.computeAirconCost(roomConfig, actualUsageHours, ratePerKwh, 16);
 
                     const savings = normalCost - actualCost;
-                    const displayName = (labsData && labsData[room] && labsData[room].customRoomName) ? labsData[room].customRoomName : room.replace('_', ' ');
+                    const displayName = getRoomDisplayName(room, labsData[room]);
                     const formattedDate = new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
                     
                     tableRows.push(`
@@ -3111,7 +3119,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
         labKeys.forEach((room, index) => {
 
-            const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
+            const displayName = getRoomDisplayName(room, labsData[room]);
 
             const color = palette[index % palette.length];
 
@@ -3424,7 +3432,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
         labKeys.forEach((room, index) => {
 
-            const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
+            const displayName = getRoomDisplayName(room, labsData[room]);
 
             const color = palette[index % palette.length];
 
@@ -3515,68 +3523,64 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
         }
     });
     
-    // Function to check and reset roomUsage if needed
+    // Function to check and reset roomUsage if needed.
+    //
+    // This shares the same Firebase-backed reset date (analytics/lastUsageResetDate)
+    // as the Dashboard page's checkAndResetRoomUsage - previously this page had its
+    // own per-browser localStorage date plus a ">2 hours = assume stale" guess, which
+    // both disagreed with the Dashboard's version (each device decided independently)
+    // and could wipe a room's real same-day usage just because it had been on for a
+    // while. It also never touched per-unit keys (Room_X_unit_1/unit_2). See the
+    // Dashboard's checkAndResetRoomUsage for the full explanation.
     function checkAndResetRoomUsage() {
         const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
-        const lastDateStored = localStorage.getItem('last_active_date');
-        let needsReset = false;
-        
-        console.log('[Analytics Page Load] todayStr:', todayStr, 'lastDateStored:', lastDateStored);
-        console.log('[Analytics Page Load] roomUsage:', roomUsage);
-        console.log('[Analytics Page Load] labKeys:', labKeys);
-        
-        // If last active date is different from today, we need to reset
-        if (lastDateStored && lastDateStored !== todayStr) {
-            console.log('[Analytics Page Load] Date changed since last visit, resetting roomUsage');
-            needsReset = true;
-            
-            // Save yesterday's data to Firebase before reset
+
+        return db.ref('analytics/lastUsageResetDate').once('value').then((snap) => {
+            const lastResetDate = snap.val();
+            if (lastResetDate === todayStr) {
+                return false; // Already reset today - nothing to do
+            }
+
+            console.log(`[Analytics Usage Reset] Last reset: ${lastResetDate || 'never'}, today: ${todayStr} - archiving and resetting daily usage`);
+
+            const usageKeys = [];
             labKeys.forEach(room => {
-                if (roomUsage[room] && roomUsage[room].totalMs > 0) {
-                    const yesterdayTotalMs = roomUsage[room].totalMs;
-                    const yesterdayTotalHours = yesterdayTotalMs / 3600000;
-                    
-                    console.log(`[Analytics Page Load] ${room}: Saving ${yesterdayTotalHours.toFixed(2)}h to Firebase for ${lastDateStored}`);
-                    db.ref(`analytics/dailyAnalytics/${lastDateStored}/${room}/usageHours`).set(yesterdayTotalHours);
+                usageKeys.push(room);
+                const roomData = labsData[room];
+                if (roomData && roomData.units) {
+                    if (roomData.units.unit_1) usageKeys.push(`${room}_unit_1`);
+                    if (roomData.units.unit_2) usageKeys.push(`${room}_unit_2`);
                 }
             });
-        }
-        
-        // Also force reset if there's accumulated time but it's clearly from a previous session
-        // (e.g., if totalMs is very large like 3+ hours but the page just loaded)
-        if (!needsReset) {
-            labKeys.forEach(room => {
-                if (roomUsage[room] && roomUsage[room].totalMs > 0) {
-                    const hours = roomUsage[room].totalMs / 3600000;
-                    // If there's more than 2 hours accumulated but the page just loaded, it's likely stale
-                    if (hours > 2) {
-                        console.log(`[Analytics Page Load] ${room} has ${hours.toFixed(2)}h accumulated on page load, likely stale data. Resetting.`);
-                        needsReset = true;
-                    }
+
+            const now = Date.now();
+            usageKeys.forEach(usageKey => {
+                const usage = roomUsage[usageKey];
+                if (!usage) return;
+
+                let finalTotalMs = usage.totalMs || 0;
+                if (usage.isActive && usage.lastStart) {
+                    finalTotalMs += (now - usage.lastStart);
                 }
-            });
-        }
-        
-        if (needsReset) {
-            labKeys.forEach(room => {
-                if (roomUsage[room]) {
-                    roomUsage[room].totalMs = 0;
-                    roomUsage[room].lastStart = null;
-                    roomUsage[room].isActive = false;
-                    db.ref(`analytics/roomUsage/${room}`).set(roomUsage[room]);
+
+                if (lastResetDate && finalTotalMs > 0) {
+                    db.ref(`analytics/dailyAnalytics/${lastResetDate}/${usageKey}/usageHours`).set(finalTotalMs / 3600000);
                 }
+
+                usage.totalMs = 0;
+                // If it's currently on, keep tracking it - just restart the clock
+                // at zero for the new day instead of stopping it.
+                usage.lastStart = usage.isActive ? now : null;
+                db.ref(`analytics/roomUsage/${usageKey}`).set(usage);
             });
-            
-            // Clear localStorage dailyAnalytics
+
+            db.ref('analytics/lastUsageResetDate').set(todayStr);
             localStorage.removeItem('dailyAnalytics');
-            
-            // Update last active date
-            localStorage.setItem('last_active_date', todayStr);
-            
-            console.log('[Analytics Page Load] Reset complete, reloading analytics data');
-            // Reload analytics data after reset
+
+            console.log('[Analytics Usage Reset] Reset complete, reloading analytics data');
             setTimeout(() => loadAnalyticsData(), 500);
-        }
+            return true;
+        });
     }
 
     // Force setup live listener after a delay if not already set
@@ -3720,7 +3724,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                 sumT += tVal;
 
-                const displayName = d.customRoomName || room.replace('_', ' ');
+                const displayName = getRoomDisplayName(room, d);
 
 
 
@@ -4027,66 +4031,37 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
     setInterval(secondUpdate, 1000);
 
-    // Midnight reset for daily usage tracking (Analytics page)
-    let lastDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
-    
+    // Midnight reset for daily usage tracking (Analytics page).
+    //
+    // This used to be its own inline reset (duplicating, and disagreeing with,
+    // checkAndResetRoomUsage above) with a real crash bug: it declared
+    // `const currentDate = ...` then reassigned `currentDate = new Date()` a few
+    // lines later, throwing "Assignment to constant variable" every time a date
+    // change was detected - so the reset never actually completed, and kept
+    // re-throwing every minute until the tab was reloaded. It also force-cleared
+    // isActive on rooms that were still genuinely running, and never touched
+    // per-unit keys. Now it just polls the shared, Firebase-backed reset check
+    // periodically so the page self-heals if left open across midnight, and
+    // only refreshes the date pickers/labels when a reset actually happened.
     setInterval(() => {
-        const currentDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
-        
-        if (currentDate !== lastDate) {
-            console.log(`[Analytics Midnight Reset] Date changed from ${lastDate} to ${currentDate}`);
-            
-            // Save yesterday's daily analytics totals to Firebase before reset
-            labKeys.forEach(room => {
-                if (roomUsage[room] && roomUsage[room].totalMs > 0) {
-                    const yesterdayTotalMs = roomUsage[room].totalMs;
-                    const yesterdayTotalSeconds = Math.round(yesterdayTotalMs / 1000);
-                    const yesterdayTotalHours = yesterdayTotalSeconds / 3600;
-                    
-                    console.log(`[Analytics Midnight Reset] ${room}: Saving ${yesterdayTotalHours.toFixed(2)}h to Firebase for ${lastDate}`);
-                    
-                    // Save to historical daily analytics
-                    db.ref(`analytics/dailyAnalytics/${lastDate}/${room}/usageHours`).set(yesterdayTotalHours);
-                    
-                    // Reset for new day
-                    roomUsage[room].totalMs = 0;
-                    roomUsage[room].lastStart = null;
-                    roomUsage[room].isActive = false;
-                    
-                    // Update Firebase
-                    db.ref(`analytics/roomUsage/${room}`).set(roomUsage[room]);
-                }
-            });
-            
-            // Clear localStorage dailyAnalytics to ensure fresh data for new day
-            localStorage.removeItem('dailyAnalytics');
-            
-            // Update currentDate to the new day
-            currentDate = new Date();
-            
-            // Reset date pickers to today
-            const todayStr = currentDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+        checkAndResetRoomUsage().then((didReset) => {
+            if (!didReset) return;
+
+            const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
             const datePickerTemp = document.getElementById('date-picker-temp');
             const datePickerHum = document.getElementById('date-picker-hum');
             const datePickerSummary = document.getElementById('date-picker-summary');
-            
+
             if (datePickerTemp) datePickerTemp.value = todayStr;
             if (datePickerHum) datePickerHum.value = todayStr;
             if (datePickerSummary) datePickerSummary.value = todayStr;
-            
-            // Update labels
+
             document.getElementById('date-label-temp').innerText = 'Today';
             document.getElementById('date-label-hum').innerText = 'Today';
             document.getElementById('date-label-summary').innerText = 'Today';
-            
-            // Reload analytics data for the new day (after date pickers are reset)
-            loadAnalyticsData();
-            
-            // Reload historical data for today
+
             loadHistoricalData(todayStr);
-            
-            lastDate = currentDate;
-        }
+        });
     }, 60000); // Check every minute
 
     // Periodic update for real-time session tracking (every 10 seconds)
@@ -4936,7 +4911,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             const room = labKeys[i];
 
-            const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
+            const displayName = getRoomDisplayName(room, labsData[room]);
 
             labels.push(displayName);
 
@@ -5909,7 +5884,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             const room = labKeys[i];
 
-            const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
+            const displayName = getRoomDisplayName(room, labsData[room]);
 
             const color = palette[i % palette.length];
 
@@ -6064,7 +6039,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             const room = labKeys[i];
 
-            const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
+            const displayName = getRoomDisplayName(room, labsData[room]);
 
             const color = palette[i % palette.length];
 
@@ -6271,7 +6246,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             const room = labKeys[i];
 
-            const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
+            const displayName = getRoomDisplayName(room, labsData[room]);
 
             const color = palette[i % palette.length];
 
@@ -6416,7 +6391,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             const room = labKeys[i];
 
-            const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
+            const displayName = getRoomDisplayName(room, labsData[room]);
 
             const color = palette[i % palette.length];
 
@@ -6604,7 +6579,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             const room = labKeys[i];
 
-            const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
+            const displayName = getRoomDisplayName(room, labsData[room]);
 
             const color = palette[i % palette.length];
 
@@ -6750,7 +6725,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             const room = labKeys[i];
 
-            const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
+            const displayName = getRoomDisplayName(room, labsData[room]);
 
             const color = palette[i % palette.length];
 
@@ -7043,7 +7018,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             const room = labKeys[i];
 
-            const displayName = labsData[room]?.customRoomName || room.replace('_', ' ');
+            const displayName = getRoomDisplayName(room, labsData[room]);
 
             labels.push(displayName);
 

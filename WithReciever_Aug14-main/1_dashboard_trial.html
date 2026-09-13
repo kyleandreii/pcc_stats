@@ -14,140 +14,6 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="shared-utils.js"></script>
     <script src="ui-enhancements.js"></script>
-    <script>
-        // Fallback: Initialize notification system if shared-utils.js didn't load properly
-        // Wait for DOM to be ready before initializing
-        function initFallbackNotificationSystem() {
-            if (typeof notificationSystem !== 'undefined') {
-                console.log('[Dashboard] notificationSystem already defined from shared-utils.js');
-                return;
-            }
-            
-            console.log('[Dashboard] notificationSystem not defined, initializing fallback...');
-            
-            class NotificationSystem {
-                constructor() {
-                    this.notifications = [];
-                    this.container = null;
-                    this.init();
-                }
-
-                init() {
-                    if (!document.body)return;
-                    this.container = document.createElement('div');
-                    this.container.id = 'notification-container';
-                    this.container.style.cssText = `
-                        position: fixed;
-                        top: 20px;
-                        right: 20px;
-                        z-index: 10000;
-                        display: flex;
-                        flex-direction: column;
-                        gap: 10px;
-                    `;
-                    document.body.appendChild(this.container);
-                }
-
-                show(message, type = 'info') {
-                    const id = Date.now();
-                    this.notifications.push({ id, message, type });
-                    this.render();
-                    
-                    setTimeout(() => {
-                        this.remove(id);
-                    }, 3000);
-                }
-
-                remove(id) {
-                    this.notifications = this.notifications.filter(n => n.id !== id);
-                    this.render();
-                }
-
-                render() {
-                    if (!this.container) return;
-                    this.container.innerHTML = '';
-                    
-                    if (this.notifications.length === 0) return;
-
-                    const latest = this.notifications[this.notifications.length - 1];
-                    const count = this.notifications.length;
-                    
-                    const notification = document.createElement('div');
-                    notification.style.cssText = `
-                        background: white;
-                        border-radius: 12px;
-                        padding: 16px 20px;
-                        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-                        display: flex;
-                        align-items: center;
-                        gap: 12px;
-                        min-width: 300px;
-                        animation: slideIn 0.3s ease-out;
-                        border-left: 4px solid ${this.getColor(latest.type)};
-                    `;
-
-                    const badge = count > 1 ? `
-                        <div style="
-                            background: #ef4444;
-                            color: white;
-                            border-radius: 50%;
-                            width: 24px;
-                            height: 24px;
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                            font-size: 12px;
-                            font-weight: bold;
-                        ">${count}</div>
-                    ` : '';
-
-                    notification.innerHTML = `
-                        ${badge}
-                        <span style="font-size: 14px; font-weight: 500; color: #374151;">${latest.message}</span>
-                    `;
-
-                    this.container.appendChild(notification);
-                }
-
-                getColor(type) {
-                    const colors = {
-                        info: '#3b82f6',
-                        success: '#10b981',
-                        warning: '#f59e0b',
-                        error: '#ef4444'
-                    };
-                    return colors[type] || colors.info;
-                }
-            }
-
-            window.notificationSystem = new NotificationSystem();
-
-            const style = document.createElement('style');
-            style.textContent = `
-                @keyframes slideIn {
-                    from {
-                        transform: translateX(100%);
-                        opacity: 0;
-                    }
-                    to {
-                        transform: translateX(0);
-                        opacity: 1;
-                    }
-                }
-            `;
-            if (document.head) {
-                document.head.appendChild(style);
-            }
-            
-            console.log('[Dashboard] Fallback notification system initialized');
-        }
-
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', initFallbackNotificationSystem);
-        } else {
-            initFallbackNotificationSystem();
-        }
-    </script>
 
     <style>
         /* Dashboard-specific styles that complement global CSS */
@@ -471,6 +337,14 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
+        // Show a toast for any new alert (device offline, occupancy change)
+        // pushed to Firebase while this page is open - see shared-utils.js.
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => notificationSystem.watchFirebaseAlerts(db));
+        } else {
+            notificationSystem.watchFirebaseAlerts(db);
+        }
+
         // Analytics tracking variables - Firebase is authoritative
         let roomUsage = {}; // Will be loaded from Firebase
 
@@ -499,6 +373,7 @@
         let searchQuery = '';
         let pendingUpdates = {}; // Track rooms with pending AC updates
         let deviceOfflineFlags = {}; // Track offline alert state per room
+        let occupancyFlags = {}; // Track last known occupancy state per room ('occupied' | 'empty')
         let heartbeatListeners = {}; // Track heartbeat listeners to prevent duplicates
         let renderInProgress = false; // Prevent concurrent renderDashboard calls
         const HEARTBEAT_TIMEOUT = 15000; // 15 seconds - device offline if no heartbeat for this duration
@@ -551,62 +426,75 @@
                 roomUsageLoaded = true;
             });
             
-            // Function to check and reset roomUsage if needed
+            // Function to check and reset roomUsage if needed.
+            //
+            // Previously this used a per-BROWSER localStorage date, plus a ">2
+            // hours accumulated = assume stale" fallback. Both were wrong: the
+            // localStorage date meant every device/browser decided independently
+            // whether to reset a value shared across everyone in Firebase, and
+            // the ">2 hours" guess would wipe a room's real usage mid-day just
+            // because a classroom AC had legitimately been on for a while. It
+            // also never touched per-unit keys (Room_X_unit_1/unit_2), so dual-
+            // unit rooms never actually reset.
+            //
+            // Now the reset date lives in Firebase (analytics/lastUsageResetDate)
+            // so all viewers agree on it, it only fires on a genuine date change,
+            // and it covers every unit key. A unit that's still running through
+            // the reset keeps isActive true and restarts its counter from 0
+            // immediately, instead of getting stuck as "stopped" while the AC is
+            // still physically on.
             function checkAndResetRoomUsage() {
                 const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
-                const lastDateStored = localStorage.getItem('last_active_date');
-                let needsReset = false;
-                
-                console.log('[Dashboard Page Load] todayStr:', todayStr, 'lastDateStored:', lastDateStored);
-                console.log('[Dashboard Page Load] roomUsage:', roomUsage);
-                console.log('[Dashboard Page Load] labKeys:', labKeys);
-                
-                // If last active date is different from today, we need to reset
-                if (lastDateStored && lastDateStored !== todayStr) {
-                    console.log('[Dashboard Page Load] Date changed since last visit, resetting roomUsage');
-                    needsReset = true;
-                    
-                    // Save yesterday's data to Firebase before reset
+
+                db.ref('analytics/lastUsageResetDate').once('value').then((snap) => {
+                    const lastResetDate = snap.val();
+                    if (lastResetDate === todayStr) {
+                        return; // Already reset today - nothing to do
+                    }
+
+                    console.log(`[Usage Reset] Last reset: ${lastResetDate || 'never'}, today: ${todayStr} - archiving and resetting daily usage`);
+
+                    // Build the full list of usage keys: each room's combined key,
+                    // plus each unit's own key for dual-unit rooms.
+                    const usageKeys = [];
                     labKeys.forEach(room => {
-                        if (roomUsage[room] && roomUsage[room].totalMs > 0) {
-                            const yesterdayTotalMs = roomUsage[room].totalMs;
-                            const yesterdayTotalHours = yesterdayTotalMs / 3600000;
-                            
-                            console.log(`[Dashboard Page Load] ${room}: Saving ${yesterdayTotalHours.toFixed(2)}h to Firebase for ${lastDateStored}`);
-                            db.ref(`analytics/dailyAnalytics/${lastDateStored}/${room}/usageHours`).set(yesterdayTotalHours);
+                        usageKeys.push(room);
+                        const roomData = labsData[room];
+                        if (roomData && roomData.units) {
+                            if (roomData.units.unit_1) usageKeys.push(`${room}_unit_1`);
+                            if (roomData.units.unit_2) usageKeys.push(`${room}_unit_2`);
                         }
                     });
-                }
-                
-                // Also force reset if there's accumulated time but it's clearly from a previous session
-                if (!needsReset) {
-                    labKeys.forEach(room => {
-                        if (roomUsage[room] && roomUsage[room].totalMs > 0) {
-                            const hours = roomUsage[room].totalMs / 3600000;
-                            if (hours > 2) {
-                                console.log(`[Dashboard Page Load] ${room} has ${hours.toFixed(2)}h accumulated on page load, likely stale data. Resetting.`);
-                                needsReset = true;
-                            }
+
+                    const now = Date.now();
+                    usageKeys.forEach(usageKey => {
+                        const usage = roomUsage[usageKey];
+                        if (!usage) return;
+
+                        // Include time accrued up to right now (not just the last
+                        // stored totalMs) when archiving yesterday's total.
+                        let finalTotalMs = usage.totalMs || 0;
+                        if (usage.isActive && usage.lastStart) {
+                            finalTotalMs += (now - usage.lastStart);
                         }
-                    });
-                }
-                
-                if (needsReset) {
-                    labKeys.forEach(room => {
-                        if (roomUsage[room]) {
-                            roomUsage[room].totalMs = 0;
-                            roomUsage[room].lastStart = null;
-                            roomUsage[room].isActive = false;
-                            db.ref(`analytics/roomUsage/${room}`).set(roomUsage[room]);
+
+                        if (lastResetDate && finalTotalMs > 0) {
+                            db.ref(`analytics/dailyAnalytics/${lastResetDate}/${usageKey}/usageHours`).set(finalTotalMs / 3600000);
                         }
+
+                        usage.totalMs = 0;
+                        // If it's currently on, keep tracking it - just restart the
+                        // clock at zero for the new day instead of stopping it.
+                        usage.lastStart = usage.isActive ? now : null;
+                        db.ref(`analytics/roomUsage/${usageKey}`).set(usage);
                     });
-                    
+
+                    db.ref('analytics/lastUsageResetDate').set(todayStr);
                     localStorage.removeItem('dailyAnalytics');
-                    localStorage.setItem('last_active_date', todayStr);
-                    
-                    console.log('[Dashboard Page Load] Reset complete, reloading dashboard');
+
+                    console.log('[Usage Reset] Reset complete, reloading dashboard');
                     setTimeout(() => renderDashboard(), 500);
-                }
+                });
             }
             
             // Test Firebase connection
@@ -662,10 +550,7 @@
                         if (!roomExists) {
                             labs.push(key);
                             labKeys.push(key);
-                            // Use roomName from data if available, otherwise format key
-                            let displayLabel = data[key].roomName || key.replace(/_/g, ' ');
-                            // Map Room_1 to Room 401 for display
-                            if (key === "Room_1") displayLabel = "Room 401";
+                            const displayLabel = getRoomDisplayName(key, data[key]);
                             roomLabels.push(displayLabel);
                             console.log(`[loadRoomsFromFirebase] Added new room: ${key} as ${displayLabel}`);
                         }
@@ -708,6 +593,27 @@
                             const unit1On = (roomData.units?.unit_1?.ac === true || roomData.units?.unit_1?.ac === "ON" || roomData.units?.unit_1?.ac === 1);
                             const unit2On = (roomData.units?.unit_2?.ac === true || roomData.units?.unit_2?.ac === "ON" || roomData.units?.unit_2?.ac === 1);
                             acOn = unit1On || unit2On;
+
+                            // Track each unit's own online duration independently and
+                            // reactively based on actual Firebase state - previously this
+                            // only updated when toggled from THIS browser tab (toggleUnitAC),
+                            // so a unit turned on/off elsewhere (another device, automation,
+                            // or already-on at page load) never started/stopped its "online
+                            // today" counter, which is why both units could show the same
+                            // frozen duration regardless of their real on/off state.
+                            [['unit_1', unit1On], ['unit_2', unit2On]].forEach(([unit, isOn]) => {
+                                const unitKey = `${key}_${unit}`;
+                                if (!roomUsage[unitKey]) roomUsage[unitKey] = { totalMs: 0, lastStart: null, isActive: false };
+                                if (isOn && !roomUsage[unitKey].isActive) {
+                                    roomUsage[unitKey].lastStart = now;
+                                    roomUsage[unitKey].isActive = true;
+                                    db.ref(`analytics/roomUsage/${unitKey}`).set(roomUsage[unitKey]);
+                                } else if (!isOn && roomUsage[unitKey].isActive) {
+                                    roomUsage[unitKey].totalMs += (now - roomUsage[unitKey].lastStart);
+                                    roomUsage[unitKey].isActive = false;
+                                    db.ref(`analytics/roomUsage/${unitKey}`).set(roomUsage[unitKey]);
+                                }
+                            });
                         }
                         
                         if (acOn && !roomUsage[key].isActive) {
@@ -721,7 +627,10 @@
                         // Save to Firebase for cross-device sync
                         db.ref(`analytics/roomUsage/${key}`).set(roomUsage[key]);
                         labsData[key] = roomData;
-                        
+
+                        // Notify on occupied/unoccupied transitions detected by the humidity automation
+                        checkOccupancyDetection(key, roomData);
+
                         console.log(`[loadRoomsFromFirebase] Found room: ${key} with AC state: ${roomData.ac}, last_seen: ${roomData.last_seen}`);
                     }
                 });
@@ -858,7 +767,7 @@
                     if (!labKeys.includes(id)) {
                         labs.push(id);
                         labKeys.push(id);
-                        const displayLabel = newRoomData.roomName || id.replace(/_/g, ' ');
+                        const displayLabel = getRoomDisplayName(id, newRoomData);
                         roomLabels.push(displayLabel);
                         console.log(`[saveNewRoom] Added room to local arrays: ${id} as ${displayLabel}`);
                     }
@@ -889,7 +798,7 @@
 
         function setFilter(type) {
             currentFilter = type;
-            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('#btn-all, #btn-on, #btn-off').forEach(btn => btn.classList.remove('active'));
             document.getElementById(`btn-${type}`).classList.add('active');
             renderDashboard();
         }
@@ -1570,8 +1479,66 @@
             }
         }
 
+        // Detect occupied/unoccupied transitions using the same humidity thresholds
+        // as the room's Occupancy Detection (Humidity) automation, and raise an alert
+        // on the Alerts page whenever a room crosses into or out of "occupied".
+        function checkOccupancyDetection(roomId, roomData) {
+            const automation = roomData.automation;
+            if (!automation || !automation.enabled) return;
+
+            // A device with no live sensor reading (offline, or hasn't reported yet)
+            // reads back as humidity 0 in Firebase - same convention the dashboard's
+            // own display uses. Treating that as a real reading would misclassify
+            // offline rooms as "unoccupied".
+            const lastSeen = roomData.last_seen || 0;
+            const isDeviceOnline = lastSeen > 0 && (Date.now() - lastSeen) < HEARTBEAT_TIMEOUT;
+            if (!isDeviceOnline) return;
+
+            const humidity = roomData.humidity;
+            const occupiedThreshold = automation.humidityOccupiedThreshold;
+            const emptyThreshold = automation.humidityEmptyThreshold;
+            if (!humidity || !occupiedThreshold || !emptyThreshold) return;
+
+            let newState;
+            if (humidity > occupiedThreshold) {
+                newState = 'occupied';
+            } else if (humidity < emptyThreshold) {
+                newState = 'empty';
+            } else {
+                return; // Within the normal band - no occupancy change to report
+            }
+
+            const previousState = occupancyFlags[roomId];
+            if (newState === previousState) return;
+            occupancyFlags[roomId] = newState;
+
+            const idx = labKeys.indexOf(roomId);
+            const roomLabel = (idx !== -1 && roomLabels[idx]) ? roomLabels[idx] : getRoomDisplayName(roomId, roomData);
+            const isOccupied = newState === 'occupied';
+
+            const alertData = {
+                type: 'occupancy_change',
+                room: roomId,
+                roomLabel: roomLabel,
+                occupancyState: newState,
+                title: isOccupied ? `Room Occupied: ${roomLabel}` : `Room Unoccupied: ${roomLabel}`,
+                message: isOccupied
+                    ? `Humidity rose to ${humidity.toFixed(1)}% (occupied threshold ${occupiedThreshold}%)`
+                    : `Humidity dropped to ${humidity.toFixed(1)}% (empty threshold ${emptyThreshold}%)`,
+                timestamp: firebase.database.ServerValue.TIMESTAMP,
+                acknowledged: false
+            };
+
+            db.ref('alerts').push(alertData);
+            console.log(`[Occupancy Detection] ${roomId} is now ${newState}`);
+
+            if (typeof notificationSystem !== 'undefined') {
+                notificationSystem.show(`${roomLabel} is ${isOccupied ? 'occupied' : 'unoccupied'}`, isOccupied ? 'warning' : 'info');
+            }
+        }
+
         function watchDeviceOnline(roomId) {
-            const roomLabel = roomId.replace('_', ' ');
+            const roomLabel = getRoomDisplayName(roomId, labsData[roomId]);
             console.log(`[Offline Detection] Starting monitor for ${roomId} (${roomLabel})`);
             console.log(`[Offline Detection] Listening to path: ${roomId}/last_seen`);
             

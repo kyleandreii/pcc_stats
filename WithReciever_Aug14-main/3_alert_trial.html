@@ -52,6 +52,17 @@
             box-shadow: var(--status-warning-glow);
             border-color: rgba(245, 158, 11, 0.3);
         }
+        .incident-card.occupancy {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%);
+            border-color: rgba(59, 130, 246, 0.2);
+        }
+        .incident-card.occupancy::before {
+            background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+        }
+        .incident-card.occupancy:hover {
+            box-shadow: 0 8px 24px rgba(59, 130, 246, 0.25);
+            border-color: rgba(59, 130, 246, 0.3);
+        }
 
         /* Resolution History Log Styling */
         .history-log-container {
@@ -240,6 +251,14 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
+        // Show a toast for any new alert (device offline, occupancy change)
+        // pushed to Firebase while this page is open - see shared-utils.js.
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => notificationSystem.watchFirebaseAlerts(db));
+        } else {
+            notificationSystem.watchFirebaseAlerts(db);
+        }
+
 
         /* --- LOGOUT LOGIC --- */
         function confirmLogout() {
@@ -258,7 +277,7 @@
         }
 
         function resolveIncident(roomKey) {
-            const roomName = roomKey.replace('_', ' ');
+            const roomName = getRoomDisplayName(roomKey, labsData[roomKey]);
 
             Swal.fire({
                 title: 'Resolve ' + roomName + '?',
@@ -412,22 +431,34 @@
             console.log(`[executeRenderAlerts] Processing ${alertKeys.length} alerts from Firebase`);
 
             let offlineAlertCount = 0;
+            let occupancyAlertCount = 0;
             alertKeys.forEach((alertKey) => {
                 const alert = alertsData[alertKey];
                 if (alert.acknowledged) return;
-                if (alert.type !== 'device_offline') return;
+                if (alert.type !== 'device_offline' && alert.type !== 'occupancy_change') return;
 
-                offlineAlertCount++;
-                incidents.push({
-                    type: 'offline',
-                    alertKey,
-                    alert,
-                    timestamp: alert.timestamp || 0
-                });
-                console.log(`[executeRenderAlerts] Added offline incident for ${alertKey}`);
+                if (alert.type === 'device_offline') {
+                    offlineAlertCount++;
+                    incidents.push({
+                        type: 'offline',
+                        alertKey,
+                        alert,
+                        timestamp: alert.timestamp || 0
+                    });
+                    console.log(`[executeRenderAlerts] Added offline incident for ${alertKey}`);
+                } else {
+                    occupancyAlertCount++;
+                    incidents.push({
+                        type: 'occupancy',
+                        alertKey,
+                        alert,
+                        timestamp: alert.timestamp || 0
+                    });
+                    console.log(`[executeRenderAlerts] Added occupancy incident for ${alertKey}`);
+                }
             });
 
-            console.log(`[executeRenderAlerts] Offline incidents count: ${offlineAlertCount}`);
+            console.log(`[executeRenderAlerts] Offline incidents count: ${offlineAlertCount}, Occupancy incidents count: ${occupancyAlertCount}`);
             console.log(`[executeRenderAlerts] Total incidents: ${incidents.length}`);
 
             // Sort incidents by timestamp (newest first)
@@ -445,7 +476,7 @@
                             <div class="flex items-center gap-4 pl-4">
                                 <div class="stats-icon-bg" style="background-color: #fee2e2; color: #dc2626;"><i data-lucide="alert-octagon" class="animate-flicker"></i></div>
                                 <div>
-                                    <h4 class="font-black text-gray-800 text-sm">${incident.roomKey.replace('_', ' ')}</h4>
+                                    <h4 class="font-black text-gray-800 text-sm">${getRoomDisplayName(incident.roomKey, labsData[incident.roomKey])}</h4>
                                     <p class="text-[10px] text-red-600 font-bold uppercase tracking-widest">Temperature Critical</p>
                                     <p class="text-[8px] text-gray-400 mt-1">Auto-dismiss in ${incident.remainingMinutes}min</p>
                                 </div>
@@ -457,7 +488,7 @@
                         </div>`;
                 } else if (incident.type === 'offline') {
                     const alert = incident.alert;
-                    const roomLabel = alert.roomLabel || alert.room?.replace('_', ' ') || 'Unknown Room';
+                    const roomLabel = alert.roomLabel || getRoomDisplayName(alert.room, labsData[alert.room]) || 'Unknown Room';
                     const timeStr = alert.timestamp ? new Date(alert.timestamp).toLocaleString() : 'Unknown';
 
                     incidentHtml += `
@@ -477,6 +508,29 @@
                                 <button onclick="acknowledgeAlert('${incident.alertKey}')" class="px-5 py-2 border-2 border-[#800000] text-[#800000] text-[10px] font-black rounded-lg uppercase hover:bg-[#800000] hover:text-white transition-all active:scale-95">Acknowledge</button>
                             </div>
                         </div>`;
+                } else if (incident.type === 'occupancy') {
+                    const alert = incident.alert;
+                    const roomLabel = alert.roomLabel || getRoomDisplayName(alert.room, labsData[alert.room]) || 'Unknown Room';
+                    const timeStr = alert.timestamp ? new Date(alert.timestamp).toLocaleString() : 'Unknown';
+                    const isOccupied = alert.occupancyState === 'occupied';
+
+                    incidentHtml += `
+                        <div class="incident-card occupancy flex items-center justify-between">
+                            <div class="flex items-center gap-4 pl-4">
+                                <div class="stats-icon-bg" style="background-color: ${isOccupied ? '#dbeafe' : '#f3f4f6'}; color: ${isOccupied ? '#2563eb' : '#6b7280'};"><i data-lucide="${isOccupied ? 'user-check' : 'user-x'}"></i></div>
+                                <div>
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <span class="${isOccupied ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'} px-2 py-0.5 rounded text-[9px] font-bold uppercase">${isOccupied ? 'Occupied' : 'Unoccupied'}</span>
+                                        <h4 class="font-black text-gray-800 text-sm">${roomLabel}</h4>
+                                    </div>
+                                    <p class="text-[10px] ${isOccupied ? 'text-blue-600' : 'text-gray-500'} font-bold uppercase tracking-widest">${alert.message || (isOccupied ? 'Occupancy detected' : 'Room now empty')}</p>
+                                    <p class="text-[10px] text-gray-500 mt-1 font-semibold">${timeStr}</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-6">
+                                <button onclick="acknowledgeAlert('${incident.alertKey}')" class="px-5 py-2 border-2 border-[#800000] text-[#800000] text-[10px] font-black rounded-lg uppercase hover:bg-[#800000] hover:text-white transition-all active:scale-95">Acknowledge</button>
+                            </div>
+                        </div>`;
                 }
             });
 
@@ -489,8 +543,8 @@
                 avgTemp: 'avg-temp'
             });
             
-            // Alert badge shows total incidents (temperature + offline) to match incident list
-            const totalIncidents = criticalCount + offlineAlertCount;
+            // Alert badge shows total incidents (temperature + offline + occupancy) to match incident list
+            const totalIncidents = criticalCount + offlineAlertCount + occupancyAlertCount;
             document.getElementById('alert-badge').innerText = totalIncidents + " Alerts";
 
             const container = document.getElementById('incident-container');

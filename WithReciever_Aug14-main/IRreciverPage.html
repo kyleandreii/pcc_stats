@@ -12,6 +12,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="shared-utils.js"></script>
     <script src="ir-library.js"></script>
     <style>
         /* IR Receiver-specific styles that complement global CSS */
@@ -474,6 +475,14 @@
         }
         const db = firebase.database();
 
+        // Show a toast for any new alert (device offline, occupancy change)
+        // pushed to Firebase while this page is open - see shared-utils.js.
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => notificationSystem.watchFirebaseAlerts(db));
+        } else {
+            notificationSystem.watchFirebaseAlerts(db);
+        }
+
         // Update Firebase connection status
         const firebaseStatus = document.getElementById('firebaseStatus');
         if (firebaseStatus) {
@@ -696,7 +705,7 @@
             );
             const list = roomEntries.map((key) => {
                 const roomData = data[key] || {};
-                const roomName = roomData.roomName || roomData.customRoomName || key.replace(/_/g, ' ');
+                const roomName = getRoomDisplayName(key, roomData);
                 return { key, name: normalizeLabName(roomName) };
             });
             return list.length ? list : [
@@ -711,11 +720,17 @@
 
         function renderLabOptions() {
             const labOptions = state.availableLabs;
-            const optionsHtml = labOptions.map((lab) => `<option value="${lab.name}">${lab.name}</option>`).join('');
+            // The option VALUE is the room's Firebase key (e.g. "Room_1") so it
+            // lines up with what the ESP32 firmware looks up by ROOM_ID; the
+            // option TEXT is the friendly display name (e.g. "Room 401") shown
+            // to the user. These used to be the same thing (the display name
+            // was used as the storage key), which meant the Remote Library
+            // could never actually be found by a room's firmware.
+            const optionsHtml = labOptions.map((lab) => `<option value="${lab.key}">${lab.name}</option>`).join('');
             document.getElementById('labFilterSelect').innerHTML = '<option value="">Select laboratory</option>' + optionsHtml;
             document.getElementById('saveLabSelect').innerHTML = optionsHtml;
             if (!document.getElementById('labFilterSelect').value && labOptions.length) {
-                document.getElementById('labFilterSelect').value = labOptions[0].name;
+                document.getElementById('labFilterSelect').value = labOptions[0].key;
             }
 
             // Populate command select dropdown
@@ -726,8 +741,8 @@
             }
         }
 
-        function getLibraryByLab(labName) {
-            const key = String(labName || '').trim();
+        function getLibraryByLab(labKey) {
+            const key = String(labKey || '').trim();
             console.log('Getting library for lab key:', key);
             const labEntry = state.libraryData[key] || {};
             console.log('Lab entry:', labEntry);
@@ -737,6 +752,13 @@
             });
             console.log('Result:', result);
             return result;
+        }
+
+        // Look up the friendly display name for a room's Firebase key, for
+        // showing to the user - Firebase paths/lookups always use the key.
+        function labNameFromKey(labKey) {
+            const found = state.availableLabs.find((lab) => lab.key === labKey);
+            return found ? found.name : getRoomDisplayName(labKey);
         }
 
         function asyncAlert(message, okText='OK') {
@@ -798,7 +820,7 @@
         }
 
         function renderLibraryCards() {
-            const selectedLab = document.getElementById('labFilterSelect').value || state.availableLabs[0]?.name || 'Laboratory 1';
+            const selectedLab = document.getElementById('labFilterSelect').value || state.availableLabs[0]?.key || 'Laboratory 1';
             const labSignals = getLibraryByLab(selectedLab);
             console.log('Rendering cards for lab:', selectedLab, 'Signals:', labSignals);
             console.log('COMMANDS:', COMMANDS);
@@ -890,7 +912,7 @@
             }
             if (action === 'view') {
                 const details = data || {};
-                const entry = { labName: lab, commandKey: command, commandLabel: COMMANDS.find((item) => item.key === command)?.label || command, protocol: details.protocol || 'PANASONIC', rawData: details.rawData || [], signalLength: details.signalLength || normalizeRawData(details.rawData || []).length, createdAt: details.createdAt || '', updatedAt: details.updatedAt || '' };
+                const entry = { labName: labNameFromKey(lab), commandKey: command, commandLabel: COMMANDS.find((item) => item.key === command)?.label || command, protocol: details.protocol || 'PANASONIC', rawData: details.rawData || [], signalLength: details.signalLength || normalizeRawData(details.rawData || []).length, createdAt: details.createdAt || '', updatedAt: details.updatedAt || '' };
                 const html = `
                     <div class="space-y-4 text-sm text-gray-700">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -930,7 +952,7 @@
             if (action === 'delete') {
                 Swal.fire({
                     title: 'Delete IR Signal?',
-                    html: `Are you sure you want to delete:<br><strong>${lab} → ${COMMANDS.find((item) => item.key === command)?.label || command}</strong><br><br>This action cannot be undone.`,
+                    html: `Are you sure you want to delete:<br><strong>${labNameFromKey(lab)} → ${COMMANDS.find((item) => item.key === command)?.label || command}</strong><br><br>This action cannot be undone.`,
                     icon: 'warning',
                     showCancelButton: true,
                     confirmButtonColor: '#800000',
@@ -966,7 +988,7 @@
 
             const existing = state.libraryData[lab]?.[command];
             if (existing) {
-                const replace = window.confirm(`${name} signal already exists for ${lab}.\n\nWhat would you like to do?`);
+                const replace = window.confirm(`${name} signal already exists for ${labNameFromKey(lab)}.\n\nWhat would you like to do?`);
                 if (!replace) return;
             }
 
@@ -1006,7 +1028,7 @@
                 console.log('Lab list:', labList);
                 state.availableLabs = labList;
                 renderLabOptions();
-                const selected = document.getElementById('labFilterSelect').value || labList[0]?.name || 'Laboratory 1';
+                const selected = document.getElementById('labFilterSelect').value || labList[0]?.key || 'Laboratory 1';
                 document.getElementById('labFilterSelect').value = selected;
                 console.log('Selected lab:', selected);
                 renderLibraryCards();
@@ -1047,7 +1069,7 @@
         });
 
         document.getElementById('pasteSignalBtn').addEventListener('click', () => {
-            const selectedLab = document.getElementById('labFilterSelect').value || state.availableLabs[0]?.name || 'Laboratory 1';
+            const selectedLab = document.getElementById('labFilterSelect').value || state.availableLabs[0]?.key || 'Laboratory 1';
             const rawText = document.getElementById('rawSignalOutput').textContent;
             populateForm({
                 lab: selectedLab,
@@ -1060,7 +1082,7 @@
         });
 
         document.getElementById('addSignalBtn').addEventListener('click', () => {
-            const selectedLab = document.getElementById('labFilterSelect').value || state.availableLabs[0]?.name || 'Laboratory 1';
+            const selectedLab = document.getElementById('labFilterSelect').value || state.availableLabs[0]?.key || 'Laboratory 1';
             populateForm({
                 lab: selectedLab,
                 command: 'acOn',

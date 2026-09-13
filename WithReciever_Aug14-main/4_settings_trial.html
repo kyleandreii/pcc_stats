@@ -598,6 +598,14 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
+        // Show a toast for any new alert (device offline, occupancy change)
+        // pushed to Firebase while this page is open - see shared-utils.js.
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => notificationSystem.watchFirebaseAlerts(db));
+        } else {
+            notificationSystem.watchFirebaseAlerts(db);
+        }
+
         let labKeys = [];
         let labsData = {};
         let selectedRoom = null;
@@ -858,9 +866,9 @@
             
             // Single unit mode
             const currentTarget = currentData.targetTemp !== undefined ? currentData.targetTemp : 24;
-            const newVal = currentTarget + change;
-            if (newVal < 16 || newVal > 30) return;
-            
+            const newVal = Math.min(30, Math.max(16, currentTarget + change));
+
+            // Always send the IR command, even at the min/max threshold, just like a physical remote
             db.ref(`${selectedRoom}`).update({ targetTemp: newVal, ac_command: cmd });
         }
 
@@ -873,9 +881,9 @@
             
             const unitKey = `unit_${unitNumber}`;
             const currentTarget = currentData.units?.[unitKey]?.targetTemp !== undefined ? currentData.units[unitKey].targetTemp : 24;
-            const newVal = currentTarget + change;
-            if (newVal < 16 || newVal > 30) return;
-            
+            const newVal = Math.min(30, Math.max(16, currentTarget + change));
+
+            // Always send the IR command, even at the min/max threshold, just like a physical remote
             console.log('[Settings] Updating Firebase - Path:', `${selectedRoom}/units/${unitKey}`, 'Data:', { targetTemp: newVal, ac_command: cmd });
             db.ref(`${selectedRoom}/units/${unitKey}`).update({ targetTemp: newVal, ac_command: cmd });
         }
@@ -1113,8 +1121,6 @@
         function confirmLogout() { document.getElementById('logoutModal').style.display = 'flex'; lucide.createIcons(); }
 
         startRealtimeSync();
-        // Check automation status every 10 seconds to ensure it catches the correct minute
-        setInterval(runAutomationCheck, 10000);
 
         // Initialize Room_1 with Koppel unit specs if not already present in specs
         db.ref("Room_1/specs").once("value", (snapshot) => {
