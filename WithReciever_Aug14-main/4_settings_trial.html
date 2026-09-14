@@ -1096,16 +1096,24 @@
             
             // Save to room-level specs
             db.ref(`${selectedRoom}/specs`).update(specs);
-            
-            // Save to config/rooms for cost calculation
-            const airconConfig = {
-                aircon_type: specs.acType,
-                rated_watts: specs.powerInput,
-                hp_rating: null,
-                duty_cycle: specs.dutyCycle
-            };
-            db.ref(`config/rooms/${selectedRoom}`).set(airconConfig);
-            
+
+            // Save to config/rooms for cost calculation, preserving any measured
+            // temperature calibration data already stored for this room so this
+            // save doesn't silently wipe it out
+            db.ref(`config/rooms/${selectedRoom}/specs/tempCalibration`).once('value').then((snap) => {
+                const existingCalibration = snap.val();
+                const airconConfig = {
+                    aircon_type: specs.acType,
+                    rated_watts: specs.powerInput,
+                    hp_rating: null,
+                    duty_cycle: specs.dutyCycle
+                };
+                if (existingCalibration) {
+                    airconConfig.specs = { tempCalibration: existingCalibration };
+                }
+                db.ref(`config/rooms/${selectedRoom}`).set(airconConfig);
+            });
+
             Swal.fire({ icon: 'success', title: 'Info Updated', timer: 1000, showConfirmButton: false });
         }
 
@@ -1143,16 +1151,25 @@
                     dutyCycle: 0.65,
                     rating: "Standard"
                 };
-                
+
+                // Measured amperage readings for this specific unit (clamp-meter
+                // readings at two target-temp setpoints), used to estimate real
+                // effective wattage instead of a flat duty-cycle guess
+                const tempCalibration = [
+                    { temp: 16, amps: 16.5, watts: 3795 },
+                    { temp: 30, amps: 1.1, watts: 253 }
+                ];
+
                 // Save to specs
                 db.ref("Room_1/specs").set(koppelSpecs);
-                
+
                 // Save to config/rooms for cost calculation
                 db.ref("config/rooms/Room_1").set({
                     aircon_type: "non_inverter",
                     rated_watts: 4020,
                     hp_rating: null,
-                    duty_cycle: 0.65
+                    duty_cycle: 0.65,
+                    specs: { tempCalibration }
                 });
                 console.log("Koppel unit configuration initialized for Room_1");
             }

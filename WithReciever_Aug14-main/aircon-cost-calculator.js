@@ -5,12 +5,6 @@
 
 const AirconCostCalculator = (function() {
     
-    // Default temperature calibration points (from measured data: 16°C = 3795W, 30°C = 253W)
-    const DEFAULT_TEMP_CALIBRATION = [
-        { temp: 16, amps: 16.5, watts: 3795 },
-        { temp: 30, amps: 1.1, watts: 253 }
-    ];
-
     // Default power ratings (watts) by HP rating for different AC types
     const POWER_RATINGS = {
         inverter: {
@@ -45,11 +39,14 @@ const AirconCostCalculator = (function() {
             return getRatedWatts(unitConfig);
         }
 
-        // Get calibration data from specs or use default
-        const calibration = unitConfig.specs?.tempCalibration || DEFAULT_TEMP_CALIBRATION;
-        
+        // Only use temperature-based wattage when this specific unit has its own
+        // measured calibration. There is no generic curve that applies across
+        // different AC models/ratings, so without room-specific data we trust the
+        // configured rated_watts/duty_cycle instead of guessing from a temp curve.
+        const calibration = unitConfig.specs?.tempCalibration;
+
         if (!calibration || calibration.length < 2) {
-            console.log('[Cost Calculator] getEffectiveWatts - no calibration data, falling back to rated_watts');
+            console.log('[Cost Calculator] getEffectiveWatts - no room-specific calibration data, falling back to rated_watts');
             return getRatedWatts(unitConfig);
         }
 
