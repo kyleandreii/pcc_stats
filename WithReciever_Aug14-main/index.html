@@ -3,75 +3,112 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
- 
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
- 
+
     <style>
-        .bg-maroon { background-color: #800000; }
-        .text-maroon { color: #800000; }
-        .focus-maroon:focus { border-color: #800000; outline: none; box-shadow: 0 0 0 4px rgba(128, 0, 0, 0.15), 0 0 0 1px #800000; transition: all 0.2s ease; }
-       
+        * { font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; }
+        .bg-maroon { background-color: #8B1538; }
+        .text-maroon { color: #8B1538; }
+        .focus-maroon:focus { border-color: #8B1538; outline: none; box-shadow: 0 0 0 4px rgba(139, 21, 56, 0.15); transition: all 0.2s ease; }
+
+        body { margin: 0; min-height: 100vh; background: #FBF6F3; }
+
         @keyframes spin {
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
         }
         .animate-spin-slow { animation: spin 2s linear infinite; }
-       
+
+        @keyframes floatSlow {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-14px) rotate(-2deg); }
+        }
+        @keyframes floatSlow2 {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(12px); }
+        }
+        .pcc-float1 { animation: floatSlow 6s ease-in-out infinite; }
+        .pcc-float2 { animation: floatSlow2 5s ease-in-out infinite; }
+
         .input-field { transition: all 0.2s ease; }
         .input-field:focus { transform: translateY(-1px); }
-       
-        body {
-            background-image: url('114logo.png');
-            background-size: cover;
-            background-position: center;
-            background-attachment: fixed;
-            position: relative;
-        }
-       
-        body::before {
-            content: '';
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0.8) 100%);
-            pointer-events: none;
-            z-index: 0;
-        }
-       
-        body > * {
-            position: relative;
-            z-index: 1;
-        }
-       
-        .login-container {
-            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.7), 0 0 60px rgba(0, 0, 0, 0.65), 0 30px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.15);
-        }
+
+        .pcc-submit-btn { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+        .pcc-submit-btn:hover { transform: translateY(-2px); box-shadow: 0 20px 40px rgba(139,21,56,0.4); }
+        .pcc-submit-btn:active { transform: translateY(0); }
     </style>
 </head>
-<body class="min-h-screen flex items-center justify-center p-4 font-sans">
- 
-    <div class="max-w-md w-full bg-white rounded-3xl shadow-2xl overflow-hidden transform transition-all hover:scale-[1.01] login-container">
-        <div class="bg-maroon p-10 text-center relative overflow-hidden">
-            <div class="absolute -top-10 -right-10 w-32 h-32 bg-white/5 rounded-full"></div>
-            <div class="absolute -bottom-10 -left-10 w-24 h-24 bg-white/5 rounded-full"></div>
- 
-            <div class="mb-4 flex justify-center relative z-10">
-                <div class="w-24 h-24 bg-white/10 rounded-2xl flex items-center justify-center border-2 border-white/20 backdrop-blur-md shadow-xl">
-                    <img src="pcctruelogo.png" alt="PCC Logo" class="w-full h-full object-contain">
+<body class="flex min-h-screen">
+
+    <!-- ILLUSTRATED SIDE -->
+    <div class="hidden lg:flex flex-col justify-center relative overflow-hidden" style="width:56%; background:linear-gradient(160deg, #A31E4A 0%, #8B1538 45%, #5C0E24 100%); padding:60px 70px;">
+        <div class="absolute rounded-full" style="top:-100px; left:-100px; width:340px; height:340px; background:rgba(255,255,255,0.06);"></div>
+        <div class="absolute rounded-full" style="bottom:-140px; right:-80px; width:400px; height:400px; background:rgba(255,255,255,0.05);"></div>
+        <div class="pcc-float1 absolute rounded-2xl" style="top:90px; right:90px; width:60px; height:60px; background:rgba(255,182,72,0.85); box-shadow:0 16px 30px rgba(0,0,0,0.15);"></div>
+        <div class="pcc-float2 absolute rounded-2xl" style="bottom:120px; left:60px; width:44px; height:44px; background:rgba(74,159,232,0.85); box-shadow:0 16px 30px rgba(0,0,0,0.15);"></div>
+
+        <div class="relative text-white mb-8" style="z-index:2;">
+            <div style="font-family:'Outfit'; font-weight:900; font-size:38px; letter-spacing:-0.02em; line-height:1.15;">Smart comfort,<br>campus-wide.</div>
+            <div class="text-sm font-medium mt-3" style="opacity:0.8; max-width:420px; line-height:1.6;">Monitor temperature, humidity, and power across every laboratory in real time.</div>
+        </div>
+
+        <svg class="pcc-float1 relative" width="440" height="300" viewBox="0 0 480 320" fill="none" xmlns="http://www.w3.org/2000/svg" style="z-index:1;">
+            <ellipse cx="240" cy="290" rx="180" ry="18" fill="rgba(0,0,0,0.12)"/>
+            <circle cx="390" cy="55" r="26" fill="#FFB648"/>
+            <g stroke="#FFB648" stroke-width="4" stroke-linecap="round">
+                <line x1="390" y1="14" x2="390" y2="22"/>
+                <line x1="424" y1="30" x2="417" y2="36"/>
+                <line x1="356" y1="30" x2="363" y2="36"/>
+            </g>
+            <rect x="120" y="90" width="180" height="160" rx="20" fill="#ffffff"/>
+            <rect x="146" y="118" width="28" height="28" rx="6" fill="#EAF4FE"/>
+            <rect x="186" y="118" width="28" height="28" rx="6" fill="#FDF1F4"/>
+            <rect x="226" y="118" width="28" height="28" rx="6" fill="#EAF4FE"/>
+            <rect x="146" y="158" width="28" height="28" rx="6" fill="#EAFBF3"/>
+            <rect x="186" y="158" width="28" height="28" rx="6" fill="#EAF4FE"/>
+            <rect x="226" y="158" width="28" height="28" rx="6" fill="#FDF1F4"/>
+            <rect x="188" y="204" width="44" height="46" rx="8" fill="#8B1538"/>
+            <rect x="202" y="218" width="16" height="8" rx="2" fill="#FFD9E2"/>
+            <g>
+                <rect x="20" y="130" width="110" height="76" rx="18" fill="#ffffff" opacity="0.97"/>
+                <circle cx="48" cy="158" r="16" fill="#FDF1F4"/>
+                <path d="M48 150v10.6a3.6 3.6 0 1 1-3.6 0V150a1.8 1.8 0 0 1 3.6 0z" stroke="#FF6B6B" stroke-width="1.6" fill="none"/>
+                <text x="68" y="154" font-family="Outfit" font-size="9" font-weight="700" fill="#B9B2BC">TEMP</text>
+                <text x="68" y="172" font-family="Outfit" font-size="17" font-weight="800" fill="#1F1B24">24.5&#176;C</text>
+            </g>
+            <g class="pcc-float2">
+                <rect x="330" y="150" width="120" height="76" rx="18" fill="#ffffff" opacity="0.97"/>
+                <circle cx="358" cy="178" r="16" fill="#EAF4FE"/>
+                <path d="M358 168c0 0 9 11 9 18a9 9 0 1 1-18 0c0-7 9-18 9-18z" stroke="#4A9FE8" stroke-width="1.6" fill="none"/>
+                <text x="378" y="174" font-family="Outfit" font-size="9" font-weight="700" fill="#B9B2BC">HUMIDITY</text>
+                <text x="378" y="192" font-family="Outfit" font-size="17" font-weight="800" fill="#1F1B24">55%</text>
+            </g>
+            <path d="M60 250 Q80 244 100 250" stroke="#EAF4FE" stroke-width="4" stroke-linecap="round" fill="none" opacity="0.7"/>
+            <path d="M50 265 Q75 257 100 265" stroke="#EAF4FE" stroke-width="4" stroke-linecap="round" fill="none" opacity="0.45"/>
+        </svg>
+    </div>
+
+    <!-- FORM SIDE -->
+    <div class="flex-1 flex items-center justify-center p-6">
+        <div class="w-full max-w-sm">
+
+            <div class="flex justify-center mb-6">
+                <div class="w-20 h-20 rounded-3xl flex items-center justify-center border-2 border-white shadow-xl overflow-hidden" style="background:linear-gradient(135deg,#8B1538,#5C0E24); box-shadow:0 14px 30px rgba(139,21,56,0.3);">
+                    <img src="pcctruelogo.png" alt="PCC Logo" class="w-full h-full object-contain p-2">
                 </div>
             </div>
-           
-            <h2 class="text-2xl font-black text-white tracking-tight uppercase relative z-10">PCC S.T.A.T.S.</h2>
-            <p class="text-white/70 text-[10px] mt-1 font-bold tracking-[0.2em] uppercase relative z-10">Smart Thermal Adjustment & Tracking System</p>
-        </div>
- 
-        <div class="p-8 md:p-10">
-            <form id="login-form" class="space-y-5">
+
+            <div class="text-center mb-8">
+                <h2 class="text-2xl font-black text-gray-800" style="font-family:'Outfit'; letter-spacing:-0.01em;">Welcome back</h2>
+                <p class="text-[11px] font-bold text-gray-400 mt-2 uppercase tracking-[0.15em]">S.T.A.T.S. Control Center</p>
+            </div>
+
+            <form id="login-form" class="space-y-4">
                 <div>
                     <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">Institutional Email</label>
                     <div class="relative group">
@@ -79,11 +116,11 @@
                             <i data-lucide="mail" class="w-5 h-5"></i>
                         </span>
                         <input type="email" id="email" required
-                            class="input-field block w-full pl-12 pr-4 py-4 border border-gray-200 rounded-2xl leading-5 bg-gray-50 placeholder-gray-400 focus-maroon sm:text-sm"
+                            class="input-field block w-full pl-12 pr-4 py-4 border-2 border-transparent rounded-2xl leading-5 bg-[#F5F2F4] placeholder-gray-400 focus-maroon focus:bg-white sm:text-sm font-semibold text-gray-800"
                             placeholder="admin@pccnet.edu.ph">
                     </div>
                 </div>
- 
+
                 <div>
                     <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">Security Key</label>
                     <div class="relative group">
@@ -91,33 +128,37 @@
                             <i data-lucide="lock" class="w-5 h-5"></i>
                         </span>
                         <input type="password" id="password" required
-                            class="input-field block w-full pl-12 pr-4 py-4 border border-gray-200 rounded-2xl leading-5 bg-gray-50 placeholder-gray-400 focus-maroon sm:text-sm"
-                            placeholder="••••••••">
+                            class="input-field block w-full pl-12 pr-4 py-4 border-2 border-transparent rounded-2xl leading-5 bg-[#F5F2F4] placeholder-gray-400 focus-maroon focus:bg-white sm:text-sm font-semibold text-gray-800"
+                            placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;">
                     </div>
                 </div>
- 
-                <div class="flex items-center justify-between px-1">
-                    <label class="flex items-center cursor-pointer group">
-                        <input type="checkbox" id="stay-logged-in" class="h-4 w-4 text-maroon focus:ring-maroon border-gray-300 rounded transition-all">
-                        <span class="ml-2 text-xs font-semibold text-gray-500 group-hover:text-gray-700">Stay logged in</span>
-                    </label>
+
+                <div class="flex items-center justify-between px-1 pt-1">
+                    <div class="flex items-center gap-2.5">
+                        <label class="neumorph-switch cursor-pointer" style="width:38px; height:22px;">
+                            <input type="checkbox" id="stay-logged-in">
+                            <span class="neumorph-switch-slider" style="width:16px; height:16px; top:3px; left:3px;"></span>
+                        </label>
+                        <span class="text-xs font-bold text-gray-500">Stay logged in</span>
+                    </div>
                     <a href="#" id="forgot-password" class="text-xs font-bold text-maroon hover:underline decoration-2 underline-offset-4">Forgot Password?</a>
                 </div>
- 
-                <div class="pt-2 space-y-3">
+
+                <div class="pt-3">
                     <button type="submit" id="submit-btn"
-                        class="group relative w-full flex justify-center py-4 px-4 border border-transparent text-sm font-black rounded-2xl text-white bg-maroon hover:opacity-95 active:scale-[0.98] focus:outline-none transition-all shadow-xl shadow-maroon/20 uppercase tracking-widest">
+                        class="pcc-submit-btn group relative w-full flex justify-center py-4 px-4 text-sm font-black rounded-2xl text-white active:scale-[0.98] focus:outline-none uppercase tracking-widest"
+                        style="background:linear-gradient(135deg,#8B1538,#5C0E24); box-shadow:0 12px 26px rgba(139,21,56,0.3);">
                         <span id="btn-text" class="flex items-center gap-2">
                             Sign In To System <i data-lucide="chevron-right" class="w-4 h-4"></i>
                         </span>
                     </button>
                 </div>
             </form>
- 
+
             <p id="error-msg" class="text-red-600 text-[11px] font-bold text-center mt-4 hidden italic"></p>
             <p id="success-msg" class="text-green-600 text-[11px] font-bold text-center mt-4 hidden italic"></p>
- 
-            <div class="mt-10 pt-8 border-t border-gray-100 text-center">
+
+            <div class="mt-8 pt-6 border-t border-gray-100 text-center">
                 <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-relaxed">
                     &copy; 2026 ICTC Department <br>
                     <span class="text-maroon opacity-60">Authorized Personnel Only</span>
@@ -149,30 +190,30 @@
             databaseURL: "https://pcc-stats-default-rtdb.asia-southeast1.firebasedatabase.app/",
             projectId: "pcc-stats"
         };
-       
+
         if (!firebase.apps.length) {
             firebase.initializeApp(firebaseConfig);
         }
         const auth = firebase.auth();
- 
+
         const loginForm = document.getElementById('login-form');
         const submitBtn = document.getElementById('submit-btn');
         const btnText = document.getElementById('btn-text');
         const errorMsg = document.getElementById('error-msg');
         const successMsg = document.getElementById('success-msg');
         const forgotPasswordLink = document.getElementById('forgot-password');
- 
+
         // Helper to reset messages
         function resetMessages() {
             errorMsg.classList.add('hidden');
             successMsg.classList.add('hidden');
         }
- 
+
         // --- 2. LOGIN LOGIC ---
         loginForm.addEventListener('submit', (e) => {
             e.preventDefault();
             resetMessages();
-           
+
             const email = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value;
             const stayLoggedIn = document.getElementById('stay-logged-in').checked;
@@ -240,7 +281,7 @@
                     errorMsg.classList.remove('hidden');
                 });
         });
- 
+
         lucide.createIcons();
     </script>
 </body>
