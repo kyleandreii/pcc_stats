@@ -204,51 +204,6 @@ const AirconCostCalculator = (function() {
     }
 
     /**
-     * Compute daily totals for all rooms
-     * @param {Object} roomsConfig - Configuration for all rooms { roomKey: { aircon_type, hp_rating, rated_watts } }
-     * @param {Object} dailyUsage - Daily usage data { roomKey: { dateStr: hours } }
-     * @param {Array} dates - Array of date strings to compute
-     * @param {number} ratePerKwh - Electricity rate per kWh
-     * @returns {Object} Computed costs { roomKey: { dateStr: cost }, dailyTotals: { dateStr: cost }, weeklyTotal: cost }
-     */
-    function computeDailyTotals(roomsConfig, dailyUsage, dates, ratePerKwh) {
-        const results = {
-            roomCosts: {},
-            dailyTotals: {},
-            weeklyTotal: 0,
-            roomWeeklyTotals: {}
-        };
-
-        // Initialize room costs and weekly totals
-        Object.keys(roomsConfig).forEach(room => {
-            results.roomCosts[room] = {};
-            results.roomWeeklyTotals[room] = { hours: 0, cost: 0 };
-        });
-
-        dates.forEach(dateStr => {
-            let dailyTotal = 0;
-            
-            Object.keys(roomsConfig).forEach(room => {
-                const hours = dailyUsage[room]?.[dateStr] || 0;
-                const cost = computeAirconCost(roomsConfig[room], hours, ratePerKwh);
-                
-                results.roomCosts[room][dateStr] = cost;
-                dailyTotal += cost;
-                
-                results.roomWeeklyTotals[room].hours += hours;
-                results.roomWeeklyTotals[room].cost += cost;
-            });
-            
-            results.dailyTotals[dateStr] = parseFloat(dailyTotal.toFixed(2));
-            results.weeklyTotal += dailyTotal;
-        });
-
-        results.weeklyTotal = parseFloat(results.weeklyTotal.toFixed(2));
-
-        return results;
-    }
-
-    /**
      * Get default room configuration template
      * @returns {Object} Default configuration structure
      */
@@ -263,7 +218,6 @@ const AirconCostCalculator = (function() {
     // Public API
     return {
         computeAirconCost,
-        computeDailyTotals,
         getDefaultRoomConfig,
         getEffectiveWatts,
         POWER_RATINGS

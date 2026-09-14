@@ -2532,7 +2532,6 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                 console.log(`[Cost Verification] Room: ${room}`);
                 console.log(`[Cost Verification] Room Config:`, JSON.stringify(roomConfig, null, 2));
-                console.log(`[Cost Verification] Total Hours: ${totalHours}`);
                 console.log(`[Cost Verification] Rate per kWh: ${ratePerKwh}`);
 
                 // Get target temperature for cost calculation
@@ -4059,9 +4058,21 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
             const updatedConfig = JSON.parse(JSON.stringify(existingConfig));
 
-            
+            const changedRooms = [];
+
+
 
             Object.keys(updatedConfig).forEach(room => {
+
+                // Dual-unit rooms (Room_1) store duty_cycle/rated_watts per
+                // unit under .units.unit_1/unit_2, not at this top level -
+                // checking the top level for them here would always see
+                // them as "missing" and inject a bogus top-level
+                // duty_cycle onto an otherwise-correct dual-unit config.
+                // This legacy flat-shape migration doesn't apply to them.
+                if (updatedConfig[room].units) {
+                    return;
+                }
 
                 if (updatedConfig[room].duty_cycle === undefined || updatedConfig[room].duty_cycle === null) {
 
@@ -4071,11 +4082,13 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                     needsUpdate = true;
 
+                    changedRooms.push(room);
+
                     console.log(`[Migration] Adding duty_cycle=${updatedConfig[room].duty_cycle} to ${room}`);
 
                 }
 
-                
+
 
                 // Fix rated_watts - if stored as kW (small number like 4.02), convert to watts (multiply by 1000)
 
@@ -4087,19 +4100,36 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
                     needsUpdate = true;
 
+                    if (!changedRooms.includes(room)) changedRooms.push(room);
+
                     console.log(`[Migration] Converting rated_watts from ${oldWatts} kW to ${updatedConfig[room].rated_watts} W for ${room}`);
 
                 }
 
             });
 
-            
+
 
             if (needsUpdate) {
 
-                db.ref("config/rooms").set(updatedConfig);
+                // Update only the specific rooms that actually changed,
+                // rather than overwriting the entire config/rooms tree from
+                // a snapshot taken moments ago - a blanket .set() here would
+                // silently clobber any other room's config saved by Settings
+                // (or this same migration running in another tab) between
+                // this read and this write.
 
-                console.log('[Migration] Updated config/rooms with duty_cycle and rated_watts fixes');
+                const updates = {};
+
+                changedRooms.forEach(room => {
+
+                    updates[room] = updatedConfig[room];
+
+                });
+
+                db.ref("config/rooms").update(updates);
+
+                console.log('[Migration] Updated config/rooms for: ' + changedRooms.join(', '));
 
                 airconConfig = updatedConfig;
 
@@ -5249,7 +5279,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
             if (currentMetric === 'cost') {
                 const prevDateStr = prevDate.toISOString().split('T')[0];
                 const prevHours = await getUsageHoursForDate(room, prevDateStr);
-                prevValue = AirconCostCalculator.computeAirconCost(airconConfig[room], prevHours, ratePerKwh, targetTemp);
+                const prevTargetTemp = await getHistoricalTargetTempForDate(room, prevDateStr, roomConfig);
+                prevValue = await getActualCostForDate(room, prevDateStr, prevHours, prevTargetTemp, roomConfig, ratePerKwh);
 
             } else if (currentMetric === 'usage') {
                 const prevDateStr = prevDate.toISOString().split('T')[0];
@@ -5517,7 +5548,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                         const hours = await getUsageHoursForDate(room, dateStr);
                         const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
                         let targetTemp = await getHistoricalTargetTempForDate(room, dateStr, roomConfig);
-                        previousValue += AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh, targetTemp);
+                        previousValue += await getActualCostForDate(room, dateStr, hours, targetTemp, roomConfig, ratePerKwh);
 
                     } else if (currentMetric === 'usage') {
                         const dateStr = d.toISOString().split('T')[0];
@@ -5601,7 +5632,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                         const hours = await getUsageHoursForDate(room, dateStr);
                         const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
                         let targetTemp = await getHistoricalTargetTempForDate(room, dateStr, roomConfig);
-                        previousValue += AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh, targetTemp);
+                        previousValue += await getActualCostForDate(room, dateStr, hours, targetTemp, roomConfig, ratePerKwh);
 
                     } else if (currentMetric === 'usage') {
                         const dateStr = d.toISOString().split('T')[0];
@@ -5684,7 +5715,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                             const hours = await getUsageHoursForDate(room, dateStr);
                             const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
                             let targetTemp = await getHistoricalTargetTempForDate(room, dateStr, roomConfig);
-                            previousValue += AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh, targetTemp);
+                            previousValue += await getActualCostForDate(room, dateStr, hours, targetTemp, roomConfig, ratePerKwh);
 
                         } else if (currentMetric === 'usage') {
                             const dateStr = d.toISOString().split('T')[0];
@@ -6148,27 +6179,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                     const dateStr = d.toISOString().split('T')[0];
                     const hours = await getUsageHoursForDate(room, dateStr);
                     const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
-
-                    // Get historical average target temperature from Firebase
-                    const snapshot = await db.ref(`history/${room}/${dateStr}`).once('value');
-                    const hourData = snapshot.val();
-
-                    let targetTemp;
-                    if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
-                        // For dual unit, get average target temp for each unit
-                        // ESP32 logs as targetTemp1 and targetTemp2 directly in hourData
-                        const unit1TargetTemps = hourData ? Object.values(hourData).map(h => h.targetTemp1).filter(t => t !== undefined && t !== null) : [];
-                        const unit2TargetTemps = hourData ? Object.values(hourData).map(h => h.targetTemp2).filter(t => t !== undefined && t !== null) : [];
-                        targetTemp = {
-                            unit_1: unit1TargetTemps.length > 0 ? (unit1TargetTemps.reduce((a, b) => a + b, 0) / unit1TargetTemps.length) : labsData[room]?.units?.unit_1?.targetTemp,
-                            unit_2: unit2TargetTemps.length > 0 ? (unit2TargetTemps.reduce((a, b) => a + b, 0) / unit2TargetTemps.length) : labsData[room]?.units?.unit_2?.targetTemp
-                        };
-                    } else {
-                        // For single unit, get average target temp
-                        const targetTemps = hourData ? Object.values(hourData).map(h => h.targetTemp).filter(t => t !== undefined && t !== null) : [];
-                        targetTemp = targetTemps.length > 0 ? (targetTemps.reduce((a, b) => a + b, 0) / targetTemps.length) : labsData[room]?.targetTemp;
-                    }
-                    value = AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh, targetTemp);
+                    const targetTemp = await getHistoricalTargetTempForDate(room, dateStr, roomConfig);
+                    value = await getActualCostForDate(room, dateStr, hours, targetTemp, roomConfig, ratePerKwh);
 
                 } else if (currentMetric === 'usage') {
                     // Load usage hours from Firebase for the selected date
@@ -6493,7 +6505,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                     const hours = await getUsageHoursForDate(room, dateStr);
                     const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
                     let targetTemp = await getHistoricalTargetTempForDate(room, dateStr, roomConfig);
-                    value = AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh, targetTemp);
+                    value = await getActualCostForDate(room, dateStr, hours, targetTemp, roomConfig, ratePerKwh);
 
                 } else if (currentMetric === 'usage') {
                     // Load usage hours from Firebase for the selected date
@@ -6818,7 +6830,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                         const hours = await getUsageHoursForDate(room, dateStr);
                         const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
                         let targetTemp = await getHistoricalTargetTempForDate(room, dateStr, roomConfig);
-                        value = AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh, targetTemp);
+                        value = await getActualCostForDate(room, dateStr, hours, targetTemp, roomConfig, ratePerKwh);
 
                     } else if (currentMetric === 'usage') {
                         const dateStr = d.toISOString().split('T')[0];
@@ -6981,7 +6993,7 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                     if (currentMetric === 'cost') {
                         const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
                         let targetTemp = await getHistoricalTargetTempForDate(room, dateStr, roomConfig);
-                        roomTotal += AirconCostCalculator.computeAirconCost(airconConfig[room], hours, ratePerKwh, targetTemp);
+                        roomTotal += await getActualCostForDate(room, dateStr, hours, targetTemp, roomConfig, ratePerKwh);
 
                     } else if (currentMetric === 'usage') {
                         roomTotal += hours;

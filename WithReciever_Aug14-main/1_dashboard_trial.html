@@ -372,22 +372,32 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // Redirect back to login if not signed in - previously nothing on
-        // this page checked auth state at all, so anyone with the URL
-        // could view/control every room without ever signing in.
+        // Gate all data loading behind auth actually resolving - redirecting
+        // AFTER the fact (the previous version of this fix) still let
+        // loadRoomsFromFirebase() and watchFirebaseAlerts() fire immediately
+        // on page load regardless, and Realtime Database's socket typically
+        // returns the live snapshot faster than Auth's persisted-session
+        // check resolves. That left a real window where an unauthenticated
+        // visitor could see (and even act on) live room data before the
+        // redirect ever kicked in. Nothing below this now runs until auth
+        // state is known one way or the other.
         firebase.auth().onAuthStateChanged((user) => {
             if (!user) {
                 window.location.href = "index.html";
+                return;
             }
-        });
 
-        // Show a toast for any new alert (device offline, occupancy change)
-        // pushed to Firebase while this page is open - see shared-utils.js.
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => notificationSystem.watchFirebaseAlerts(db));
-        } else {
-            notificationSystem.watchFirebaseAlerts(db);
-        }
+            // Show a toast for any new alert (device offline, occupancy
+            // change) pushed to Firebase while this page is open - see
+            // shared-utils.js.
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', () => notificationSystem.watchFirebaseAlerts(db));
+            } else {
+                notificationSystem.watchFirebaseAlerts(db);
+            }
+
+            loadRoomsFromFirebase();
+        });
 
         // Analytics tracking variables - Firebase is authoritative
         let roomUsage = {}; // Will be loaded from Firebase
@@ -691,65 +701,71 @@
                 if (isInitialLoad) {
                     console.log('[loadRoomsFromFirebase] Final room list:', labKeys);
                     console.log('[loadRoomsFromFirebase] labsData:', labsData);
-                    
-                    // Start heartbeat monitoring for all rooms (only once on initial load)
-                    labKeys.forEach(roomId => {
-                        if (!deviceOfflineFlags[roomId]) {
-                            watchDeviceOnline(roomId);
-                        }
-                        
-                        // Add specific listener for last_seen to update heartbeat animation immediately (prevent duplicates)
-                        if (!heartbeatListeners[roomId]) {
-                            heartbeatListeners[roomId] = true;
-                            console.log(`[Heartbeat] Setting up listener for /${roomId}/last_seen`);
-                            db.ref(`/${roomId}/last_seen`).on('value', (snapshot) => {
-                                const lastSeen = snapshot.val();
-                                console.log(`[Heartbeat] /${roomId}/last_seen updated:`, lastSeen ? new Date(lastSeen).toISOString() : 'null');
-                                
-                                // Update the room data with new last_seen regardless of value
-                                const index = labKeys.indexOf(roomId);
-                                if (index !== -1 && labsData[roomId]) {
-                                    // Firebase is authoritative - use Firebase AC state directly
-                                    labsData[roomId].last_seen = lastSeen || 0;
-                                    latestData[index].last_seen = lastSeen || 0;
-                                    console.log(`[Heartbeat] Updating ${roomId} in UI - re-rendering, last_seen: ${lastSeen}`);
-                                    // Re-render to update heartbeat animation
-                                    renderDashboard();
-                                    
-                                    // Set a timeout to check if device goes offline (no new updates for HEARTBEAT_TIMEOUT)
-                                    clearTimeout(heartbeatListeners[`${roomId}_timeout`]);
-                                    heartbeatListeners[`${roomId}_timeout`] = setTimeout(() => {
-                                        console.log(`[Heartbeat] ${roomId} timeout - checking if offline`);
-                                        const timeSinceLastSeen = Date.now() - (lastSeen || 0);
-                                        if (timeSinceLastSeen > HEARTBEAT_TIMEOUT) {
-                                            console.log(`[Heartbeat] ${roomId} detected as offline (timeout exceeded)`);
-                                            renderDashboard();
-                                        }
-                                    }, HEARTBEAT_TIMEOUT);
-                                }
-                            });
-                        }
-                        
-                        // Add specific listener for target temperature changes to ensure real-time sync with settings page
-                        // Listen for single room target temperature changes
-                        db.ref(`${roomId}/targetTemp`).on('value', (snapshot) => {
-                                const newTarget = snapshot.val();
-                                console.log(`[TargetTemp] ${roomId} targetTemp updated:`, newTarget);
-                                if (newTarget !== null && labsData[roomId]) {
-                                    const index = labKeys.indexOf(roomId);
-                                    if (index !== -1) {
-                                        labsData[roomId].targetTemp = newTarget;
-                                        latestData[index].targetTemp = newTarget;
-                                        console.log(`[TargetTemp] Updating ${roomId} in UI - re-rendering`);
-                                        renderDashboard();
-                                    }
-                                }
-                            });
-                    });
+
+                    // Start heartbeat/targetTemp monitoring for all rooms (only once on initial load)
+                    labKeys.forEach(roomId => wireRoomListeners(roomId));
                 }
-                
+
                 renderDashboard();
             });
+        }
+
+        // Wires up heartbeat offline-detection and targetTemp sync listeners for a
+        // single room. Called once per room from the initial-load forEach above,
+        // and again from saveNewRoom() so a room created after page load gets the
+        // same monitoring without requiring a full page reload.
+        function wireRoomListeners(roomId) {
+            if (!deviceOfflineFlags[roomId]) {
+                watchDeviceOnline(roomId);
+            }
+
+            // Add specific listener for last_seen to update heartbeat animation immediately (prevent duplicates)
+            if (!heartbeatListeners[roomId]) {
+                heartbeatListeners[roomId] = true;
+                console.log(`[Heartbeat] Setting up listener for /${roomId}/last_seen`);
+                db.ref(`/${roomId}/last_seen`).on('value', (snapshot) => {
+                    const lastSeen = snapshot.val();
+                    console.log(`[Heartbeat] /${roomId}/last_seen updated:`, lastSeen ? new Date(lastSeen).toISOString() : 'null');
+
+                    // Update the room data with new last_seen regardless of value
+                    const index = labKeys.indexOf(roomId);
+                    if (index !== -1 && labsData[roomId]) {
+                        // Firebase is authoritative - use Firebase AC state directly
+                        labsData[roomId].last_seen = lastSeen || 0;
+                        latestData[index].last_seen = lastSeen || 0;
+                        console.log(`[Heartbeat] Updating ${roomId} in UI - re-rendering, last_seen: ${lastSeen}`);
+                        // Re-render to update heartbeat animation
+                        renderDashboard();
+
+                        // Set a timeout to check if device goes offline (no new updates for HEARTBEAT_TIMEOUT)
+                        clearTimeout(heartbeatListeners[`${roomId}_timeout`]);
+                        heartbeatListeners[`${roomId}_timeout`] = setTimeout(() => {
+                            console.log(`[Heartbeat] ${roomId} timeout - checking if offline`);
+                            const timeSinceLastSeen = Date.now() - (lastSeen || 0);
+                            if (timeSinceLastSeen > HEARTBEAT_TIMEOUT) {
+                                console.log(`[Heartbeat] ${roomId} detected as offline (timeout exceeded)`);
+                                renderDashboard();
+                            }
+                        }, HEARTBEAT_TIMEOUT);
+                    }
+                });
+            }
+
+            // Add specific listener for target temperature changes to ensure real-time sync with settings page
+            // Listen for single room target temperature changes
+            db.ref(`${roomId}/targetTemp`).on('value', (snapshot) => {
+                    const newTarget = snapshot.val();
+                    console.log(`[TargetTemp] ${roomId} targetTemp updated:`, newTarget);
+                    if (newTarget !== null && labsData[roomId]) {
+                        const index = labKeys.indexOf(roomId);
+                        if (index !== -1) {
+                            labsData[roomId].targetTemp = newTarget;
+                            latestData[index].targetTemp = newTarget;
+                            console.log(`[TargetTemp] Updating ${roomId} in UI - re-rendering`);
+                            renderDashboard();
+                        }
+                    }
+                });
         }
 
         function saveNewRoom() {
@@ -824,7 +840,11 @@
                         roomLabels.push(displayLabel);
                         console.log(`[saveNewRoom] Added room to local arrays: ${id} as ${displayLabel}`);
                     }
-                    
+                    // Wire up heartbeat/offline and targetTemp monitoring immediately,
+                    // same as rooms present at initial page load, so it doesn't wait
+                    // for a full page reload.
+                    wireRoomListeners(id);
+
                     Swal.fire({
                         title: 'Room Created!',
                         text: `${newRoomData.roomName} (${unitType === 'dual' ? 'Dual Unit' : 'Single Unit'}) has been added successfully.`,
@@ -1784,7 +1804,8 @@
             }
         }
 
-        loadRoomsFromFirebase();
+        // loadRoomsFromFirebase() now runs from inside the auth guard above,
+        // once we actually know the visitor is signed in.
         requestNotificationPermission();
 
         document.getElementById('menu-toggle').addEventListener('click', () => {

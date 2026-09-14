@@ -8,6 +8,7 @@
 #include <IRremoteESP8266.h>
 #include <IRrecv.h>
 #include <IRsend.h>
+#include <IRutils.h>
 #include <time.h>
 #include <Preferences.h>
 #include <ArduinoOTA.h>
@@ -139,14 +140,38 @@ float getUnitPowerKw(float targetTemp) {
   return getEffectiveWattsForTemp(targetTemp) / 1000.0;
 }
 
+// A handful of retries with short delays for the one-time boot-time
+// energy-resume read below - this runs right after WiFi/Firebase just
+// connected, which is exactly when a transient read failure is most
+// likely, and it's the one read this device most needs to succeed (a
+// failure here silently re-triggers the "reboot erases today's cost"
+// bug the resume logic exists to prevent).
+bool getFloatWithRetry(const String &path, float &outValue, int maxAttempts = 3) {
+  for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (Firebase.RTDB.getFloat(&fbdo, path)) {
+      outValue = fbdo.floatData();
+      return true;
+    }
+    if (attempt < maxAttempts) {
+      Serial.println("[Setup] Read failed for " + path + ", retrying (" + String(attempt) + "/" + String(maxAttempts) + ")...");
+      delay(1000);
+    }
+  }
+  return false;
+}
+
 bool automationEnabled = false;  // Controls humidity-based automation
 bool temperatureAutomationEnabled = true;  // Temperature safety is always active (see Settings UI)
 unsigned long automationStartTime = 0;  // Timestamp when automation was last enabled
 String lastAutomationEvent = "";  // Description of last automation action
 String lastAutomationEventType = "";  // Type: "humidity", "temperature", "power"
 unsigned long lastAutomationEventTime = 0;  // Timestamp of last automation action
-float lastAutomationEventPastTemp = 0.0;  // Temperature before automation
-float lastAutomationEventUpdatedTemp = 0.0;  // Temperature after automation
+float lastAutomationEventPastTemp = 0.0;  // Unit 1 (or the only unit) target temp before automation
+float lastAutomationEventUpdatedTemp = 0.0;  // Unit 1 (or the only unit) target temp after automation
+#if DUAL_UNIT_MODE
+float lastAutomationEventPastTemp2 = 0.0;  // Unit 2 target temp before automation - previously only Unit 1 was ever logged, even when Unit 2's setpoint also changed
+float lastAutomationEventUpdatedTemp2 = 0.0;  // Unit 2 target temp after automation
+#endif
 
 // Online duration tracking variables
 unsigned long onlineDurationSeconds = 0;  // Cumulative online duration in seconds
@@ -403,24 +428,21 @@ void setup() {
 
     String energyBasePath = "/analytics/dailyAnalytics/" + lastEnergyDateStr + "/" + String(ROOM_ID);
     #if DUAL_UNIT_MODE
-    if (Firebase.RTDB.getFloat(&fbdo, energyBasePath + "_unit_1/energyKwh")) {
-      dailyEnergyKwhUnit1 = fbdo.floatData();
+    if (getFloatWithRetry(energyBasePath + "_unit_1/energyKwh", dailyEnergyKwhUnit1)) {
       Serial.println("[Setup] Resumed unit_1 energyKwh from Firebase: " + String(dailyEnergyKwhUnit1, 3) + " kWh");
     } else {
-      Serial.println("[Setup] No unit_1 energyKwh found for today, starting at 0");
+      Serial.println("[Setup] No unit_1 energyKwh found for today (or read kept failing), starting at 0");
     }
-    if (Firebase.RTDB.getFloat(&fbdo, energyBasePath + "_unit_2/energyKwh")) {
-      dailyEnergyKwhUnit2 = fbdo.floatData();
+    if (getFloatWithRetry(energyBasePath + "_unit_2/energyKwh", dailyEnergyKwhUnit2)) {
       Serial.println("[Setup] Resumed unit_2 energyKwh from Firebase: " + String(dailyEnergyKwhUnit2, 3) + " kWh");
     } else {
-      Serial.println("[Setup] No unit_2 energyKwh found for today, starting at 0");
+      Serial.println("[Setup] No unit_2 energyKwh found for today (or read kept failing), starting at 0");
     }
     #else
-    if (Firebase.RTDB.getFloat(&fbdo, energyBasePath + "/energyKwh")) {
-      dailyEnergyKwhUnit1 = fbdo.floatData();
+    if (getFloatWithRetry(energyBasePath + "/energyKwh", dailyEnergyKwhUnit1)) {
       Serial.println("[Setup] Resumed energyKwh from Firebase: " + String(dailyEnergyKwhUnit1, 3) + " kWh");
     } else {
-      Serial.println("[Setup] No energyKwh found for today, starting at 0");
+      Serial.println("[Setup] No energyKwh found for today (or read kept failing), starting at 0");
     }
     #endif
   }
@@ -864,6 +886,16 @@ void loop() {
       }
       float elapsedHoursEnergy = (nowMillisEnergy - lastEnergyAccumMillis) / 3600000.0;
       lastEnergyAccumMillis = nowMillisEnergy;
+      // Guard against an abnormal stall (blocked WiFi/Firebase call, long delay)
+      // getting billed in one lump at whatever state happens to be active on
+      // recovery. Normal ticks are ~10s; cap at 5 min so a stall only ever
+      // costs a bounded amount instead of hours of wrongly-attributed usage.
+      const float MAX_ENERGY_GAP_HOURS = 5.0 / 60.0;
+      if (elapsedHoursEnergy > MAX_ENERGY_GAP_HOURS) {
+        Serial.print("[Energy] Abnormal gap detected: "); Serial.print(elapsedHoursEnergy * 60.0, 1);
+        Serial.println(" min. Capping to avoid lump-sum billing.");
+        elapsedHoursEnergy = MAX_ENERGY_GAP_HOURS;
+      }
 
       #if DUAL_UNIT_MODE
       if (unit1AC) dailyEnergyKwhUnit1 += getUnitPowerKw(targetTemp1) * elapsedHoursEnergy;
@@ -1192,6 +1224,13 @@ void logAutomationEventToHistory() {
     historyData.add("automationEventTime", now);
     historyData.add("automationEventPastTemp", lastAutomationEventPastTemp);
     historyData.add("automationEventUpdatedTemp", lastAutomationEventUpdatedTemp);
+    #if DUAL_UNIT_MODE
+    // Previously only Unit 1's before/after setpoint was ever logged here,
+    // even for events that changed both units - add Unit 2's alongside it
+    // rather than silently dropping it.
+    historyData.add("automationEventPastTemp2", lastAutomationEventPastTemp2);
+    historyData.add("automationEventUpdatedTemp2", lastAutomationEventUpdatedTemp2);
+    #endif
 
     Serial.print("[History] Writing to Firebase path: "); Serial.println(historyPath.c_str());
     // Use pushJSON to preserve all events (creates unique keys)
@@ -1207,6 +1246,10 @@ void logAutomationEventToHistory() {
     lastAutomationEventTime = 0;
     lastAutomationEventPastTemp = 0.0;
     lastAutomationEventUpdatedTemp = 0.0;
+    #if DUAL_UNIT_MODE
+    lastAutomationEventPastTemp2 = 0.0;
+    lastAutomationEventUpdatedTemp2 = 0.0;
+    #endif
   }
 }
 
@@ -1228,7 +1271,7 @@ void handleIRReceiver() {
     FirebaseJson signalJson;
     signalJson.add("rawData", rawData);
     signalJson.add("length", len);
-    signalJson.add("protocol", "PANASONIC");
+    signalJson.add("protocol", typeToString(irResults.decode_type, irResults.repeat));
     signalJson.add("timestamp", String(millis()));
 
     Serial.println("[IR Receiver] Sending to Firebase...");
@@ -1308,30 +1351,50 @@ void runAutomation(float temp, float humidity) {
           // previously fed a bogus target into the cost calibration and
           // made "Past Temp"/"Automated Temp" show room-temperature
           // values instead of AC setpoints.
+          // If a getFloat read fails (this device's WiFi drops routinely
+          // enough that it already has its own reconnect watchdog), do
+          // NOT fall back to writing a hardcoded 24.0-based guess back to
+          // Firebase as if it were real - that would permanently desync
+          // the tracked setpoint from the AC's real one, and every future
+          // cycle would then step from the wrong baseline with no way to
+          // self-correct. Skip the write instead; Firebase just stays one
+          // step stale until a read succeeds, which is a far safer failure
+          // mode than persisting a wrong value as fact.
           #if DUAL_UNIT_MODE
           float priorTarget1 = 24.0, priorTarget2 = 24.0;
-          if (Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/targetTemp")) {
-            priorTarget1 = fbdo.floatData();
-          }
-          if (Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/targetTemp")) {
-            priorTarget2 = fbdo.floatData();
-          }
+          bool gotPrior1 = Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/targetTemp");
+          if (gotPrior1) priorTarget1 = fbdo.floatData();
+          bool gotPrior2 = Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/targetTemp");
+          if (gotPrior2) priorTarget2 = fbdo.floatData();
           float newTargetTemp1 = constrain(priorTarget1 - 1.0, 16.0, 30.0);
           float newTargetTemp2 = constrain(priorTarget2 - 1.0, 16.0, 30.0);
-          Firebase.RTDB.setFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/targetTemp", newTargetTemp1);
-          Firebase.RTDB.setFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/targetTemp", newTargetTemp2);
-          Serial.print("[Automation] Updated Firebase unit_1 targetTemp to: "); Serial.println(newTargetTemp1, 1);
-          Serial.print("[Automation] Updated Firebase unit_2 targetTemp to: "); Serial.println(newTargetTemp2, 1);
+          if (gotPrior1) {
+            Firebase.RTDB.setFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/targetTemp", newTargetTemp1);
+            Serial.print("[Automation] Updated Firebase unit_1 targetTemp to: "); Serial.println(newTargetTemp1, 1);
+          } else {
+            Serial.println("[Automation] Skipped unit_1 targetTemp write - could not read current setpoint");
+          }
+          if (gotPrior2) {
+            Firebase.RTDB.setFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/targetTemp", newTargetTemp2);
+            Serial.print("[Automation] Updated Firebase unit_2 targetTemp to: "); Serial.println(newTargetTemp2, 1);
+          } else {
+            Serial.println("[Automation] Skipped unit_2 targetTemp write - could not read current setpoint");
+          }
           float priorTarget = priorTarget1;
           float newTargetTemp = newTargetTemp1;
+          lastAutomationEventPastTemp2 = priorTarget2;
+          lastAutomationEventUpdatedTemp2 = newTargetTemp2;
           #else
           float priorTarget = 24.0;
-          if (Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/targetTemp")) {
-            priorTarget = fbdo.floatData();
-          }
+          bool gotPrior = Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/targetTemp");
+          if (gotPrior) priorTarget = fbdo.floatData();
           float newTargetTemp = constrain(priorTarget - 1.0, 16.0, 30.0);
-          Firebase.RTDB.setFloat(&fbdo, "/" + String(ROOM_ID) + "/targetTemp", newTargetTemp);
-          Serial.print("[Automation] Updated Firebase targetTemp to: "); Serial.println(newTargetTemp, 1);
+          if (gotPrior) {
+            Firebase.RTDB.setFloat(&fbdo, "/" + String(ROOM_ID) + "/targetTemp", newTargetTemp);
+            Serial.print("[Automation] Updated Firebase targetTemp to: "); Serial.println(newTargetTemp, 1);
+          } else {
+            Serial.println("[Automation] Skipped targetTemp write - could not read current setpoint");
+          }
           #endif
           // Log automation event with the AC's own target temp before/
           // after (both within 16-30, like the physical remote) rather
@@ -1376,30 +1439,44 @@ void runAutomation(float temp, float humidity) {
           // Step the AC's own target temp up by 1 - see the matching
           // comment in the TEMP_DOWN branch above for why this reads the
           // current setpoint instead of the room's ambient sensor temp.
+          // See the matching comment in the TEMP_DOWN branch above for why
+          // a failed read skips the Firebase write instead of falling
+          // back to a hardcoded guess.
           #if DUAL_UNIT_MODE
           float priorTarget1 = 24.0, priorTarget2 = 24.0;
-          if (Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/targetTemp")) {
-            priorTarget1 = fbdo.floatData();
-          }
-          if (Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/targetTemp")) {
-            priorTarget2 = fbdo.floatData();
-          }
+          bool gotPrior1 = Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/targetTemp");
+          if (gotPrior1) priorTarget1 = fbdo.floatData();
+          bool gotPrior2 = Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/targetTemp");
+          if (gotPrior2) priorTarget2 = fbdo.floatData();
           float newTargetTemp1 = constrain(priorTarget1 + 1.0, 16.0, 30.0);
           float newTargetTemp2 = constrain(priorTarget2 + 1.0, 16.0, 30.0);
-          Firebase.RTDB.setFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/targetTemp", newTargetTemp1);
-          Firebase.RTDB.setFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/targetTemp", newTargetTemp2);
-          Serial.print("[Automation] Updated Firebase unit_1 targetTemp to: "); Serial.println(newTargetTemp1, 1);
-          Serial.print("[Automation] Updated Firebase unit_2 targetTemp to: "); Serial.println(newTargetTemp2, 1);
+          if (gotPrior1) {
+            Firebase.RTDB.setFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/targetTemp", newTargetTemp1);
+            Serial.print("[Automation] Updated Firebase unit_1 targetTemp to: "); Serial.println(newTargetTemp1, 1);
+          } else {
+            Serial.println("[Automation] Skipped unit_1 targetTemp write - could not read current setpoint");
+          }
+          if (gotPrior2) {
+            Firebase.RTDB.setFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/targetTemp", newTargetTemp2);
+            Serial.print("[Automation] Updated Firebase unit_2 targetTemp to: "); Serial.println(newTargetTemp2, 1);
+          } else {
+            Serial.println("[Automation] Skipped unit_2 targetTemp write - could not read current setpoint");
+          }
           float priorTarget = priorTarget1;
           float newTargetTemp = newTargetTemp1;
+          lastAutomationEventPastTemp2 = priorTarget2;
+          lastAutomationEventUpdatedTemp2 = newTargetTemp2;
           #else
           float priorTarget = 24.0;
-          if (Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/targetTemp")) {
-            priorTarget = fbdo.floatData();
-          }
+          bool gotPrior = Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/targetTemp");
+          if (gotPrior) priorTarget = fbdo.floatData();
           float newTargetTemp = constrain(priorTarget + 1.0, 16.0, 30.0);
-          Firebase.RTDB.setFloat(&fbdo, "/" + String(ROOM_ID) + "/targetTemp", newTargetTemp);
-          Serial.print("[Automation] Updated Firebase targetTemp to: "); Serial.println(newTargetTemp, 1);
+          if (gotPrior) {
+            Firebase.RTDB.setFloat(&fbdo, "/" + String(ROOM_ID) + "/targetTemp", newTargetTemp);
+            Serial.print("[Automation] Updated Firebase targetTemp to: "); Serial.println(newTargetTemp, 1);
+          } else {
+            Serial.println("[Automation] Skipped targetTemp write - could not read current setpoint");
+          }
           #endif
           // Log automation event with the AC's own target temp before/
           // after (both within 16-30), not the room's ambient reading.
@@ -1461,13 +1538,22 @@ void runAutomation(float temp, float humidity) {
     // range), not the room's ambient sensor reading.
     pastTargetTemp = targetTemp;
     #if DUAL_UNIT_MODE
+    float pastTargetTemp2 = targetTemp;
     if (Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/targetTemp")) {
       pastTargetTemp = fbdo.floatData();
+    }
+    // Previously only unit_1's prior setpoint was ever read/logged here,
+    // even though both units get overwritten and could have had different
+    // prior values (e.g. after a manual per-unit override).
+    if (Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/targetTemp")) {
+      pastTargetTemp2 = fbdo.floatData();
     }
     Firebase.RTDB.setFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/targetTemp", targetTemp);
     Firebase.RTDB.setFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/targetTemp", targetTemp);
     Serial.print("[Automation] Updated Firebase unit_1 targetTemp to: "); Serial.println(targetTemp, 1);
     Serial.print("[Automation] Updated Firebase unit_2 targetTemp to: "); Serial.println(targetTemp, 1);
+    lastAutomationEventPastTemp2 = pastTargetTemp2;
+    lastAutomationEventUpdatedTemp2 = targetTemp;
     #else
     if (Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/targetTemp")) {
       pastTargetTemp = fbdo.floatData();
@@ -1490,13 +1576,19 @@ void runAutomation(float temp, float humidity) {
     // matching comment in the humidity>MAX_HUMIDITY branch above.
     pastTargetTemp = targetTemp;
     #if DUAL_UNIT_MODE
+    float pastTargetTemp2 = targetTemp;
     if (Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/targetTemp")) {
       pastTargetTemp = fbdo.floatData();
+    }
+    if (Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/targetTemp")) {
+      pastTargetTemp2 = fbdo.floatData();
     }
     Firebase.RTDB.setFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/targetTemp", targetTemp);
     Firebase.RTDB.setFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/targetTemp", targetTemp);
     Serial.print("[Automation] Updated Firebase unit_1 targetTemp to: "); Serial.println(targetTemp, 1);
     Serial.print("[Automation] Updated Firebase unit_2 targetTemp to: "); Serial.println(targetTemp, 1);
+    lastAutomationEventPastTemp2 = pastTargetTemp2;
+    lastAutomationEventUpdatedTemp2 = targetTemp;
     #else
     if (Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/targetTemp")) {
       pastTargetTemp = fbdo.floatData();

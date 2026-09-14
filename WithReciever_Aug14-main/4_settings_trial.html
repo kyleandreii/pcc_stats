@@ -1106,10 +1106,18 @@
 
             // Save to config/rooms for cost calculation, preserving any measured
             // temperature calibration data already stored for this room so this
-            // save doesn't silently wipe it out
+            // save doesn't silently wipe it out. For a dual-unit room the real
+            // data now lives nested under units.unit_1 (both units share the
+            // same measured spec in this codebase's model), not at the old
+            // flat path - reading the flat path unconditionally here would
+            // always come back empty for Room 401 and erase its calibration
+            // on the very next save.
             const roomData = labsData[selectedRoom];
             const isDualUnitRoom = !!(roomData && roomData.units && (roomData.units.unit_1 || roomData.units.unit_2));
-            db.ref(`config/rooms/${selectedRoom}/specs/tempCalibration`).once('value').then((snap) => {
+            const calibrationPath = isDualUnitRoom
+                ? `config/rooms/${selectedRoom}/units/unit_1/specs/tempCalibration`
+                : `config/rooms/${selectedRoom}/specs/tempCalibration`;
+            db.ref(calibrationPath).once('value').then((snap) => {
                 const existingCalibration = snap.val();
                 let airconConfig;
                 if (isDualUnitRoom) {
