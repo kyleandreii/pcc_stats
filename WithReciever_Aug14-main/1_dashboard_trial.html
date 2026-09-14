@@ -1419,10 +1419,22 @@
                 
                 console.log(`[Dashboard] ${roomPath} - last_seen: ${lastSeen} (${lastSeen ? new Date(lastSeen).toISOString() : 'null'}), timeSinceLastSeen: ${Math.floor(timeSinceLastSeen/1000)}s, isOnline: ${isDeviceOnline}`);
                 
+                // Check if this is a dual-unit room (has units object with unit_1 and unit_2)
+                const isDualUnitRoom = d.units && (d.units.unit_1 || d.units.unit_2);
+                const unit1FirebaseState = d.units?.unit_1?.ac === true || d.units?.unit_1?.ac === "ON" || d.units?.unit_1?.ac === 1;
+                const unit2FirebaseState = d.units?.unit_2?.ac === true || d.units?.unit_2?.ac === "ON" || d.units?.unit_2?.ac === 1;
+                const unit1State = pendingUpdates[`${roomPath}_unit_1`] !== undefined ? pendingUpdates[`${roomPath}_unit_1`] : unit1FirebaseState;
+                const unit2State = pendingUpdates[`${roomPath}_unit_2`] !== undefined ? pendingUpdates[`${roomPath}_unit_2`] : unit2FirebaseState;
+
                 // Firebase is authoritative for AC state - use it directly for cross-device sync
-                // But respect pending updates to prevent race conditions
-                const firebaseState = d.ac === true || d.ac === "ON" || d.ac === 1;
-                const isPoweredOn = pendingUpdates[roomPath] !== undefined ? pendingUpdates[roomPath] : firebaseState;
+                // But respect pending updates to prevent race conditions.
+                // Dual-unit rooms are "powered on" if EITHER unit is on - the top-level
+                // d.ac field isn't meaningfully used for dual-unit rooms (their real
+                // state lives under d.units.unit_1/unit_2), so using it alone wrongly
+                // treated a room with Unit 1 actively running as "off", which grayscaled
+                // and dimmed the entire card and also broke the Turned On/Off filters.
+                const firebaseState = isDualUnitRoom ? (unit1FirebaseState || unit2FirebaseState) : (d.ac === true || d.ac === "ON" || d.ac === 1);
+                const isPoweredOn = isDualUnitRoom ? (unit1State || unit2State) : (pendingUpdates[roomPath] !== undefined ? pendingUpdates[roomPath] : firebaseState);
                 console.log(`[Dashboard] ${roomPath} - Firebase: ${d.ac}, Pending: ${pendingUpdates[roomPath]}, Using: ${isPoweredOn}`);
                 console.log(`[Dashboard] ${roomPath} - Using Firebase: ${d.ac}, isPoweredOn=${isPoweredOn}`);
                 console.log(`[Dashboard] ${roomPath} - Full room data:`, JSON.stringify(d));
@@ -1440,14 +1452,7 @@
                     console.log(`[renderDashboard] ${roomPath} - Adding to grid (filter matched)`);
                     const progressWidth = Math.min(Math.max((temp - minT) / (maxT - minT) * 100, 0), 100);
                     const humProgressWidth = Math.min(Math.max(hum, 0), 100);
-                    
-                    // Check if this is a dual-unit room (has units object with unit_1 and unit_2)
-                    const isDualUnitRoom = d.units && (d.units.unit_1 || d.units.unit_2);
-                    const unit1FirebaseState = d.units?.unit_1?.ac === true || d.units?.unit_1?.ac === "ON" || d.units?.unit_1?.ac === 1;
-                    const unit2FirebaseState = d.units?.unit_2?.ac === true || d.units?.unit_2?.ac === "ON" || d.units?.unit_2?.ac === 1;
-                    const unit1State = pendingUpdates[`${roomPath}_unit_1`] !== undefined ? pendingUpdates[`${roomPath}_unit_1`] : unit1FirebaseState;
-                    const unit2State = pendingUpdates[`${roomPath}_unit_2`] !== undefined ? pendingUpdates[`${roomPath}_unit_2`] : unit2FirebaseState;
-                    
+
                     let statusClass = isTooHigh ? "border-status-high" : (isTooLow ? "border-status-low" : "border-status-normal");
                     const powerStyle = isPoweredOn ? statusClass : "border-gray-200 opacity-60 grayscale-[0.5]";
                     const mascotState = !isDeviceOnline ? 'offline' : (isTooHigh ? 'hot' : (isTooLow ? 'cold' : 'normal'));
