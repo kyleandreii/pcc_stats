@@ -411,6 +411,7 @@
         let occupancyFlags = {}; // Track last known occupancy state per room ('occupied' | 'empty')
         let heartbeatListeners = {}; // Track heartbeat listeners to prevent duplicates
         let renderInProgress = false; // Prevent concurrent renderDashboard calls
+        let hasPlayedCardEntranceAnimation = false; // Only animate cards in on the true initial render, not on every background re-render (data refreshes every few seconds via Firebase/interval and would otherwise replay the animation each time)
         const HEARTBEAT_TIMEOUT = 15000; // 15 seconds - device offline if no heartbeat for this duration
         const CHECK_INTERVAL_MS = 10000; // 10 seconds
 
@@ -1451,8 +1452,11 @@
                     const powerStyle = isPoweredOn ? statusClass : "border-gray-200 opacity-60 grayscale-[0.5]";
                     const mascotState = !isDeviceOnline ? 'offline' : (isTooHigh ? 'hot' : (isTooLow ? 'cold' : 'normal'));
 
+                    const entranceClass = hasPlayedCardEntranceAnimation ? '' : 'animate-card-in';
+                    const entranceStyle = hasPlayedCardEntranceAnimation ? '' : `style="animation-delay:${Math.min(i, 8) * 0.06}s"`;
+
                     gridHtml += `
-                        <div class="neumorph-card p-6 transition-all duration-500 hover:shadow-xl hover:scale-[1.02] animate-card-in ${powerStyle}" style="animation-delay:${Math.min(i, 8) * 0.06}s">
+                        <div class="neumorph-card p-6 transition-all duration-500 hover:shadow-xl hover:scale-[1.02] ${entranceClass} ${powerStyle}" ${entranceStyle}>
                             <div class="flex justify-between items-center mb-5">
                                 <div class="flex items-center gap-3">
                                     <div class="relative flex-shrink-0" id="status-dot-${i}">
@@ -1565,7 +1569,8 @@
 
             document.getElementById('total-count').innerText = activeRooms;
             document.getElementById('lab-grid').innerHTML = gridHtml || `<div class="col-span-full py-20 text-center text-gray-400 text-xs font-bold uppercase tracking-widest">No matching rooms found</div>`;
-            
+            hasPlayedCardEntranceAnimation = true;
+
             console.log('[renderDashboard] lab-grid innerHTML set successfully');
             lucide.createIcons();
             
