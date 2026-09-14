@@ -299,7 +299,7 @@
                         localStorage.setItem('pcc_incident_history', JSON.stringify(resolvedHistory));
                         
                         renderHistory();
-                        updateAlertsPage(); 
+                        renderAlerts();
                         Swal.fire({ icon: 'success', title: 'Incident Resolved', timer: 1000, showConfirmButton: false });
                     });
                 }
@@ -362,7 +362,7 @@
             labKeys.forEach((roomKey) => {
                 const d = labsData[roomKey];
                 const temp = parseFloat(d.temperature) || 0;
-                const maxT = parseFloat(d.maxT) || 30;
+                const maxT = parseFloat(d.thresholds?.maxTemp) || parseFloat(d.maxT) || 30;
                 sumT += temp;
 
                 const isAlarm = (d.status === "ALARM" || temp > maxT);

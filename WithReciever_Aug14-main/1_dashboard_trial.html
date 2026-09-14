@@ -372,6 +372,15 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
+        // Redirect back to login if not signed in - previously nothing on
+        // this page checked auth state at all, so anyone with the URL
+        // could view/control every room without ever signing in.
+        firebase.auth().onAuthStateChanged((user) => {
+            if (!user) {
+                window.location.href = "index.html";
+            }
+        });
+
         // Show a toast for any new alert (device offline, occupancy change)
         // pushed to Firebase while this page is open - see shared-utils.js.
         if (document.readyState === 'loading') {
@@ -382,6 +391,14 @@
 
         // Analytics tracking variables - Firebase is authoritative
         let roomUsage = {}; // Will be loaded from Firebase
+
+        // Previously implicit globals (no let/var/const anywhere), only ever
+        // assigned inside the root data listener below. The separate
+        // analytics/roomUsage listener can fire first on a fresh page load
+        // and read labKeys before that assignment ever runs, throwing
+        // "labKeys is not defined" instead of just seeing an empty array.
+        let labKeys = [];
+        let labsData = {};
 
         db.ref(".info/connected").on("value", (snap) => {
             const indicator = document.getElementById('conn-indicator');
@@ -1181,40 +1198,13 @@
             renderDashboard();
         }, 10000);
 
-        // Midnight reset for daily usage tracking
-        let lastDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
-        
-        setInterval(() => {
-            const currentDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
-            
-            if (currentDate !== lastDate) {
-                console.log(`[Midnight Reset] Date changed from ${lastDate} to ${currentDate}`);
-                
-                // Save yesterday's totals to historical data before resetting
-                labKeys.forEach(room => {
-                    if (roomUsage[room] && roomUsage[room].totalMs > 0) {
-                        const yesterdayTotalMs = roomUsage[room].totalMs;
-                        const yesterdayTotalSeconds = Math.round(yesterdayTotalMs / 1000);
-                        const yesterdayTotalHours = yesterdayTotalSeconds / 3600;
-                        
-                        console.log(`[Midnight Reset] ${room}: Saving ${yesterdayTotalHours.toFixed(2)}h to history for ${lastDate}`);
-                        
-                        // Save to historical daily analytics
-                        db.ref(`analytics/dailyAnalytics/${lastDate}/${room}/usageHours`).set(yesterdayTotalHours);
-                        
-                        // Reset for new day
-                        roomUsage[room].totalMs = 0;
-                        roomUsage[room].lastStart = null;
-                        roomUsage[room].isActive = false;
-                        
-                        // Update Firebase
-                        db.ref(`analytics/roomUsage/${room}`).set(roomUsage[room]);
-                    }
-                });
-                
-                lastDate = currentDate;
-            }
-        }, 60000); // Check every minute
+        // Midnight reset for daily usage tracking is handled by
+        // checkAndResetRoomUsage() (Firebase-shared analytics/lastUsageResetDate
+        // marker) above - a leftover legacy interval used to also live here,
+        // tracking the date per-browser and unconditionally clearing
+        // roomUsage[room].isActive for every room (including per-unit keys it
+        // never even iterated), which could reintroduce exactly the stale-data
+        // bug the newer function was written to fix. Removed.
 
         function showInfo(roomIndex) {
             const data = latestData[roomIndex];

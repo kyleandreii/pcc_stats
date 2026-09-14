@@ -1076,6 +1076,13 @@
 
         function saveLabInfo() {
             if (!selectedRoom) return;
+            // A blank/unmeasured input must not become a stored 0 - the
+            // cost calculator treats a falsy duty_cycle as "not measured"
+            // and substitutes 1.0 (100% duty, worst case), so a literal 0
+            // silently inflates that room's reported cost to the max
+            // instead of falling back to that safer default.
+            const dutyCycleInput = document.getElementById('input-duty-cycle').value;
+            const dutyCycleValue = dutyCycleInput !== '' ? parseFloat(dutyCycleInput) : null;
             const specs = {
                 building: document.getElementById('input-building').value,
                 floor: document.getElementById('input-floor').value,
@@ -1090,7 +1097,7 @@
                 ratedAmps: parseFloat(document.getElementById('input-rated-amps').value) || 0,
                 voltage: parseFloat(document.getElementById('input-voltage').value) || 0,
                 serialNo: document.getElementById('input-serial-no').value,
-                dutyCycle: parseFloat(document.getElementById('input-duty-cycle').value) || 0,
+                dutyCycle: dutyCycleValue,
                 rating: document.getElementById('input-rating').value
             };
             
@@ -1100,16 +1107,46 @@
             // Save to config/rooms for cost calculation, preserving any measured
             // temperature calibration data already stored for this room so this
             // save doesn't silently wipe it out
+            const roomData = labsData[selectedRoom];
+            const isDualUnitRoom = !!(roomData && roomData.units && (roomData.units.unit_1 || roomData.units.unit_2));
             db.ref(`config/rooms/${selectedRoom}/specs/tempCalibration`).once('value').then((snap) => {
                 const existingCalibration = snap.val();
-                const airconConfig = {
-                    aircon_type: specs.acType,
-                    rated_watts: specs.powerInput,
-                    hp_rating: null,
-                    duty_cycle: specs.dutyCycle
-                };
-                if (existingCalibration) {
-                    airconConfig.specs = { tempCalibration: existingCalibration };
+                let airconConfig;
+                if (isDualUnitRoom) {
+                    // computeAirconCost() only takes the per-unit costing path
+                    // when roomConfig.units.unit_1/unit_2 exist - a flat shape
+                    // (the only kind this form used to ever write) meant the
+                    // one room with two physically independent AC units could
+                    // never be costed as two units. This Lab Info form only
+                    // measures one set of specs, so apply it to both units
+                    // (they're always driven by the same IR command/target
+                    // temp in this codebase, so that's a reasonable stand-in
+                    // for genuinely separate per-unit specs).
+                    const unitConfig = {
+                        aircon_type: specs.acType,
+                        rated_watts: specs.powerInput,
+                        hp_rating: null,
+                        duty_cycle: specs.dutyCycle
+                    };
+                    if (existingCalibration) {
+                        unitConfig.specs = { tempCalibration: existingCalibration };
+                    }
+                    airconConfig = {
+                        units: {
+                            unit_1: { ...unitConfig },
+                            unit_2: { ...unitConfig }
+                        }
+                    };
+                } else {
+                    airconConfig = {
+                        aircon_type: specs.acType,
+                        rated_watts: specs.powerInput,
+                        hp_rating: null,
+                        duty_cycle: specs.dutyCycle
+                    };
+                    if (existingCalibration) {
+                        airconConfig.specs = { tempCalibration: existingCalibration };
+                    }
                 }
                 db.ref(`config/rooms/${selectedRoom}`).set(airconConfig);
             });
@@ -1163,13 +1200,26 @@
                 // Save to specs
                 db.ref("Room_1/specs").set(koppelSpecs);
 
-                // Save to config/rooms for cost calculation
-                db.ref("config/rooms/Room_1").set({
+                // Save to config/rooms for cost calculation. Room_1 is
+                // always dual-unit, so this needs the units.unit_1/unit_2
+                // shape computeAirconCost() actually looks for - a flat
+                // shape here meant the per-unit costing path never
+                // triggered for the one room that has two physical AC
+                // units. Only one unit's amperage was ever measured, so
+                // apply the same spec to both (they're always driven by
+                // the same IR command/target temp in this codebase).
+                const koppelUnitConfig = {
                     aircon_type: "non_inverter",
                     rated_watts: 4020,
                     hp_rating: null,
                     duty_cycle: 0.65,
                     specs: { tempCalibration }
+                };
+                db.ref("config/rooms/Room_1").set({
+                    units: {
+                        unit_1: { ...koppelUnitConfig },
+                        unit_2: { ...koppelUnitConfig }
+                    }
                 });
                 console.log("Koppel unit configuration initialized for Room_1");
             }
