@@ -1881,14 +1881,40 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
     async function getUsageHoursForDate(room, dateStr) {
         console.log(`[Usage Hours] Checking ${room} for ${dateStr}`);
-        
+
         const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
         const isToday = dateStr === todayStr;
-        
+
+        // Dual-unit rooms use the LARGER of the two units' tracked hours,
+        // not the sum - both units are always run together in practice, so
+        // summing would double-count the same time period (and this single
+        // number also feeds computeAirconCost(), which applies one plain
+        // number to BOTH units when it isn't given a per-unit object - so
+        // summing there would have doubly overcounted cost too). This reads
+        // the per-unit entries rather than the single combined "room" entry
+        // because that combined entry is independently tracked AND written
+        // by both this page and the Dashboard with no coordination between
+        // them, so it can drift out of sync with the actual per-unit state
+        // (which is what was showing "0m" here while the Dashboard
+        // correctly showed hours for a specific unit).
+        const roomData = labsData[room];
+        const isDualUnit = !!(roomData && roomData.units && (roomData.units.unit_1 || roomData.units.unit_2));
+
         if (isToday) {
             // For today, use Firebase roomUsage for accurate real-time tracking
             let totalMs = 0;
-            if (roomUsage[room]) {
+            if (isDualUnit) {
+                ['unit_1', 'unit_2'].forEach((unit) => {
+                    if (!roomData.units[unit]) return;
+                    const usage = roomUsage[`${room}_${unit}`];
+                    if (!usage) return;
+                    let unitMs = usage.totalMs || 0;
+                    if (usage.isActive && usage.lastStart) {
+                        unitMs += (Date.now() - usage.lastStart);
+                    }
+                    totalMs = Math.max(totalMs, unitMs);
+                });
+            } else if (roomUsage[room]) {
                 totalMs = roomUsage[room].totalMs || 0;
                 if (roomUsage[room].isActive) {
                     totalMs += (Date.now() - roomUsage[room].lastStart);
@@ -1898,7 +1924,19 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
             console.log(`[Usage Hours] ${room} (today): ${hours.toFixed(2)} hours from Firebase roomUsage`);
             return hours;
         } else {
-            // For past dates, use historical daily analytics
+            // For past dates, use historical daily analytics - the reset/
+            // archive step stores per-unit entries (Room_X_unit_1/unit_2)
+            // alongside the combined one, so read those the same way.
+            if (isDualUnit) {
+                let hours = 0;
+                for (const unit of ['unit_1', 'unit_2']) {
+                    if (!roomData.units[unit]) continue;
+                    const snap = await db.ref(`analytics/dailyAnalytics/${dateStr}/${room}_${unit}/usageHours`).once('value');
+                    hours = Math.max(hours, snap.val() || 0);
+                }
+                console.log(`[Usage Hours] ${room} (${dateStr}): ${hours} hours from historical daily analytics (max of both units)`);
+                return hours;
+            }
             const snapshot = await db.ref(`analytics/dailyAnalytics/${dateStr}/${room}/usageHours`).once('value');
             const hours = snapshot.val() || 0;
             console.log(`[Usage Hours] ${room} (${dateStr}): ${hours} hours from historical daily analytics`);
