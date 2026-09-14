@@ -122,16 +122,16 @@
             
             <label class="add-label">Unit Type</label>
             <div class="flex gap-3 mb-4">
-                <button onclick="selectUnitType('single')" id="singleUnitBtn" class="flex-1 py-3 px-4 border-2 border-gray-200 rounded-xl font-black text-sm transition-all hover:border-[#800000] hover:text-[#800000]">
+                <button onclick="selectUnitType('single')" id="singleUnitBtn" class="flex-1 py-3 px-4 border-2 border-gray-200 rounded-xl font-black text-sm transition-all hover:border-[#8B1538] hover:text-[#8B1538]">
                     Single Unit
                 </button>
-                <button onclick="selectUnitType('dual')" id="dualUnitBtn" class="flex-1 py-3 px-4 border-2 border-gray-200 rounded-xl font-black text-sm transition-all hover:border-[#800000] hover:text-[#800000]">
+                <button onclick="selectUnitType('dual')" id="dualUnitBtn" class="flex-1 py-3 px-4 border-2 border-gray-200 rounded-xl font-black text-sm transition-all hover:border-[#8B1538] hover:text-[#8B1538]">
                     Dual Unit
                 </button>
             </div>
             <input type="hidden" id="unitType" value="single">
 
-            <button onclick="saveNewRoom()" class="w-full bg-[#800000] text-white font-black py-4 rounded-2xl shadow-lg hover:bg-[#600000] transition-all">
+            <button onclick="saveNewRoom()" class="w-full bg-[#8B1538] text-white font-black py-4 rounded-2xl shadow-lg hover:bg-[#5C0E24] transition-all">
                 CREATE ROOM
             </button>
         </div>
@@ -149,7 +149,7 @@
                     <button onclick="closeLogoutModal()" class="flex-1 py-3 px-4 border-2 border-gray-200 text-gray-600 font-black rounded-2xl hover:bg-gray-50 transition-all uppercase tracking-widest text-sm">
                         Cancel
                     </button>
-                    <button onclick="logout()" class="flex-1 py-3 px-4 bg-[#800000] text-white font-black rounded-2xl hover:bg-[#600000] transition-all uppercase tracking-widest text-sm">
+                    <button onclick="logout()" class="flex-1 py-3 px-4 bg-[#8B1538] text-white font-black rounded-2xl hover:bg-[#5C0E24] transition-all uppercase tracking-widest text-sm">
                         Logout
                     </button>
                 </div>
@@ -176,7 +176,7 @@
 
             <div class="modal-row">
                 <span class="text-[10px] font-bold text-gray-400 uppercase">AC Type</span>
-                <span id="modalType" class="text-[11px] font-black text-[#800000]">--</span>
+                <span id="modalType" class="text-[11px] font-black text-[#8B1538]">--</span>
             </div>
 
             <div class="modal-row">
@@ -745,7 +745,7 @@
                     title: 'Missing Information',
                     text: 'Please fill in both Room ID and Room Number fields.',
                     icon: 'warning',
-                    confirmButtonColor: '#800000'
+                    confirmButtonColor: '#8B1538'
                 });
                 return;
             }
@@ -765,7 +765,7 @@
                         title: 'Duplicate Room ID',
                         text: `A room with ID "${id}" already exists. Please use a different Room ID.`,
                         icon: 'error',
-                        confirmButtonColor: '#800000'
+                        confirmButtonColor: '#8B1538'
                     });
                     return;
                 }
@@ -812,7 +812,7 @@
                         title: 'Room Created!',
                         text: `${newRoomData.roomName} (${unitType === 'dual' ? 'Dual Unit' : 'Single Unit'}) has been added successfully.`,
                         icon: 'success',
-                        confirmButtonColor: '#800000'
+                        confirmButtonColor: '#8B1538'
                     });
                     document.getElementById('addRoomModal').style.display = 'none';
                     document.getElementById('newRoomId').value = "";
@@ -825,7 +825,7 @@
                         title: 'Error',
                         text: 'Failed to create room. Please try again.',
                         icon: 'error',
-                        confirmButtonColor: '#800000'
+                        confirmButtonColor: '#8B1538'
                     });
                     console.error('Error creating room:', error);
                 });
@@ -1263,14 +1263,14 @@
             const dualBtn = document.getElementById('dualUnitBtn');
             
             if (type === 'single') {
-                singleBtn.classList.add('border-[#800000]', 'text-[#800000]', 'bg-[#800000]/5');
+                singleBtn.classList.add('border-[#8B1538]', 'text-[#8B1538]', 'bg-[#8B1538]/5');
                 singleBtn.classList.remove('border-gray-200');
-                dualBtn.classList.remove('border-[#800000]', 'text-[#800000]', 'bg-[#800000]/5');
+                dualBtn.classList.remove('border-[#8B1538]', 'text-[#8B1538]', 'bg-[#8B1538]/5');
                 dualBtn.classList.add('border-gray-200');
             } else {
-                dualBtn.classList.add('border-[#800000]', 'text-[#800000]', 'bg-[#800000]/5');
+                dualBtn.classList.add('border-[#8B1538]', 'text-[#8B1538]', 'bg-[#8B1538]/5');
                 dualBtn.classList.remove('border-gray-200');
-                singleBtn.classList.remove('border-[#800000]', 'text-[#800000]', 'bg-[#800000]/5');
+                singleBtn.classList.remove('border-[#8B1538]', 'text-[#8B1538]', 'bg-[#8B1538]/5');
                 singleBtn.classList.add('border-gray-200');
             }
         }
@@ -1467,7 +1467,7 @@
                                         <h3 class="font-black text-gray-800 tracking-tight uppercase text-sm">${label}</h3>
                                         <p class="text-[8px] font-bold text-gray-400 uppercase">${isDeviceOnline ? 'Online' : 'Offline'}</p>
                                     </div>
-                                    <button onclick="showInfo(${i})" class="neumorph-btn p-2 rounded-xl text-gray-400 hover:text-[#800000] transition-all">
+                                    <button onclick="showInfo(${i})" class="neumorph-btn p-2 rounded-xl text-gray-400 hover:text-[#8B1538] transition-all">
                                         <i data-lucide="info" class="w-4 h-4"></i>
                                     </button>
                                 </div>
@@ -1479,7 +1479,7 @@
                                     </label>
                                     <div class="flex flex-col items-center mt-1">
                                         <span class="text-[8px] font-bold text-gray-400 uppercase">AC Power</span>
-                                        <span class="text-[10px] font-bold text-[#800000] bg-[#800000]/10 px-3 py-1 rounded-lg shadow-sm">${durationCache[roomPath] || '0h online today'}</span>
+                                        <span class="text-[10px] font-bold text-[#8B1538] bg-[#8B1538]/10 px-3 py-1 rounded-lg shadow-sm">${durationCache[roomPath] || '0h online today'}</span>
                                     </div>
                                 </div>
                                 ` : ''}
@@ -1490,14 +1490,14 @@
                                 </span>
                             </div>
                             <div class="grid grid-cols-2 gap-4 mb-5">
-                                <div class="glass-card p-5 text-center">
+                                <div class="p-5 text-center rounded-2xl" style="background:#FDF1F4;">
                                     <div class="w-10 h-10 mx-auto mb-2 rounded-full ${isTooHigh && isPoweredOn ? 'bg-red-500' : 'bg-red-200'} flex items-center justify-center">
                                         <i data-lucide="thermometer" class="w-5 h-5 ${isTooHigh && isPoweredOn ? 'text-white' : 'text-red-400'}"></i>
                                     </div>
                                     <h2 class="text-3xl font-black ${isTooHigh && isPoweredOn ? 'text-red-600' : 'text-gray-800'}">${temp.toFixed(1)}°C</h2>
                                     <p class="text-[9px] font-bold text-red-400 uppercase tracking-widest mt-1">Temperature</p>
                                 </div>
-                                <div class="glass-card p-5 text-center">
+                                <div class="p-5 text-center rounded-2xl" style="background:#EAF4FE;">
                                     <div class="w-10 h-10 mx-auto mb-2 rounded-full bg-blue-200 flex items-center justify-center">
                                         <i data-lucide="droplets" class="w-5 h-5 text-blue-400"></i>
                                     </div>
@@ -1508,7 +1508,7 @@
                             ${isDualUnitRoom ? `
                             <div class="grid grid-cols-2 gap-4 mb-5">
                                 <!-- Individual unit controls for dual-unit room -->
-                                <div class="neumorph-card p-4">
+                                <div class="p-4 rounded-2xl" style="background:${unit1State ? '#FDF1F4' : '#F5F2F4'};">
                                     <div class="flex justify-between items-center mb-2">
                                         <p class="text-[9px] font-bold text-gray-600 uppercase">Unit 1</p>
                                         <label class="neumorph-switch scale-75 ${powerButtonCooldown ? 'cooldown' : ''}">
@@ -1516,9 +1516,9 @@
                                             <span class="neumorph-switch-slider"></span>
                                         </label>
                                     </div>
-                                    <p class="text-[10px] font-bold text-[#800000] text-center bg-[#800000]/10 px-3 py-1 rounded-lg shadow-sm">${durationCache[`${roomPath}_unit_1`] || '0h online today'}</p>
+                                    <p class="text-[10px] font-bold text-[#8B1538] text-center bg-white/60 px-3 py-1 rounded-lg shadow-sm">${durationCache[`${roomPath}_unit_1`] || '0h online today'}</p>
                                 </div>
-                                <div class="neumorph-card p-4">
+                                <div class="p-4 rounded-2xl" style="background:${unit2State ? '#FDF1F4' : '#F5F2F4'};">
                                     <div class="flex justify-between items-center mb-2">
                                         <p class="text-[9px] font-bold text-gray-600 uppercase">Unit 2</p>
                                         <label class="neumorph-switch scale-75 ${powerButtonCooldown ? 'cooldown' : ''}">
@@ -1526,7 +1526,7 @@
                                             <span class="neumorph-switch-slider"></span>
                                         </label>
                                     </div>
-                                    <p class="text-[10px] font-bold text-[#800000] text-center bg-[#800000]/10 px-3 py-1 rounded-lg shadow-sm">${durationCache[`${roomPath}_unit_2`] || '0h online today'}</p>
+                                    <p class="text-[10px] font-bold text-[#8B1538] text-center bg-white/60 px-3 py-1 rounded-lg shadow-sm">${durationCache[`${roomPath}_unit_2`] || '0h online today'}</p>
                                 </div>
                             </div>
                             ` : ''}
