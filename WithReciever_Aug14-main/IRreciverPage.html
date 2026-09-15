@@ -1029,10 +1029,27 @@
 
             const existing = state.libraryData[lab]?.[command];
             if (existing) {
-                const replace = window.confirm(`${name} signal already exists for ${labNameFromKey(lab)}.\n\nWhat would you like to do?`);
-                if (!replace) return;
+                Swal.fire({
+                    title: 'Signal Already Exists',
+                    html: `<strong>${name}</strong> signal already exists for <strong>${labNameFromKey(lab)}</strong>.<br><br>Do you want to replace it?`,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#800000',
+                    cancelButtonColor: '#6b7280',
+                    confirmButtonText: 'Replace',
+                    cancelButtonText: 'Cancel'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        persistLibrarySignal(lab, command, name, protocol, rawData, existing);
+                    }
+                });
+                return;
             }
 
+            persistLibrarySignal(lab, command, name, protocol, rawData, existing);
+        }
+
+        function persistLibrarySignal(lab, command, name, protocol, rawData, existing) {
             const payload = {
                 name,
                 protocol,
