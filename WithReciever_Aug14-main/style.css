@@ -1337,4 +1337,12 @@ a:hover {
         flex-wrap: wrap;
         gap: var(--space-3);
     }
+
+    /* The From/To/Today card inside that row is 381px wide on its own
+       content alone (measured), still wider than a 370px viewport even
+       after the row around it wraps. Let its own contents wrap too. */
+    .analytics-date-card {
+        flex-wrap: wrap;
+        row-gap: 6px;
+    }
 }
