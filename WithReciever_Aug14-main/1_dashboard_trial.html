@@ -275,7 +275,7 @@
                     </div>
                     <div class="flex-1">
                         <p class="text-[10px] uppercase font-bold text-white/70 tracking-widest">Total Labs</p>
-                        <h2 id="total-count" class="text-4xl font-black text-white">0</h2>
+                        <h2 id="total-count" class="text-4xl font-black text-white">--</h2>
                     </div>
                 </div>
                 
@@ -1685,14 +1685,14 @@
                                     <div class="w-10 h-10 mx-auto mb-2 rounded-full ${isTooHigh && isPoweredOn ? 'bg-red-500' : 'bg-red-300'} flex items-center justify-center shadow-sm">
                                         <i data-lucide="thermometer" class="w-5 h-5 ${isTooHigh && isPoweredOn ? 'text-white' : 'text-white'}"></i>
                                     </div>
-                                    <h2 class="text-3xl font-black ${isTooHigh && isPoweredOn ? 'text-red-600' : 'text-gray-800'}">${temp.toFixed(1)}°C</h2>
+                                    <h2 class="text-3xl font-black ${isTooHigh && isPoweredOn ? 'text-red-600' : 'text-gray-800'}">${isDeviceOnline ? temp.toFixed(1) + '°C' : '--'}</h2>
                                     <p class="text-[9px] font-black text-red-500 uppercase tracking-widest mt-1">Temperature</p>
                                 </div>
                                 <div class="p-5 text-center rounded-2xl" style="background:#CFE9FC; border:2px solid #9FCDF2;">
                                     <div class="w-10 h-10 mx-auto mb-2 rounded-full bg-blue-400 flex items-center justify-center shadow-sm">
                                         <i data-lucide="droplets" class="w-5 h-5 text-white"></i>
                                     </div>
-                                    <h2 class="text-3xl font-black text-blue-900">${hum}%</h2>
+                                    <h2 class="text-3xl font-black text-blue-900">${isDeviceOnline ? hum + '%' : '--'}</h2>
                                     <p class="text-[9px] font-black text-blue-600 uppercase tracking-widest mt-1">Humidity</p>
                                 </div>
                             </div>
@@ -1840,6 +1840,60 @@
             }
         }
 
+        // Persisted (not just in-memory) offline-alert dedup state, shared
+        // across every open tab/browser and surviving page reloads.
+        // deviceOfflineFlags below is a plain in-memory object that resets
+        // to empty on every page load - with rooms that have been offline
+        // for weeks, that meant every single dashboard load re-detected
+        // "just went offline" as if it had never been seen before, and
+        // pushed a brand new alert each time. That's what inflated the
+        // Alerts page into the thousands instead of the handful of real
+        // transitions that actually happened. A Firebase transaction (not
+        // a plain read-then-write) also makes this safe if two tabs are
+        // open at once - only whichever one actually flips the flag from
+        // false/absent to true proceeds to create the alert.
+        async function handleOfflineTransition(roomId, roomLabel, isOffline, timeDiff) {
+            const flagRef = db.ref(`alerts/deviceOfflineState/${roomId}`);
+            if (isOffline) {
+                const result = await flagRef.transaction((current) => {
+                    if (current === true) return; // abort - already alerted, no duplicate
+                    return true;
+                });
+                if (!result.committed) return;
+                console.log(`[Offline Detection] ${roomId} - OFFLINE DETECTED! Creating alert...`);
+                const alertData = {
+                    type: 'device_offline',
+                    room: roomId,
+                    roomLabel: roomLabel,
+                    title: `Device Offline: ${roomLabel}`,
+                    message: `No heartbeat received for ${formatDuration(Math.floor(timeDiff / 1000))}`,
+                    timestamp: firebase.database.ServerValue.TIMESTAMP,
+                    acknowledged: false
+                };
+                db.ref('alerts').push(alertData);
+                console.log(`[Offline Detection] Alert created for ${roomId}`);
+                if (typeof notificationSystem !== 'undefined') {
+                    notificationSystem.show(`${roomLabel} is offline`, 'error');
+                }
+                if (Notification.permission === 'granted') {
+                    new Notification('Device Offline Alert', {
+                        body: `${roomLabel} has stopped responding`,
+                        icon: 'pcctruelogo.png'
+                    });
+                }
+            } else {
+                const result = await flagRef.transaction((current) => {
+                    if (current !== true) return; // abort - wasn't marked offline, nothing to clear
+                    return false;
+                });
+                if (!result.committed) return;
+                console.log(`[Offline Detection] ${roomId} is back online`);
+                if (typeof notificationSystem !== 'undefined') {
+                    notificationSystem.show(`${roomLabel} is back online`, 'success');
+                }
+            }
+        }
+
         function watchDeviceOnline(roomId) {
             const roomLabel = getRoomDisplayName(roomId, labsData[roomId]);
             console.log(`[Offline Detection] Starting monitor for ${roomId} (${roomLabel})`);
@@ -1866,46 +1920,7 @@
                 }
                 
                 // Check if we need to alert
-                if (isOffline && !deviceOfflineFlags[roomId]) {
-                    // Device just went offline - create alert
-                    deviceOfflineFlags[roomId] = true;
-                    console.log(`[Offline Detection] ${roomId} - OFFLINE DETECTED! Creating alert...`);
-                    
-                    const alertData = {
-                        type: 'device_offline',
-                        room: roomId,
-                        roomLabel: roomLabel,
-                        title: `Device Offline: ${roomLabel}`,
-                        message: `No heartbeat received for ${formatDuration(Math.floor(timeDiff / 1000))}`,
-                        timestamp: firebase.database.ServerValue.TIMESTAMP,
-                        acknowledged: false
-                    };
-                    
-                    db.ref('alerts').push(alertData);
-                    console.log(`[Offline Detection] Alert created for ${roomId}`);
-                    
-                    // Show popup notification
-                    if (typeof notificationSystem !== 'undefined') {
-                        notificationSystem.show(`${roomLabel} is offline`, 'error');
-                    }
-                    
-                    // Send browser notification if permitted
-                    if (Notification.permission === 'granted') {
-                        new Notification('Device Offline Alert', {
-                            body: `${roomLabel} has stopped responding`,
-                            icon: 'pcctruelogo.png'
-                        });
-                    }
-                } else if (!isOffline && deviceOfflineFlags[roomId]) {
-                    // Device came back online - reset flag
-                    deviceOfflineFlags[roomId] = false;
-                    console.log(`[Offline Detection] ${roomId} is back online`);
-                    
-                    // Show popup notification
-                    if (typeof notificationSystem !== 'undefined') {
-                        notificationSystem.show(`${roomLabel} is back online`, 'success');
-                    }
-                }
+                handleOfflineTransition(roomId, roomLabel, isOffline, timeDiff);
             });
             
             // Periodic check every 10 seconds
@@ -1923,43 +1938,7 @@
                     const isOffline = timeDiff > HEARTBEAT_TIMEOUT;
                     console.log(`[Offline Detection] Periodic check - ${roomId} Time diff: ${Math.floor(timeDiff / 1000)}s, Offline: ${isOffline}`);
                     
-                    if (isOffline && !deviceOfflineFlags[roomId]) {
-                        deviceOfflineFlags[roomId] = true;
-                        console.log(`[Offline Detection] Periodic check - ${roomId} OFFLINE DETECTED! Creating alert...`);
-                        
-                        const alertData = {
-                            type: 'device_offline',
-                            room: roomId,
-                            roomLabel: roomLabel,
-                            title: `Device Offline: ${roomLabel}`,
-                            message: `No heartbeat received for ${formatDuration(Math.floor(timeDiff / 1000))}`,
-                            timestamp: firebase.database.ServerValue.TIMESTAMP,
-                            acknowledged: false
-                        };
-                        
-                        db.ref('alerts').push(alertData);
-                        console.log(`[Offline Detection] Periodic check - Alert created for ${roomId}`);
-                        
-                        // Show popup notification
-                        if (typeof notificationSystem !== 'undefined') {
-                            notificationSystem.show(`${roomLabel} is offline`, 'error');
-                        }
-                        
-                        if (Notification.permission === 'granted') {
-                            new Notification('Device Offline Alert', {
-                                body: `${roomLabel} has stopped responding`,
-                                icon: 'pcctruelogo.png'
-                            });
-                        }
-                    } else if (!isOffline && deviceOfflineFlags[roomId]) {
-                        deviceOfflineFlags[roomId] = false;
-                        console.log(`[Offline Detection] Periodic check - ${roomId} is back online`);
-                        
-                        // Show popup notification
-                        if (typeof notificationSystem !== 'undefined') {
-                            notificationSystem.show(`${roomLabel} is back online`, 'success');
-                        }
-                    }
+                    handleOfflineTransition(roomId, roomLabel, isOffline, timeDiff);
                 }).catch((error) => {
                     console.error(`[Offline Detection] Periodic check error for ${roomId}:`, error);
                 });

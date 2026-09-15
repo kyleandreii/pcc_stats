@@ -74,14 +74,22 @@ function calculateStats(labsData, labKeys) {
     console.log('[calculateStats] labsData keys:', labsData ? Object.keys(labsData) : 'null/undefined');
     
     let sumT = 0;
+    let onlineCount = 0; // rooms actually contributing a real reading to the average
     let criticalCount = 0;
     let count = 0;
-    
+    // Same threshold used everywhere else a room is judged online/offline
+    // (Dashboard's own HEARTBEAT_TIMEOUT). Kept as a local constant here
+    // rather than reading a global, since this is a shared utility called
+    // from more than one page - a room with no last_seen at all (never
+    // connected, e.g. Rooms 404/405) or a stale one otherwise silently
+    // contributed a phantom 0°C into the average, dragging it down.
+    const ONLINE_THRESHOLD_MS = 15000;
+
     if (!labKeys || labKeys.length === 0) {
         console.log('[calculateStats] WARNING: labKeys is empty or null!');
         return { totalLabs: 0, normalCount: 0, criticalCount: 0, avgTemp: "--" };
     }
-    
+
     labKeys.forEach(key => {
         const d = labsData[key];
         console.log(`[calculateStats] Processing room ${key}:`, d);
@@ -89,27 +97,31 @@ function calculateStats(labsData, labKeys) {
             console.log(`[calculateStats] Room ${key} has no data, skipping`);
             return;
         }
-        
+
         const temp = parseFloat(d.temperature) || 0;
         // Handle both data structures: Dashboard uses thresholds.maxTemp, Analytics uses maxT directly
         const maxT = parseFloat(d.thresholds?.maxTemp) || parseFloat(d.maxT) || 30;
-        console.log(`[calculateStats] Room ${key}: temp=${temp}, maxT=${maxT}, status=${d.status}`);
-        sumT += temp;
-        
+        const isOnline = d.last_seen > 0 && (Date.now() - d.last_seen) < ONLINE_THRESHOLD_MS;
+        console.log(`[calculateStats] Room ${key}: temp=${temp}, maxT=${maxT}, status=${d.status}, online=${isOnline}`);
+        if (isOnline) {
+            sumT += temp;
+            onlineCount++;
+        }
+
         // Critical if status is ALARM or temperature exceeds individual room threshold
         if (d.status === "ALARM" || temp > maxT) {
             criticalCount++;
             console.log(`[calculateStats] Room ${key} marked as CRITICAL`);
         }
-        
+
         count++;
     });
-    
+
     const result = {
         totalLabs: count,
         normalCount: count - criticalCount,
         criticalCount: criticalCount,
-        avgTemp: count > 0 ? (sumT / count).toFixed(1) + "°C" : "--"
+        avgTemp: onlineCount > 0 ? (sumT / onlineCount).toFixed(1) + "°C" : "--"
     };
     
     console.log('[calculateStats] Output result:', result);

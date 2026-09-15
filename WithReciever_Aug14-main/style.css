@@ -773,6 +773,16 @@ a:hover {
     overflow: hidden;
 }
 
+/* .btn is used on every page and removes the outline unconditionally
+   above, with no replacement anywhere - a keyboard user tabbing through
+   the site got no visible indication of which button they were on.
+   :focus-visible (not plain :focus) so this only shows up for keyboard/
+   programmatic focus, not every mouse click. */
+.btn:focus-visible {
+    outline: 3px solid var(--maroon-accent);
+    outline-offset: 2px;
+}
+
 .btn::before {
     content: '';
     position: absolute;
@@ -1367,5 +1377,15 @@ a:hover {
     .ir-page-header {
         flex-wrap: wrap;
         gap: 12px;
+    }
+
+    /* "Daily Total Cost" (uppercase, wide letter-spacing) sharing a row
+       with the "Today" label + date picker had no room to breathe at
+       phone width and wrapped itself into 3 cramped lines instead of
+       wrapping the ROW - the date picker belongs on its own line, not
+       squeezed next to the heading. */
+    .analytics-summary-header {
+        flex-wrap: wrap;
+        gap: 8px;
     }
 }
