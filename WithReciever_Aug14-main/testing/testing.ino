@@ -1524,6 +1524,10 @@ void runAutomation(float temp, float humidity) {
   // each) so the IR step-count math further down can use the AC's real
   // prior setpoint instead of the room's ambient sensor temp.
   float pastTargetTemp = 24.0;
+  String humidityEventName;
+  #if DUAL_UNIT_MODE
+  float pastTargetTemp2 = 24.0;
+  #endif
 
   if (humidity > MAX_HUMIDITY) {
     // minTemp/maxTemp double as room-ambient safety thresholds elsewhere
@@ -1531,80 +1535,47 @@ void runAutomation(float temp, float humidity) {
     // the AC's real 16-30 range (e.g. as extra safety margin) - clamp
     // before writing it as a setpoint so that can never happen here.
     targetTemp = constrain(maxTemp, 16.0, 30.0);
+    humidityEventName = "Humidity automation: Occupied detected, setting target to max temp";
     Serial.println("📊 HUMIDITY AUTOMATION: Occupied detected");
     Serial.print("Humidity: "); Serial.print(humidity, 1); Serial.print("% > "); Serial.print(MAX_HUMIDITY); Serial.print("%, setting target to max: "); Serial.println(targetTemp, 1);
-    // Read the AC's current target before overwriting it, so the event
-    // log below shows setpoint-to-setpoint (both in the AC's real
-    // range), not the room's ambient sensor reading.
-    pastTargetTemp = targetTemp;
-    #if DUAL_UNIT_MODE
-    float pastTargetTemp2 = targetTemp;
-    if (Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/targetTemp")) {
-      pastTargetTemp = fbdo.floatData();
-    }
-    // Previously only unit_1's prior setpoint was ever read/logged here,
-    // even though both units get overwritten and could have had different
-    // prior values (e.g. after a manual per-unit override).
-    if (Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/targetTemp")) {
-      pastTargetTemp2 = fbdo.floatData();
-    }
-    Firebase.RTDB.setFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/targetTemp", targetTemp);
-    Firebase.RTDB.setFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/targetTemp", targetTemp);
-    Serial.print("[Automation] Updated Firebase unit_1 targetTemp to: "); Serial.println(targetTemp, 1);
-    Serial.print("[Automation] Updated Firebase unit_2 targetTemp to: "); Serial.println(targetTemp, 1);
-    lastAutomationEventPastTemp2 = pastTargetTemp2;
-    lastAutomationEventUpdatedTemp2 = targetTemp;
-    #else
-    if (Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/targetTemp")) {
-      pastTargetTemp = fbdo.floatData();
-    }
-    Firebase.RTDB.setFloat(&fbdo, "/" + String(ROOM_ID) + "/targetTemp", targetTemp);
-    Serial.print("[Automation] Updated Firebase targetTemp to: "); Serial.println(targetTemp, 1);
-    #endif
-    lastAutomationEvent = "Humidity automation: Occupied detected, setting target to max temp";
-    lastAutomationEventType = "humidity";
-    lastAutomationEventTime = millis();
-    lastAutomationEventPastTemp = pastTargetTemp;
-    lastAutomationEventUpdatedTemp = targetTemp;
-    Serial.print("[Automation] Event set: "); Serial.println(lastAutomationEvent);
-    Serial.print("[Automation] Past temp: "); Serial.print(lastAutomationEventPastTemp, 1); Serial.print("°C, Updated temp: "); Serial.print(lastAutomationEventUpdatedTemp, 1); Serial.println("°C");
   } else if (humidity < MIN_HUMIDITY) {
     targetTemp = constrain(minTemp, 16.0, 30.0);
+    humidityEventName = "Humidity automation: Not occupied detected, setting target to min temp";
     Serial.println("📊 HUMIDITY AUTOMATION: Not occupied detected");
     Serial.print("Humidity: "); Serial.print(humidity, 1); Serial.print("% < "); Serial.print(MIN_HUMIDITY); Serial.print("%, setting target to min: "); Serial.println(targetTemp, 1);
-    // Read the AC's current target before overwriting it - see the
-    // matching comment in the humidity>MAX_HUMIDITY branch above.
-    pastTargetTemp = targetTemp;
-    #if DUAL_UNIT_MODE
-    float pastTargetTemp2 = targetTemp;
-    if (Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/targetTemp")) {
-      pastTargetTemp = fbdo.floatData();
-    }
-    if (Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/targetTemp")) {
-      pastTargetTemp2 = fbdo.floatData();
-    }
-    Firebase.RTDB.setFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/targetTemp", targetTemp);
-    Firebase.RTDB.setFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/targetTemp", targetTemp);
-    Serial.print("[Automation] Updated Firebase unit_1 targetTemp to: "); Serial.println(targetTemp, 1);
-    Serial.print("[Automation] Updated Firebase unit_2 targetTemp to: "); Serial.println(targetTemp, 1);
-    lastAutomationEventPastTemp2 = pastTargetTemp2;
-    lastAutomationEventUpdatedTemp2 = targetTemp;
-    #else
-    if (Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/targetTemp")) {
-      pastTargetTemp = fbdo.floatData();
-    }
-    Firebase.RTDB.setFloat(&fbdo, "/" + String(ROOM_ID) + "/targetTemp", targetTemp);
-    Serial.print("[Automation] Updated Firebase targetTemp to: "); Serial.println(targetTemp, 1);
-    #endif
-    lastAutomationEvent = "Humidity automation: Not occupied detected, setting target to min temp";
-    lastAutomationEventType = "humidity";
-    lastAutomationEventTime = millis();
-    lastAutomationEventPastTemp = pastTargetTemp;
-    lastAutomationEventUpdatedTemp = targetTemp;
-    Serial.print("[Automation] Event set: "); Serial.println(lastAutomationEvent);
-    Serial.print("[Automation] Past temp: "); Serial.print(lastAutomationEventPastTemp, 1); Serial.print("°C, Updated temp: "); Serial.print(lastAutomationEventUpdatedTemp, 1); Serial.println("°C");
   } else {
     Serial.println("✅ [Humidity Automation] Humidity within normal range (45-60%), no action needed");
+    return;
+  }
+
+  // Read the AC's actual current setpoint(s) before deciding anything -
+  // read-only, no Firebase writes here. The write of the new setpoint is
+  // deferred until after an IR command is actually confirmed sent (see
+  // below), matching the temperature-safety code above, so a skipped or
+  // failed send can never make Firebase claim a setpoint change that
+  // never reached the physical AC.
+  bool gotPastTemp = false;
+  #if DUAL_UNIT_MODE
+  if (Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/targetTemp")) {
+    pastTargetTemp = fbdo.floatData();
+    gotPastTemp = true;
+  }
+  // unit_2's prior value is only used for event history display below,
+  // never to decide whether/how much to send - see the note further down
+  // where it feeds lastAutomationEventPastTemp2.
+  bool gotPastTemp2 = Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/targetTemp");
+  if (gotPastTemp2) {
+    pastTargetTemp2 = fbdo.floatData();
+  }
+  #else
+  if (Firebase.RTDB.getFloat(&fbdo, "/" + String(ROOM_ID) + "/targetTemp")) {
+    pastTargetTemp = fbdo.floatData();
+    gotPastTemp = true;
+  }
+  #endif
+
+  if (!gotPastTemp) {
+    Serial.println("[Humidity Automation] Skipped - could not read current setpoint");
     return;
   }
 
@@ -1617,15 +1588,10 @@ void runAutomation(float temp, float humidity) {
     if (timeSinceLastIR < IR_SEND_COOLDOWN_MS) {
       unsigned long cooldownRemaining = (IR_SEND_COOLDOWN_MS - timeSinceLastIR) / 1000;
       Serial.print("Cooldown active, "); Serial.print(cooldownRemaining); Serial.println(" seconds remaining");
-      Serial.println("Skipping automation event log - no IR was actually sent");
-      // Clear the pending event without logging it to Firebase history, since no
-      // IR was transmitted. Logging here previously made the analytics page show
-      // an automation event even though the AC never received the command.
-      lastAutomationEvent = "";
-      lastAutomationEventType = "";
-      lastAutomationEventTime = 0;
-      lastAutomationEventPastTemp = 0.0;
-      lastAutomationEventUpdatedTemp = 0.0;
+      // Nothing was written to Firebase or lastAutomationEvent* yet (both
+      // are only set after a confirmed send, below), so there is nothing
+      // to roll back here - just skip this cycle.
+      Serial.println("Skipping - no IR was actually sent");
       return;
     }
     Serial.println("No cooldown active, proceeding with IR commands");
@@ -1675,6 +1641,32 @@ void runAutomation(float temp, float humidity) {
 
     lastIRSendMillis = millis();
     Serial.print("Humidity automation complete. Target temp: "); Serial.println(targetTemp, 1);
+
+    // The IR command is now confirmed sent - only now persist the new
+    // setpoint(s) to Firebase and log the event, so a cooldown-skip or
+    // failed-read above (both of which return before this point) can
+    // never leave Firebase claiming a setpoint change that never reached
+    // the physical AC.
+    #if DUAL_UNIT_MODE
+    Firebase.RTDB.setFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/targetTemp", targetTemp);
+    Firebase.RTDB.setFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/targetTemp", targetTemp);
+    Serial.print("[Automation] Updated Firebase unit_1 targetTemp to: "); Serial.println(targetTemp, 1);
+    Serial.print("[Automation] Updated Firebase unit_2 targetTemp to: "); Serial.println(targetTemp, 1);
+    lastAutomationEventPastTemp2 = gotPastTemp2 ? pastTargetTemp2 : pastTargetTemp;
+    lastAutomationEventUpdatedTemp2 = targetTemp;
+    #else
+    Firebase.RTDB.setFloat(&fbdo, "/" + String(ROOM_ID) + "/targetTemp", targetTemp);
+    Serial.print("[Automation] Updated Firebase targetTemp to: "); Serial.println(targetTemp, 1);
+    #endif
+
+    lastAutomationEvent = humidityEventName;
+    lastAutomationEventType = "humidity";
+    lastAutomationEventTime = millis();
+    lastAutomationEventPastTemp = pastTargetTemp;
+    lastAutomationEventUpdatedTemp = targetTemp;
+    Serial.print("[Automation] Event set: "); Serial.println(lastAutomationEvent);
+    Serial.print("[Automation] Past temp: "); Serial.print(lastAutomationEventPastTemp, 1); Serial.print("°C, Updated temp: "); Serial.print(lastAutomationEventUpdatedTemp, 1); Serial.println("°C");
+
     // Log humidity automation event to Firebase history
     logAutomationEventToHistory();
   } else {
