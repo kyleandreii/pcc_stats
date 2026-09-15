@@ -533,6 +533,20 @@
             db.ref(firebasePath).transaction((current) => (current || 0) + kwhDelta)
                 .then(() => console.log(`[Energy Accumulator] ${tickKey}: +${kwhDelta.toFixed(5)} kWh @ ${targetTemp}°C (${watts}W, ${(elapsedHours * 3600).toFixed(0)}s) -> ${firebasePath}`))
                 .catch((err) => console.error(`[Energy Accumulator] ${tickKey}: write failed`, err));
+
+            // Also accumulate on-time hours from this same tick's elapsedHours,
+            // written alongside energyKwh (same path, sibling field) instead
+            // of leaving "hours used" to the separate roomUsage tracker, which
+            // resets on its own ac on/off-transition schedule and its own
+            // lagging daily-reset trigger (only runs when some tab happens to
+            // load and notice the date changed). Two independently-clocked
+            // trackers measuring the same thing is exactly what let Cost and
+            // Usage drift apart (confirmed live: cost implied ~1h20m of
+            // runtime while Usage still showed 1h5m). Sharing this one tick
+            // as the clock for both numbers keeps them in sync by construction.
+            const hoursPath = firebasePath.replace(/\/energyKwh$/, '/onHours');
+            db.ref(hoursPath).transaction((current) => (current || 0) + elapsedHours)
+                .catch((err) => console.error(`[Energy Accumulator] ${tickKey}: onHours write failed`, err));
         }
 
         function tickEnergyAccumulator() {

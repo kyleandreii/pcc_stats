@@ -1901,6 +1901,39 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
         const isDualUnit = !!(roomData && roomData.units && (roomData.units.unit_1 || roomData.units.unit_2));
 
         if (isToday) {
+            // Prefer the dashboard's energy-accumulator onHours field, which
+            // is written from the exact same tick/elapsedHours measurement
+            // as energyKwh (see accumulateUnitEnergy in 1_dashboard_trial.html).
+            // Falling back to the separately-clocked roomUsage tracker below
+            // is what let Cost and Usage drift apart - roomUsage resets on its
+            // own ac on/off-transition schedule and its own lagging daily
+            // reset (only runs when some tab happens to load and notice the
+            // date changed), while the energy accumulator ticks independently.
+            // Sharing one clock for both numbers keeps them in sync by
+            // construction instead of relying on two trackers to agree.
+            let onHours = null;
+            if (isDualUnit) {
+                const [snap1, snap2] = await Promise.all([
+                    db.ref(`analytics/dailyAnalytics/${dateStr}/${room}_unit_1/onHours`).once('value'),
+                    db.ref(`analytics/dailyAnalytics/${dateStr}/${room}_unit_2/onHours`).once('value')
+                ]);
+                const h1 = snap1.val();
+                const h2 = snap2.val();
+                if (h1 !== null || h2 !== null) {
+                    // Larger of the two units, not the sum - see the comment
+                    // above on totalMs for why (both units run together).
+                    onHours = Math.max(h1 || 0, h2 || 0);
+                }
+            } else {
+                const snap = await db.ref(`analytics/dailyAnalytics/${dateStr}/${room}/onHours`).once('value');
+                const h = snap.val();
+                if (h !== null) onHours = h;
+            }
+            if (onHours !== null) {
+                console.log(`[Usage Hours] ${room} (today): ${onHours.toFixed(2)} hours from energy-accumulator onHours`);
+                return onHours;
+            }
+
             // For today, use Firebase roomUsage for accurate real-time tracking
             let totalMs = 0;
             if (isDualUnit) {
