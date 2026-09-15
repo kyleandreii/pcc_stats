@@ -1309,4 +1309,22 @@ a:hover {
         right: 16px !important;
         max-width: none !important;
     }
+
+    /* Analytics' period-tab strip (Day/Week/Month/Year/Total) and metric-tab
+       strip (Temp/Humidity/Cost/Usage/Schedule) are ".neumorph-card
+       inline-flex" rows with no wrap - at phone width they measured 558px
+       and 442px wide in a 370px viewport, forcing the WHOLE PAGE to scroll
+       horizontally just to reach one tab strip. Letting the strip itself
+       scroll sideways (a normal, expected mobile pattern) instead keeps the
+       rest of the page contained. */
+    .neumorph-card.inline-flex {
+        max-width: 100%;
+        overflow-x: auto;
+        justify-content: flex-start;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    .neumorph-card.inline-flex::-webkit-scrollbar {
+        display: none;
+    }
 }
