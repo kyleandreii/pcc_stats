@@ -511,22 +511,35 @@
                 // has elapsed under this baseline yet, same as the firmware's
                 // own "first tick: nothing elapsed yet" behavior on boot.
                 energyAccumLastTick[tickKey] = { millis: nowMs, date: todayStr };
+                console.log(`[Energy Accumulator] ${tickKey}: baseline set, first real tick lands in ~10s`);
                 return;
             }
             let elapsedHours = (nowMs - last.millis) / 3600000;
             energyAccumLastTick[tickKey] = { millis: nowMs, date: todayStr };
             if (elapsedHours <= 0) return;
             if (elapsedHours > ENERGY_ACCUM_MAX_GAP_HOURS) elapsedHours = ENERGY_ACCUM_MAX_GAP_HOURS;
-            if (!isOn) return;
+            if (!isOn) {
+                console.log(`[Energy Accumulator] ${tickKey}: AC off, skipping (${(elapsedHours * 3600).toFixed(0)}s elapsed)`);
+                return;
+            }
 
+            if (typeof AirconCostCalculator === 'undefined') {
+                console.error('[Energy Accumulator] AirconCostCalculator failed to load - check that aircon-cost-calculator.js is reachable.');
+                return;
+            }
             const watts = AirconCostCalculator.getEffectiveWatts(unitConfig || {}, targetTemp);
             const kwhDelta = (watts / 1000) * elapsedHours;
             if (!kwhDelta || kwhDelta <= 0) return;
-            db.ref(firebasePath).transaction((current) => (current || 0) + kwhDelta);
+            db.ref(firebasePath).transaction((current) => (current || 0) + kwhDelta)
+                .then(() => console.log(`[Energy Accumulator] ${tickKey}: +${kwhDelta.toFixed(5)} kWh @ ${targetTemp}°C (${watts}W, ${(elapsedHours * 3600).toFixed(0)}s) -> ${firebasePath}`))
+                .catch((err) => console.error(`[Energy Accumulator] ${tickKey}: write failed`, err));
         }
 
         function tickEnergyAccumulator() {
             const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+            if (labKeys.length === 0) {
+                console.log('[Energy Accumulator] tick fired but labKeys is still empty - rooms not loaded yet');
+            }
 
             labKeys.forEach((room) => {
                 const roomData = labsData[room];
