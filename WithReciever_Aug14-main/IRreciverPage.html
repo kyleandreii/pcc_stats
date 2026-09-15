@@ -357,11 +357,12 @@
                                 <i data-lucide="check-circle" class="w-5 h-5 text-green-600"></i>
                                 <h3 class="text-lg font-black text-green-800">Signal Received!</h3>
                             </div>
-                            <div class="grid grid-cols-3 gap-3 text-sm mb-3">
-                                <div><span class="text-xs font-bold text-gray-500 uppercase">Protocol</span><p id="signalProtocol" class="font-bold text-gray-800">--</p></div>
+                            <div class="grid grid-cols-2 gap-3 text-sm mb-3">
                                 <div><span class="text-xs font-bold text-gray-500 uppercase">Length</span><p id="signalLength" class="font-bold text-gray-800">--</p></div>
                                 <div><span class="text-xs font-bold text-gray-500 uppercase">Status</span><p id="signalStatus" class="font-bold text-green-600">Ready</p></div>
                             </div>
+                            <!-- signalProtocol kept as a hidden node (id referenced by displaySignal()) since Protocol is no longer shown anywhere in this UI. -->
+                            <p id="signalProtocol" class="hidden">--</p>
                         </div>
                         
                         <!-- Syntax-highlighted code block with white/red theme -->
@@ -842,7 +843,6 @@
                             <span class="library-entry-status bg-green-100 text-green-700 text-xs font-bold px-2 py-1 rounded-full">Saved</span>
                         </div>
                         <div class="library-entry-details text-xs text-gray-600 mb-3 flex gap-4">
-                            <span><strong>Protocol:</strong> ${entry.protocol || 'PANASONIC'}</span>
                             <span><strong>Length:</strong> ${entry.signalLength || normalizeRawData(entry.rawData || []).length}</span>
                         </div>
                         <div class="library-entry-actions flex gap-2">
@@ -934,10 +934,9 @@
                     </div>`;
                 const html = `
                     <div class="space-y-4 text-sm text-gray-700">
-                        <div class="grid grid-cols-2 gap-3">
+                        <div class="grid grid-cols-3 gap-3">
                             ${statTile('Laboratory', entry.labName)}
                             ${statTile('Command', entry.commandLabel)}
-                            ${statTile('Protocol', entry.protocol)}
                             ${statTile('Signal Length', entry.signalLength)}
                         </div>
                         <div class="rounded-xl border border-gray-200 overflow-hidden">
