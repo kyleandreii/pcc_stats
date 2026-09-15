@@ -323,6 +323,24 @@ a:hover {
     100% { transform: translateX(100%); }
 }
 
+/* The switch itself is pointer-events:none while cooling down (needed so
+   a stray click can't visually flip the native checkbox even though the
+   onchange handler would reject it - that mismatch was worse than just
+   blocking the click). Since pointer-events:none means the switch never
+   receives the hover itself, the not-allowed cursor goes on its outer
+   wrapper instead, where the mouse position actually resolves to. */
+.cooldown-cursor {
+    cursor: not-allowed;
+}
+
+.cooldown-badge-inline {
+    background: rgba(139, 21, 56, 0.1);
+    padding: 1px 5px;
+    border-radius: var(--radius-full);
+    min-width: 14px;
+    text-align: center;
+}
+
 /* --- INPUTS --- */
 .neumorph-input {
     background: var(--bg-secondary);

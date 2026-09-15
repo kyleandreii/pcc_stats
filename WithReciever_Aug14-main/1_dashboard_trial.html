@@ -1053,7 +1053,27 @@
 
         // Cooldown tracking for power button
         let powerButtonCooldown = false;
+        let powerCooldownEndsAt = 0; // absolute timestamp; lets the countdown badge show the true remaining time even if a re-render recreates its DOM node mid-countdown
         const POWER_COOLDOWN_MS = 5000;
+
+        // Ticks any visible cooldown countdown badges every 500ms. Runs as
+        // one always-on interval (started once, below) rather than being
+        // started/stopped per toggle - it's a cheap no-op whenever nothing
+        // is cooling down, and avoids needing to coordinate interval
+        // lifecycles across two toggle functions plus renderDashboard()
+        // possibly recreating these elements at any moment.
+        function tickPowerCooldownBadges() {
+            const remainingMs = Math.max(0, powerCooldownEndsAt - Date.now());
+            const remainingSec = Math.ceil(remainingMs / 1000);
+            const active = powerButtonCooldown && remainingSec > 0;
+            document.querySelectorAll('.cooldown-badge').forEach((el) => {
+                el.textContent = active ? `Wait ${remainingSec}s` : (el.dataset.defaultLabel || '');
+            });
+            document.querySelectorAll('.cooldown-badge-inline').forEach((el) => {
+                el.textContent = active ? `${remainingSec}s` : '';
+            });
+        }
+        setInterval(tickPowerCooldownBadges, 500);
 
         function toggleAC(roomPath, isChecked) {
             console.log(`[Dashboard] toggleAC called for ${roomPath}, isChecked: ${isChecked}`);
@@ -1062,6 +1082,7 @@
                 return;
             }
             powerButtonCooldown = true;
+            powerCooldownEndsAt = Date.now() + POWER_COOLDOWN_MS;
 
             console.log(`[Dashboard] Toggle ${roomPath} to ${isChecked ? 'ON' : 'OFF'}`);
             
@@ -1130,13 +1151,16 @@
             
             // Force immediate re-render to show the change
             renderDashboard();
-            
+
             // Add cooldown class to all switches AFTER re-render
             document.querySelectorAll('.neumorph-switch').forEach(sw => sw.classList.add('cooldown'));
-            
+            tickPowerCooldownBadges();
+
             setTimeout(() => {
                 powerButtonCooldown = false;
+                powerCooldownEndsAt = 0;
                 document.querySelectorAll('.neumorph-switch').forEach(sw => sw.classList.remove('cooldown'));
+                tickPowerCooldownBadges();
             }, POWER_COOLDOWN_MS);
         }
 
@@ -1146,6 +1170,7 @@
                 return;
             }
             powerButtonCooldown = true;
+            powerCooldownEndsAt = Date.now() + POWER_COOLDOWN_MS;
 
             const unitPath = `${roomPath}/units/${unit}`;
             const cmd = isChecked ? "ON" : "OFF";
@@ -1213,16 +1238,19 @@
             
             // Force immediate re-render to show the change
             renderDashboard();
-            
+
             // Add cooldown class to all switches AFTER re-render
             document.querySelectorAll('.neumorph-switch').forEach(sw => sw.classList.add('cooldown'));
-            
+            tickPowerCooldownBadges();
+
             setTimeout(() => {
                 powerButtonCooldown = false;
+                powerCooldownEndsAt = 0;
                 document.querySelectorAll('.neumorph-switch').forEach(sw => sw.classList.remove('cooldown'));
+                tickPowerCooldownBadges();
             }, POWER_COOLDOWN_MS);
         }
-        
+
         function formatTimeAgo(timestamp) {
             if (!timestamp) return 'Unknown';
             const now = Date.now();
@@ -1663,13 +1691,13 @@
                                     </button>
                                 </div>
                                 ${!isDualUnitRoom ? `
-                                <div class="flex flex-col items-center">
-                                    <label class="neumorph-switch ${powerButtonCooldown ? 'cooldown' : ''}">
+                                <div class="flex flex-col items-center ${powerButtonCooldown ? 'cooldown-cursor' : ''}">
+                                    <label class="neumorph-switch ${powerButtonCooldown ? 'cooldown' : ''}" title="${powerButtonCooldown ? 'Please wait a moment before toggling again' : ''}">
                                         <input type="checkbox" ${isPoweredOn ? 'checked' : ''} onchange="toggleAC('${roomPath}', this.checked)">
                                         <span class="neumorph-switch-slider"></span>
                                     </label>
                                     <div class="flex flex-col items-center mt-1">
-                                        <span class="text-[8px] font-bold text-gray-400 uppercase">AC Power</span>
+                                        <span class="text-[8px] font-bold ${powerButtonCooldown ? 'text-[#8B1538]' : 'text-gray-400'} uppercase cooldown-badge" data-default-label="AC Power">${powerButtonCooldown ? `Wait ${Math.ceil(Math.max(0, powerCooldownEndsAt - Date.now()) / 1000)}s` : 'AC Power'}</span>
                                         <span class="text-[10px] font-bold text-[#8B1538] bg-[#8B1538]/10 px-3 py-1 rounded-lg shadow-sm">${durationCache[roomPath] || '0h online today'}</span>
                                     </div>
                                 </div>
@@ -1700,22 +1728,28 @@
                             <div class="grid grid-cols-2 gap-4 mb-5">
                                 <!-- Individual unit controls for dual-unit room -->
                                 <div class="p-4 rounded-2xl" style="background:${unit1State ? '#FDF1F4' : '#F5F2F4'};">
-                                    <div class="flex justify-between items-center mb-2">
+                                    <div class="flex justify-between items-center mb-2 ${powerButtonCooldown ? 'cooldown-cursor' : ''}">
                                         <p class="text-[9px] font-bold text-gray-600 uppercase">Unit 1</p>
-                                        <label class="neumorph-switch scale-75 ${powerButtonCooldown ? 'cooldown' : ''}">
-                                            <input type="checkbox" ${unit1State ? 'checked' : ''} onchange="toggleUnitAC('${roomPath}', 'unit_1', this.checked)">
-                                            <span class="neumorph-switch-slider"></span>
-                                        </label>
+                                        <div class="flex items-center gap-1.5">
+                                            <span class="text-[7px] font-black text-[#8B1538] uppercase cooldown-badge-inline">${powerButtonCooldown ? `${Math.ceil(Math.max(0, powerCooldownEndsAt - Date.now()) / 1000)}s` : ''}</span>
+                                            <label class="neumorph-switch scale-75 ${powerButtonCooldown ? 'cooldown' : ''}" title="${powerButtonCooldown ? 'Please wait a moment before toggling again' : ''}">
+                                                <input type="checkbox" ${unit1State ? 'checked' : ''} onchange="toggleUnitAC('${roomPath}', 'unit_1', this.checked)">
+                                                <span class="neumorph-switch-slider"></span>
+                                            </label>
+                                        </div>
                                     </div>
                                     <p class="text-[10px] font-bold text-[#8B1538] text-center bg-white/60 px-3 py-1 rounded-lg shadow-sm">${durationCache[`${roomPath}_unit_1`] || '0h online today'}</p>
                                 </div>
                                 <div class="p-4 rounded-2xl" style="background:${unit2State ? '#FDF1F4' : '#F5F2F4'};">
-                                    <div class="flex justify-between items-center mb-2">
+                                    <div class="flex justify-between items-center mb-2 ${powerButtonCooldown ? 'cooldown-cursor' : ''}">
                                         <p class="text-[9px] font-bold text-gray-600 uppercase">Unit 2</p>
-                                        <label class="neumorph-switch scale-75 ${powerButtonCooldown ? 'cooldown' : ''}">
-                                            <input type="checkbox" ${unit2State ? 'checked' : ''} onchange="toggleUnitAC('${roomPath}', 'unit_2', this.checked)">
-                                            <span class="neumorph-switch-slider"></span>
-                                        </label>
+                                        <div class="flex items-center gap-1.5">
+                                            <span class="text-[7px] font-black text-[#8B1538] uppercase cooldown-badge-inline">${powerButtonCooldown ? `${Math.ceil(Math.max(0, powerCooldownEndsAt - Date.now()) / 1000)}s` : ''}</span>
+                                            <label class="neumorph-switch scale-75 ${powerButtonCooldown ? 'cooldown' : ''}" title="${powerButtonCooldown ? 'Please wait a moment before toggling again' : ''}">
+                                                <input type="checkbox" ${unit2State ? 'checked' : ''} onchange="toggleUnitAC('${roomPath}', 'unit_2', this.checked)">
+                                                <span class="neumorph-switch-slider"></span>
+                                            </label>
+                                        </div>
                                     </div>
                                     <p class="text-[10px] font-bold text-[#8B1538] text-center bg-white/60 px-3 py-1 rounded-lg shadow-sm">${durationCache[`${roomPath}_unit_2`] || '0h online today'}</p>
                                 </div>
