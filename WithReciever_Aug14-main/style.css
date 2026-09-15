@@ -1345,4 +1345,18 @@ a:hover {
         flex-wrap: wrap;
         row-gap: 6px;
     }
+
+    /* .incident-card is "flex items-center justify-between" with its own
+       overflow:hidden (there only to clip the decorative ::before accent
+       bar to the card's rounded corners). Its text content doesn't shrink
+       to fit a 240px-wide phone card, so the Acknowledge button on the
+       right got pushed almost entirely outside the card and silently
+       clipped by that overflow:hidden - it rendered as just the letter
+       "A" with no visible bug in the page's own scrollWidth, since the
+       overflow was contained (and hidden) at the card level. Wrapping
+       drops the button to its own row instead of squeezing/clipping it. */
+    .incident-card {
+        flex-wrap: wrap;
+        gap: 12px;
+    }
 }
