@@ -1278,9 +1278,21 @@ a:hover {
     .main-wrapper {
         margin-left: 0;
         padding: var(--space-6);
+        padding-top: 80px; /* .mobile-menu-toggle floats fixed at top:16px, ~48px tall - without this, page headings render underneath/behind it */
         padding-bottom: 100px; /* Space for bottom nav */
     }
 
     .mobile-bottom-nav { display: flex; }
     .mobile-menu-toggle { display: flex; }
+
+    /* Re-collapse to 1 column here (not just in the earlier 768px block
+       above) - this block is declared after the 1024px breakpoint's
+       ".bento-grid-4 { repeat(2, 1fr) }", and CSS resolves same-specificity
+       rules by source order, not by which max-width is narrower. Without
+       restating it here, phones inherited the tablet's 2-column layout and
+       the stat cards blew out past the viewport (measured 419px content in
+       a 380px viewport on the dashboard). */
+    .bento-grid-4 {
+        grid-template-columns: 1fr;
+    }
 }
