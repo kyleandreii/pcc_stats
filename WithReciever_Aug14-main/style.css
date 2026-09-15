@@ -1359,4 +1359,13 @@ a:hover {
         flex-wrap: wrap;
         gap: 12px;
     }
+
+    /* IR Receiver page's header (title + Firebase/Status badges) measured
+       a 5px page-level overflow at phone width - the "IR Signal Manager"
+       heading and the two status badges don't quite fit on one row.
+       Minor, but wrapping avoids the page having any horizontal scroll. */
+    .ir-page-header {
+        flex-wrap: wrap;
+        gap: 12px;
+    }
 }
