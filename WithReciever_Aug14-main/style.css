@@ -1295,4 +1295,18 @@ a:hover {
     .bento-grid-4 {
         grid-template-columns: 1fr;
     }
+
+    /* #notification-container's positioning (top:20px/right:20px/max-width:
+       360px) is set via inline style.cssText in shared-utils.js, so only an
+       !important stylesheet rule can override it. At phone width that inline
+       max-width nearly spans the whole screen, landing directly on top of
+       the fixed hamburger button and page heading (measured overlap on the
+       real dashboard). Drop it below the hamburger and keep it inset from
+       both edges instead of pinned to the right. */
+    #notification-container {
+        top: 80px !important;
+        left: 16px !important;
+        right: 16px !important;
+        max-width: none !important;
+    }
 }
