@@ -435,15 +435,11 @@
                                 <select id="saveCommandSelect" class="field w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#7A001E] focus:border-transparent"></select>
                             </div>
                         </div>
-                        <div class="grid grid-cols-2 gap-3 mb-3">
-                            <div>
-                                <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Signal Name</label>
-                                <input type="text" id="saveSignalName" class="field w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#7A001E] focus:border-transparent" placeholder="e.g., AC ON">
-                            </div>
-                            <div>
-                                <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Protocol</label>
-                                <input type="text" id="saveProtocolInput" class="field w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#7A001E] focus:border-transparent" value="PANASONIC">
-                            </div>
+                        <div class="mb-3">
+                            <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Signal Name</label>
+                            <input type="text" id="saveSignalName" class="field w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#7A001E] focus:border-transparent" placeholder="e.g., AC ON">
+                            <!-- Protocol is always PANASONIC for these units - kept as a hidden field so saveLibrarySignal() still works unchanged, just no longer shown to the user. -->
+                            <input type="hidden" id="saveProtocolInput" value="PANASONIC">
                         </div>
                         <div class="mb-4">
                             <label class="text-xs font-bold text-gray-500 uppercase block mb-2">Raw Data</label>
@@ -626,9 +622,17 @@
         function normalizeRawData(raw) {
             if (Array.isArray(raw)) return raw.map(Number).filter((n) => !Number.isNaN(n));
             if (typeof raw !== 'string') return [];
+            // A leading/trailing separator (e.g. whitespace before the first
+            // number) makes split() emit an empty string at that end, and
+            // Number('') is 0 rather than NaN - so it used to slip through
+            // as a bogus extra "0" sample at the start/end of the array.
+            // Dropping blank tokens before the Number() conversion (as the
+            // equivalent parser in ir-library.js already does) fixes that.
             return raw.replace(/uint16_t\s*rawData\s*\[\]\s*=\s*\{?|\};?$/gi, '')
                 .split(/[\s,]+/)
-                .map((item) => Number(item.trim()))
+                .map((item) => item.trim())
+                .filter((item) => item !== '')
+                .map((item) => Number(item))
                 .filter((value) => !Number.isNaN(value));
         }
 
