@@ -1327,4 +1327,14 @@ a:hover {
     .neumorph-card.inline-flex::-webkit-scrollbar {
         display: none;
     }
+
+    /* The date-range filter (From/To/Today) + Export CSV button row was a
+       plain "flex items-center justify-between" with no wrap - its four
+       children (date card, gap, button) don't fit in 370px and were
+       measured forcing the whole page's scrollWidth to 553px. Wrapping
+       lets the Export button drop to its own line instead. */
+    .analytics-filter-row {
+        flex-wrap: wrap;
+        gap: var(--space-3);
+    }
 }
