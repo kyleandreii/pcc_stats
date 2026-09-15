@@ -492,16 +492,47 @@
         // This ticks the exact same Firebase fields, using the same wattage
         // curve (AirconCostCalculator.getEffectiveWatts) the firmware and
         // Analytics page already use, so cost keeps accumulating correctly
-        // with zero hardware connected - e.g. for a demo. Deliberately runs
-        // on this page only (not duplicated on Analytics/Settings too) to
-        // avoid two open tabs both crediting the same elapsed time twice;
-        // keep this dashboard tab open (it can be in the background) while
-        // demoing. If a real device is later reconnected and also ticking
-        // these fields, both simply add to the same running total via
-        // Firebase's transaction() - nothing to reconcile by hand.
+        // with zero hardware connected - e.g. for a demo.
+        //
+        // Only one open tab may actually credit at a time, enforced via a
+        // Firebase-held lease (below) rather than just "keep one tab open" -
+        // confirmed live that a second Dashboard tab (this browser and the
+        // user's own, both open at once) double-credited energyKwh at
+        // roughly 2x the correct rate, since each tab independently computed
+        // its own elapsedHours with no idea the other existed. If a real
+        // ESP32 is later reconnected and also ticks these same fields, it
+        // isn't part of this lease and will simply add on top - firmware
+        // is the authoritative source and this accumulator is only a
+        // hardware-free stand-in, so that's an acceptable, rare overlap
+        // rather than the routine one two browser tabs created.
         let energyAccumLastTick = {};
+        let energyAccumIsLeader = false;
+        const ENERGY_ACCUM_CLIENT_ID = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        const ENERGY_ACCUM_LEASE_PATH = 'analytics/energyAccumLease';
+        const ENERGY_ACCUM_LEASE_TTL_MS = 15000; // lease considered abandoned if not renewed within this long
         const ENERGY_ACCUM_INTERVAL_MS = 10000; // matches the firmware's own cadence
         const ENERGY_ACCUM_MAX_GAP_HOURS = 5 / 60; // guard against a huge jump after e.g. the laptop was asleep
+
+        // Attempts to claim (or renew) the single accumulation lease. Resolves
+        // true only if THIS tab now holds it - either it already did, the
+        // lease was empty, or the previous holder went stale (closed tab,
+        // crashed, lost connectivity) without releasing it.
+        async function claimEnergyAccumLeadership() {
+            try {
+                const result = await db.ref(ENERGY_ACCUM_LEASE_PATH).transaction((current) => {
+                    const now = Date.now();
+                    if (!current || (now - current.timestamp) > ENERGY_ACCUM_LEASE_TTL_MS || current.clientId === ENERGY_ACCUM_CLIENT_ID) {
+                        return { clientId: ENERGY_ACCUM_CLIENT_ID, timestamp: now };
+                    }
+                    return; // abort - another tab holds a still-fresh lease
+                });
+                energyAccumIsLeader = !!(result.committed && result.snapshot.val()?.clientId === ENERGY_ACCUM_CLIENT_ID);
+            } catch (err) {
+                console.error('[Energy Accumulator] Lease claim failed', err);
+                energyAccumIsLeader = false;
+            }
+            return energyAccumIsLeader;
+        }
 
         function accumulateUnitEnergy(tickKey, todayStr, isOn, targetTemp, unitConfig, firebasePath) {
             const nowMs = Date.now();
@@ -549,7 +580,25 @@
                 .catch((err) => console.error(`[Energy Accumulator] ${tickKey}: onHours write failed`, err));
         }
 
-        function tickEnergyAccumulator() {
+        async function tickEnergyAccumulator() {
+            const gotLeadership = await claimEnergyAccumLeadership();
+            if (!gotLeadership) {
+                // Another open tab holds the lease - don't credit anything
+                // this tick, and clear our own baselines rather than leaving
+                // them stale. If we don't clear them, regaining leadership
+                // later would compute elapsedHours across the ENTIRE time we
+                // were sidelined and credit that whole gap again on top of
+                // whatever the actual leader already credited for it -
+                // trading one double-count for another. Clearing means the
+                // next tick we do lead starts fresh (credits nothing for the
+                // gap), the same as any other first-tick-after-a-gap case.
+                if (Object.keys(energyAccumLastTick).length > 0) {
+                    console.log('[Energy Accumulator] Another tab holds the lease - standing down this tick');
+                    energyAccumLastTick = {};
+                }
+                return;
+            }
+
             const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
             if (labKeys.length === 0) {
                 console.log('[Energy Accumulator] tick fired but labKeys is still empty - rooms not loaded yet');
