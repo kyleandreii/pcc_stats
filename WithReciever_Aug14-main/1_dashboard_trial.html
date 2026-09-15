@@ -14,6 +14,7 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="shared-utils.js"></script>
     <script src="ui-enhancements.js"></script>
+    <script src="aircon-cost-calculator.js"></script>
 
     <style>
         /* Dashboard-specific styles that complement global CSS */
@@ -410,6 +411,14 @@
         let labKeys = [];
         let labsData = {};
 
+        // Room configs (rated_watts / duty_cycle / tempCalibration) - needed
+        // by the client-side energy accumulator below to compute wattage the
+        // same way the Analytics page and firmware do.
+        let airconConfig = {};
+        db.ref('config/rooms').on('value', (snapshot) => {
+            airconConfig = snapshot.val() || {};
+        });
+
         db.ref(".info/connected").on("value", (snap) => {
             const indicator = document.getElementById('conn-indicator');
             const text = document.getElementById('conn-text');
@@ -469,6 +478,74 @@
         setInterval(() => {
             renderDashboard();
         }, 4000); // Check every 4 seconds to catch connection changes quickly
+
+        // --- Client-side energy/cost accumulator ---
+        // The Analytics page's "actual cost" for today prefers a firmware-
+        // accumulated energyKwh value at analytics/dailyAnalytics/{date}/
+        // {room}[_unit_X]/energyKwh, and only falls back to a live-temp
+        // estimate (whatever the AC is set to RIGHT NOW, applied across the
+        // whole day) when no such value exists. Without a physical ESP32
+        // online to write it, that fallback is all there ever is - so cost
+        // swings with every temp change instead of adding up, since a dead
+        // device never recorded what temp was active earlier in the day.
+        //
+        // This ticks the exact same Firebase fields, using the same wattage
+        // curve (AirconCostCalculator.getEffectiveWatts) the firmware and
+        // Analytics page already use, so cost keeps accumulating correctly
+        // with zero hardware connected - e.g. for a demo. Deliberately runs
+        // on this page only (not duplicated on Analytics/Settings too) to
+        // avoid two open tabs both crediting the same elapsed time twice;
+        // keep this dashboard tab open (it can be in the background) while
+        // demoing. If a real device is later reconnected and also ticking
+        // these fields, both simply add to the same running total via
+        // Firebase's transaction() - nothing to reconcile by hand.
+        let energyAccumLastTick = {};
+        const ENERGY_ACCUM_INTERVAL_MS = 10000; // matches the firmware's own cadence
+        const ENERGY_ACCUM_MAX_GAP_HOURS = 5 / 60; // guard against a huge jump after e.g. the laptop was asleep
+
+        function accumulateUnitEnergy(tickKey, todayStr, isOn, targetTemp, unitConfig, firebasePath) {
+            const nowMs = Date.now();
+            const last = energyAccumLastTick[tickKey];
+            if (!last || last.date !== todayStr) {
+                // First tick today (or ever, or crossing midnight) - nothing
+                // has elapsed under this baseline yet, same as the firmware's
+                // own "first tick: nothing elapsed yet" behavior on boot.
+                energyAccumLastTick[tickKey] = { millis: nowMs, date: todayStr };
+                return;
+            }
+            let elapsedHours = (nowMs - last.millis) / 3600000;
+            energyAccumLastTick[tickKey] = { millis: nowMs, date: todayStr };
+            if (elapsedHours <= 0) return;
+            if (elapsedHours > ENERGY_ACCUM_MAX_GAP_HOURS) elapsedHours = ENERGY_ACCUM_MAX_GAP_HOURS;
+            if (!isOn) return;
+
+            const watts = AirconCostCalculator.getEffectiveWatts(unitConfig || {}, targetTemp);
+            const kwhDelta = (watts / 1000) * elapsedHours;
+            if (!kwhDelta || kwhDelta <= 0) return;
+            db.ref(firebasePath).transaction((current) => (current || 0) + kwhDelta);
+        }
+
+        function tickEnergyAccumulator() {
+            const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+
+            labKeys.forEach((room) => {
+                const roomData = labsData[room];
+                if (!roomData) return;
+                const roomConfig = airconConfig[room] || {};
+                const isDualUnit = !!(roomData.units && (roomData.units.unit_1 || roomData.units.unit_2));
+
+                if (isDualUnit) {
+                    const u1 = roomData.units.unit_1 || {};
+                    const u2 = roomData.units.unit_2 || {};
+                    accumulateUnitEnergy(`${room}_unit_1`, todayStr, u1.ac === true, u1.targetTemp, roomConfig.units?.unit_1, `analytics/dailyAnalytics/${todayStr}/${room}_unit_1/energyKwh`);
+                    accumulateUnitEnergy(`${room}_unit_2`, todayStr, u2.ac === true, u2.targetTemp, roomConfig.units?.unit_2, `analytics/dailyAnalytics/${todayStr}/${room}_unit_2/energyKwh`);
+                } else {
+                    accumulateUnitEnergy(room, todayStr, roomData.ac === true, roomData.targetTemp, roomConfig, `analytics/dailyAnalytics/${todayStr}/${room}/energyKwh`);
+                }
+            });
+        }
+
+        setInterval(tickEnergyAccumulator, ENERGY_ACCUM_INTERVAL_MS);
 
         function loadRoomsFromFirebase() {
             console.log('[loadRoomsFromFirebase] FUNCTION CALLED - Starting Firebase connection...');
