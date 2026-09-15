@@ -1596,45 +1596,64 @@ void runAutomation(float temp, float humidity) {
     }
     Serial.println("No cooldown active, proceeding with IR commands");
 
-    float difference = targetTemp - pastTargetTemp;
-    int steps = (int)round(abs(difference));
-    Serial.print("Adjusting temp by "); Serial.print(difference, 1); Serial.print("°C ("); Serial.print(steps); Serial.println(" steps)");
+    float difference1 = targetTemp - pastTargetTemp;
+    int steps1 = (int)round(abs(difference1));
+    bool up1 = difference1 > 0;
+    Serial.print("Unit 1: adjusting by "); Serial.print(difference1, 1); Serial.print("°C ("); Serial.print(steps1); Serial.println(" steps)");
 
-    if ((difference > 0 && irCodeTempUpLen == 0) || (difference <= 0 && irCodeTempDownLen == 0)) {
-      Serial.println("⚠️ No " + String(difference > 0 ? "TEMP_UP" : "TEMP_DOWN") + " code loaded - skipping automation IR send");
+    #if DUAL_UNIT_MODE
+    // Unit 2 may have drifted from Unit 1's setpoint (e.g. a manual
+    // per-unit override) - its own step count and direction are computed
+    // independently rather than assuming it needs Unit 1's commands,
+    // which could otherwise land it at the wrong temperature.
+    bool adjustUnit2 = gotPastTemp2 && (pastTargetTemp2 != targetTemp);
+    float difference2 = adjustUnit2 ? (targetTemp - pastTargetTemp2) : 0.0;
+    int steps2 = adjustUnit2 ? (int)round(abs(difference2)) : 0;
+    bool up2 = difference2 > 0;
+    if (adjustUnit2) {
+      Serial.print("Unit 2: adjusting by "); Serial.print(difference2, 1); Serial.print("°C ("); Serial.print(steps2); Serial.println(" steps)");
+    } else if (!gotPastTemp2) {
+      Serial.println("Unit 2: prior setpoint unknown - leaving untouched this cycle");
+    } else {
+      Serial.println("Unit 2: already at target, no adjustment needed");
+    }
+    #endif
+
+    bool needUp = up1;
+    bool needDown = !up1;
+    #if DUAL_UNIT_MODE
+    if (adjustUnit2 && up2) needUp = true;
+    if (adjustUnit2 && !up2) needDown = true;
+    #endif
+
+    if ((needUp && irCodeTempUpLen == 0) || (needDown && irCodeTempDownLen == 0)) {
+      Serial.println("⚠️ Missing IR code for a needed direction - skipping automation IR send");
       return;
     }
 
     Serial.println("Starting IR transmission...");
 
-    for (int i = 0; i < steps; i++) {
-      if (difference > 0) {
-        Serial.print("Step "); Serial.print(i + 1); Serial.print("/"); Serial.print(steps); Serial.print(": Sending TEMP UP on pin "); Serial.println(kIrLedPin);
-        #if DUAL_UNIT_MODE
-        Serial.println("  -> Unit 1 (pin 4)");
-        irsend.sendRaw(irCodeTempUp, irCodeTempUpLen, kFrequency);
-        delay(100);
-        Serial.println("  -> Unit 2 (pin 5)");
-        irsend2.sendRaw(irCodeTempUp, irCodeTempUpLen, kFrequency);
-        #else
-        irsend.sendRaw(irCodeTempUp, irCodeTempUpLen, kFrequency);
-        #endif
-        Serial.println("TEMP UP sent");
-      } else {
-        Serial.print("Step "); Serial.print(i + 1); Serial.print("/"); Serial.print(steps); Serial.print(": Sending TEMP DOWN on pin "); Serial.println(kIrLedPin);
-        #if DUAL_UNIT_MODE
-        Serial.println("  -> Unit 1 (pin 4)");
-        irsend.sendRaw(irCodeTempDown, irCodeTempDownLen, kFrequency);
-        delay(100);
-        Serial.println("  -> Unit 2 (pin 5)");
-        irsend2.sendRaw(irCodeTempDown, irCodeTempDownLen, kFrequency);
-        #else
-        irsend.sendRaw(irCodeTempDown, irCodeTempDownLen, kFrequency);
-        #endif
-        Serial.println("TEMP DOWN sent");
-      }
+    int maxSteps = steps1;
+    #if DUAL_UNIT_MODE
+    if (steps2 > maxSteps) maxSteps = steps2;
+    #endif
 
-      if (i < steps - 1) {
+    for (int i = 0; i < maxSteps; i++) {
+      if (i < steps1) {
+        Serial.print("Step "); Serial.print(i + 1); Serial.print("/"); Serial.print(steps1); Serial.print(": Unit 1 "); Serial.println(up1 ? "TEMP UP" : "TEMP DOWN");
+        if (up1) irsend.sendRaw(irCodeTempUp, irCodeTempUpLen, kFrequency);
+        else irsend.sendRaw(irCodeTempDown, irCodeTempDownLen, kFrequency);
+      }
+      #if DUAL_UNIT_MODE
+      if (i < steps1 && i < steps2) delay(100); // gap between back-to-back sends this round
+      if (i < steps2) {
+        Serial.print("Step "); Serial.print(i + 1); Serial.print("/"); Serial.print(steps2); Serial.print(": Unit 2 "); Serial.println(up2 ? "TEMP UP" : "TEMP DOWN");
+        if (up2) irsend2.sendRaw(irCodeTempUp, irCodeTempUpLen, kFrequency);
+        else irsend2.sendRaw(irCodeTempDown, irCodeTempDownLen, kFrequency);
+      }
+      #endif
+
+      if (i < maxSteps - 1) {
         delay(20000);
       }
     }
@@ -1642,18 +1661,28 @@ void runAutomation(float temp, float humidity) {
     lastIRSendMillis = millis();
     Serial.print("Humidity automation complete. Target temp: "); Serial.println(targetTemp, 1);
 
-    // The IR command is now confirmed sent - only now persist the new
+    // The IR command(s) are now confirmed sent - only now persist the new
     // setpoint(s) to Firebase and log the event, so a cooldown-skip or
     // failed-read above (both of which return before this point) can
     // never leave Firebase claiming a setpoint change that never reached
-    // the physical AC.
+    // the physical AC. Unit 2's Firebase value (and event log entry) is
+    // only touched if it was actually sent commands this cycle, or was
+    // already confirmed at the target - never guessed.
     #if DUAL_UNIT_MODE
     Firebase.RTDB.setFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_1/targetTemp", targetTemp);
-    Firebase.RTDB.setFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/targetTemp", targetTemp);
     Serial.print("[Automation] Updated Firebase unit_1 targetTemp to: "); Serial.println(targetTemp, 1);
-    Serial.print("[Automation] Updated Firebase unit_2 targetTemp to: "); Serial.println(targetTemp, 1);
-    lastAutomationEventPastTemp2 = gotPastTemp2 ? pastTargetTemp2 : pastTargetTemp;
-    lastAutomationEventUpdatedTemp2 = targetTemp;
+    if (adjustUnit2) {
+      Firebase.RTDB.setFloat(&fbdo, "/" + String(ROOM_ID) + "/units/unit_2/targetTemp", targetTemp);
+      Serial.print("[Automation] Updated Firebase unit_2 targetTemp to: "); Serial.println(targetTemp, 1);
+      lastAutomationEventPastTemp2 = pastTargetTemp2;
+      lastAutomationEventUpdatedTemp2 = targetTemp;
+    } else if (gotPastTemp2) {
+      lastAutomationEventPastTemp2 = pastTargetTemp2;
+      lastAutomationEventUpdatedTemp2 = pastTargetTemp2;
+    } else {
+      lastAutomationEventPastTemp2 = pastTargetTemp;
+      lastAutomationEventUpdatedTemp2 = pastTargetTemp;
+    }
     #else
     Firebase.RTDB.setFloat(&fbdo, "/" + String(ROOM_ID) + "/targetTemp", targetTemp);
     Serial.print("[Automation] Updated Firebase targetTemp to: "); Serial.println(targetTemp, 1);
