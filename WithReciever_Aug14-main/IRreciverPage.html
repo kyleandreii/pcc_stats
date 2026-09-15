@@ -18,7 +18,12 @@
         /* IR Receiver-specific styles that complement global CSS */
         .page-shell { max-width: 1400px; margin: 0 auto; display: grid; gap: var(--space-6); }
         .receiver-panel, .library-panel { padding: var(--space-6); }
-        
+
+        @keyframes modalPopIn {
+            from { opacity: 0; transform: translateY(8px) scale(0.98); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
         /* Dynamic Status Indicator Styles */
         .status-pill { display: inline-flex; align-items: center; gap: var(--space-2); background: var(--bg-secondary); border-radius: var(--radius-full); padding: var(--space-2) var(--space-4); font-size: var(--font-size-xs); font-weight: 900; letter-spacing: 0.15em; text-transform: uppercase; transition: var(--transition-fast); border: 1px solid var(--border-color); }
         .status-pill.ready { color: var(--text-muted); background: var(--bg-secondary); }
@@ -913,40 +918,76 @@
             if (action === 'view') {
                 const details = data || {};
                 const entry = { labName: labNameFromKey(lab), commandKey: command, commandLabel: COMMANDS.find((item) => item.key === command)?.label || command, protocol: details.protocol || 'PANASONIC', rawData: details.rawData || [], signalLength: details.signalLength || normalizeRawData(details.rawData || []).length, createdAt: details.createdAt || '', updatedAt: details.updatedAt || '' };
+                // .tag/.mini-btn/.primary-btn used below previously had no CSS
+                // definition anywhere in the app - the modal was rendering as
+                // plain unstyled text/buttons. Rebuilt with real Tailwind
+                // utility classes and the app's own maroon theme variables
+                // instead of introducing more undefined class names.
+                const statTile = (label, value) => `
+                    <div class="rounded-xl border border-gray-200 bg-gray-50 p-3 min-w-0">
+                        <p class="text-[10px] font-black uppercase tracking-wider text-[#8B1538]">${label}</p>
+                        <p class="mt-1 text-sm font-bold text-gray-800 truncate" title="${value}">${value}</p>
+                    </div>`;
                 const html = `
                     <div class="space-y-4 text-sm text-gray-700">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div><span class="tag">Laboratory</span><p class="mt-2 font-bold">${entry.labName}</p></div>
-                            <div><span class="tag">Command</span><p class="mt-2 font-bold">${entry.commandLabel}</p></div>
-                            <div><span class="tag">Protocol</span><p class="mt-2 font-bold">${entry.protocol}</p></div>
-                            <div><span class="tag">Signal Length</span><p class="mt-2 font-bold">${entry.signalLength}</p></div>
+                        <div class="grid grid-cols-2 gap-3">
+                            ${statTile('Laboratory', entry.labName)}
+                            ${statTile('Command', entry.commandLabel)}
+                            ${statTile('Protocol', entry.protocol)}
+                            ${statTile('Signal Length', entry.signalLength)}
                         </div>
-                        <div class="bg-gray-50 border border-gray-200 rounded-2xl p-4">
-                            <span class="tag">Raw Data</span>
-                            <pre class="mt-3 text-xs leading-6 font-mono whitespace-pre-wrap">${formatSignal(entry.rawData)}</pre>
+                        <div class="rounded-xl border border-gray-200 overflow-hidden">
+                            <div class="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-200">
+                                <p class="text-[10px] font-black uppercase tracking-wider text-gray-500">Raw Data</p>
+                                <button id="modalCopyRawBtn" class="inline-flex items-center gap-1 text-[11px] font-bold text-[#8B1538] hover:text-[#5C0E24] transition-colors">
+                                    <i data-lucide="copy" class="w-3 h-3"></i> Copy
+                                </button>
+                            </div>
+                            <pre class="p-4 text-xs leading-6 font-mono whitespace-pre-wrap max-h-56 overflow-y-auto bg-white text-gray-700">${formatSignal(entry.rawData)}</pre>
                         </div>
                     </div>
                 `;
                 const modal = document.createElement('div');
-                modal.style.position = 'fixed'; modal.style.inset = '0'; modal.style.background = 'rgba(15,23,42,0.5)'; modal.style.display = 'flex'; modal.style.alignItems = 'center'; modal.style.justifyContent = 'center'; modal.style.zIndex = '999';
-                modal.innerHTML = `<div style="background:#fff; border-radius:24px; max-width:760px; width:min(90vw,760px); padding:24px; border-top:8px solid #800000; box-shadow:0 32px 70px rgba(0,0,0,0.2);">
-                    <div class="flex justify-between items-center mb-4">
-                        <div>
-                            <p class="tag">IR Signal Details</p>
-                            <h3 class="text-2xl font-black text-gray-800">IR Signal Details</h3>
+                modal.id = 'irSignalDetailsModal';
+                modal.className = 'fixed inset-0 flex items-center justify-center p-4';
+                modal.style.background = 'rgba(15,23,42,0.55)'; modal.style.backdropFilter = 'blur(2px)'; modal.style.zIndex = '999';
+                modal.innerHTML = `<div class="w-full bg-white rounded-3xl shadow-2xl overflow-hidden" style="max-width:640px; animation: modalPopIn 0.18s ease-out;">
+                    <div class="flex items-start justify-between gap-4 px-6 py-5" style="background: linear-gradient(135deg, var(--maroon-primary), var(--maroon-dark));">
+                        <div class="flex items-center gap-3 min-w-0">
+                            <div class="w-10 h-10 shrink-0 rounded-xl bg-white/15 flex items-center justify-center">
+                                <i data-lucide="radio-tower" class="w-5 h-5 text-white"></i>
+                            </div>
+                            <div class="min-w-0">
+                                <p class="text-[11px] font-bold uppercase tracking-wider text-white/70">IR Signal Details</p>
+                                <h3 class="text-lg font-black text-white leading-tight truncate">${entry.labName} &bull; ${entry.commandLabel}</h3>
+                            </div>
                         </div>
-                        <button id="closeModalBtn" class="mini-btn">Close</button>
+                        <button id="closeModalBtn" class="shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-white/10 hover:bg-white/20 transition-colors text-white" aria-label="Close">
+                            <i data-lucide="x" class="w-4 h-4"></i>
+                        </button>
                     </div>
-                    ${html}
-                    <div class="mt-5 flex gap-3">
-                        <button id="modalCopyBtn" class="primary-btn">Copy Signal</button>
-                        <button id="modalEditBtn" class="mini-btn">Edit Signal</button>
+                    <div class="p-6">
+                        ${html}
+                    </div>
+                    <div class="flex gap-3 px-6 pb-6">
+                        <button id="modalCopyBtn" class="flex-1 inline-flex items-center justify-center gap-2 text-white text-sm font-bold py-2.5 rounded-xl transition-transform hover:-translate-y-0.5" style="background: linear-gradient(135deg, var(--maroon-primary), var(--maroon-accent)); box-shadow: var(--shadow-glow-maroon);">
+                            <i data-lucide="copy" class="w-4 h-4"></i> Copy Signal
+                        </button>
+                        <button id="modalEditBtn" class="flex-1 inline-flex items-center justify-center gap-2 text-sm font-bold py-2.5 rounded-xl border-2 border-gray-200 text-gray-700 hover:border-[#8B1538] hover:text-[#8B1538] transition-colors">
+                            <i data-lucide="edit-3" class="w-4 h-4"></i> Edit Signal
+                        </button>
                     </div>
                 </div>`;
                 document.body.appendChild(modal);
-                document.getElementById('closeModalBtn').addEventListener('click', () => modal.remove());
+                lucide.createIcons();
+                const closeModal = () => { modal.remove(); document.removeEventListener('keydown', onKeydown); };
+                const onKeydown = (e) => { if (e.key === 'Escape') closeModal(); };
+                document.addEventListener('keydown', onKeydown);
+                modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+                document.getElementById('closeModalBtn').addEventListener('click', closeModal);
                 document.getElementById('modalCopyBtn').addEventListener('click', async () => { await navigator.clipboard.writeText(formatSignal(entry.rawData)); asyncAlert('IR signal copied successfully!'); });
-                document.getElementById('modalEditBtn').addEventListener('click', () => { modal.remove(); handleLibraryAction('edit', lab, command); });
+                document.getElementById('modalCopyRawBtn').addEventListener('click', async () => { await navigator.clipboard.writeText(formatSignal(entry.rawData)); asyncAlert('IR signal copied successfully!'); });
+                document.getElementById('modalEditBtn').addEventListener('click', () => { closeModal(); handleLibraryAction('edit', lab, command); });
                 return;
             }
             if (action === 'delete') {

@@ -803,6 +803,23 @@
                     return;
                 }
 
+                // Check for duplicate Room Number - a different Room ID can still
+                // end up showing the same displayed room number (e.g. "Room 407"),
+                // which previously slipped through since only the ID was checked.
+                const newDisplayName = ("Room " + label).trim().toLowerCase();
+                const duplicateRoomKey = existingRooms.find(key =>
+                    getRoomDisplayName(key, data[key]).trim().toLowerCase() === newDisplayName
+                );
+                if (duplicateRoomKey) {
+                    Swal.fire({
+                        title: 'Duplicate Room Number',
+                        text: `Room number "${label}" is already used by "${getRoomDisplayName(duplicateRoomKey, data[duplicateRoomKey])}" (ID: ${duplicateRoomKey}). Please use a different Room Number.`,
+                        icon: 'error',
+                        confirmButtonColor: '#8B1538'
+                    });
+                    return;
+                }
+
                 // No duplicates found, proceed to create room
                 const newRoomData = {
                     temperature: 25.0, 
