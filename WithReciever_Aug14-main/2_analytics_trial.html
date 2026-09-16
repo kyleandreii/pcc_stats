@@ -1160,21 +1160,38 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                                 y: hourlySavings
                             });
 
-                            // Automation events data - collect all events with details
+                            // Automation events data - aggregate all of this hour's events into
+                            // ONE entry (matching every other series' one-entry-per-hour shape).
+                            // Chart.js's tooltip interaction mode is 'index', which pairs datasets
+                            // by array position, not by x-value - pushing multiple entries per
+                            // hour here would desync every later hour's tooltip for the rest of
+                            // the day.
                             if (hourData.automation_events) {
-                                Object.keys(hourData.automation_events).forEach(eventKey => {
-                                    const eventData = hourData.automation_events[eventKey];
-                                    if (eventData) {
-                                        chartData.automationEvents.push({
-                                            x: timestamp,
-                                            y: 1,
-                                            event: eventData.automationEvent || 'Unknown event',
-                                            type: eventData.automationEventType || 'unknown',
-                                            pastTemp: eventData.automationEventPastTemp || null,
-                                            updatedTemp: eventData.automationEventUpdatedTemp || null
-                                        });
-                                    }
-                                });
+                                const events = Object.keys(hourData.automation_events)
+                                    .sort() // Firebase push keys sort lexicographically = chronologically
+                                    .map(eventKey => hourData.automation_events[eventKey])
+                                    .filter(eventData => eventData);
+                                if (events.length > 0) {
+                                    const firstEvent = events[0];
+                                    const lastEvent = events[events.length - 1];
+                                    chartData.automationEvents.push({
+                                        x: timestamp,
+                                        y: events.length,
+                                        event: events.map(e => e.automationEvent || 'Unknown event').join('\n'),
+                                        type: lastEvent.automationEventType || 'unknown',
+                                        pastTemp: (firstEvent.automationEventPastTemp !== undefined) ? firstEvent.automationEventPastTemp : null,
+                                        updatedTemp: (lastEvent.automationEventUpdatedTemp !== undefined) ? lastEvent.automationEventUpdatedTemp : null
+                                    });
+                                } else {
+                                    chartData.automationEvents.push({
+                                        x: timestamp,
+                                        y: 0,
+                                        event: null,
+                                        type: null,
+                                        pastTemp: null,
+                                        updatedTemp: null
+                                    });
+                                }
                             } else if (hourData.automationEvent) {
                                 chartData.automationEvents.push({
                                     x: timestamp,
@@ -1648,7 +1665,14 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                                 if (label === 'Automation Events') {
                                     const event = context.raw;
                                     if (event.event) {
-                                        let result = `Automation Events: ${value}\nAction: ${event.event}`;
+                                        const actions = event.event.split('\n');
+                                        let result;
+                                        if (actions.length > 1) {
+                                            const actionText = actions.map((a, i) => `  ${i + 1}. ${a}`).join('\n');
+                                            result = `Automation Events: ${value}\nActions:\n${actionText}`;
+                                        } else {
+                                            result = `Automation Events: ${value}\nAction: ${actions[0]}`;
+                                        }
                                         if (event.pastTemp !== null && event.updatedTemp !== null) {
                                             result += `\nPast Temp: ${event.pastTemp.toFixed(1)}°C`;
                                             result += `\nAutomated Temp: ${event.updatedTemp.toFixed(1)}°C`;
