@@ -1134,8 +1134,16 @@ void handleACCommand(String cmd, int unit, bool isAutomation) {
     Serial.println("[Manual] Manual command - not logging as automation event");
   }
   
-  IRsend *irSender = (unit == 1) ? &irsend2 : &irsend;
-  uint16_t pin = (unit == 1) ? kIrLedPin2 : kIrLedPin;
+  // unit==0 is single-unit mode (must use the primary sender/pin, same as
+  // every automation branch's #else path); unit==2 is the only case that
+  // should use the secondary sender/pin. The previous "unit==1 ? secondary
+  // : primary" ternary meant manual commands for Unit 1 fired on pin 5 and
+  // Unit 2 fired on pin 4 - backwards from every automation branch, which
+  // consistently sends Unit 1 on irsend/pin 4 and Unit 2 on irsend2/pin 5.
+  // Confirmed live via serial: a manual "Unit 1 OFF" was logged as sending
+  // on pin 5, Unit 2's physical pin.
+  IRsend *irSender = (unit == 2) ? &irsend2 : &irsend;
+  uint16_t pin = (unit == 2) ? kIrLedPin2 : kIrLedPin;
   
   Serial.println("🎮 Using IRsend instance on pin " + String(pin));
   
