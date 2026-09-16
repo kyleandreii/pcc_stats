@@ -508,13 +508,23 @@ void loop() {
         // First 2 minutes: try the lighter-weight reconnect first
         Serial.println("[WiFi Watchdog] Attempting WiFi.reconnect()");
         WiFi.reconnect();
-      } else {
-        // Still down after 2 minutes: reset the WiFi driver state and
-        // start fresh, in case it's stuck rather than just slow
+      } else if (disconnectedFor < 300000) {
+        // 2-5 minutes: reset the WiFi driver state and start fresh, in
+        // case it's stuck rather than just slow
         Serial.println("[WiFi Watchdog] Still down after 2 min, restarting WiFi.begin()");
         WiFi.disconnect();
         delay(100);
         WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+      } else {
+        // Still down after 5 minutes despite both of the above - whatever
+        // is wrong likely isn't something WiFi.reconnect()/WiFi.begin() can
+        // clear on their own (a stuck driver/heap state, not just a slow
+        // AP). A full chip restart is the most reliable way to clear that,
+        // and re-runs setup()'s own 20s-timeout connect loop from scratch.
+        Serial.println("🔄 [WiFi Watchdog] Still down after 5 min - restarting the whole device");
+        showBootStatus("WiFi lost", "Restarting...");
+        delay(500);
+        ESP.restart();
       }
     } else if (wifiDisconnectedSinceMillis != 0) {
       Serial.println("✅ [WiFi Watchdog] Reconnected after " + String((millis() - wifiDisconnectedSinceMillis) / 1000) + "s");
@@ -526,6 +536,14 @@ void loop() {
   if (millis() - lastLoopLog > 60000) {
     Serial.println("[Loop] ESP32 is running, millis: " + String(millis()));
     Serial.println("[Loop] Firebase ready: " + String(Firebase.ready() ? "YES" : "NO"));
+    // Signal strength context for diagnosing repeated WiFi drops - below
+    // roughly -75dBm is generally considered weak/marginal for a 2.4GHz
+    // link, and consistently poor RSSI points at distance/obstruction/
+    // interference rather than a firmware bug.
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("[Loop] WiFi RSSI: " + String(WiFi.RSSI()) + " dBm");
+    }
+    Serial.println("[Loop] Free heap: " + String(ESP.getFreeHeap()) + " bytes");
     lastLoopLog = millis();
   }
 
