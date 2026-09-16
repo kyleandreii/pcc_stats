@@ -1665,19 +1665,22 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                                 if (label === 'Automation Events') {
                                     const event = context.raw;
                                     if (event.event) {
+                                        // Chart.js renders each array element as its own tooltip
+                                        // line; a single string with \n renders as one long line
+                                        // since canvas text doesn't wrap on newlines.
                                         const actions = event.event.split('\n');
-                                        let result;
+                                        const lines = [`Automation Events: ${value}`];
                                         if (actions.length > 1) {
-                                            const actionText = actions.map((a, i) => `  ${i + 1}. ${a}`).join('\n');
-                                            result = `Automation Events: ${value}\nActions:\n${actionText}`;
+                                            lines.push('Actions:');
+                                            actions.forEach((a, i) => lines.push(`  ${i + 1}. ${a}`));
                                         } else {
-                                            result = `Automation Events: ${value}\nAction: ${actions[0]}`;
+                                            lines.push(`Action: ${actions[0]}`);
                                         }
                                         if (event.pastTemp !== null && event.updatedTemp !== null) {
-                                            result += `\nPast Temp: ${event.pastTemp.toFixed(1)}°C`;
-                                            result += `\nAutomated Temp: ${event.updatedTemp.toFixed(1)}°C`;
+                                            lines.push(`Past Temp: ${event.pastTemp.toFixed(1)}°C`);
+                                            lines.push(`Automated Temp: ${event.updatedTemp.toFixed(1)}°C`);
                                         }
-                                        return result;
+                                        return lines;
                                     }
                                     return `Automation Events: ${value}`;
                                 }
