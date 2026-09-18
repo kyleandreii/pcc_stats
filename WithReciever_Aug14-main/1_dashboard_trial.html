@@ -499,12 +499,16 @@
         // confirmed live that a second Dashboard tab (this browser and the
         // user's own, both open at once) double-credited energyKwh at
         // roughly 2x the correct rate, since each tab independently computed
-        // its own elapsedHours with no idea the other existed. If a real
-        // ESP32 is later reconnected and also ticks these same fields, it
-        // isn't part of this lease and will simply add on top - firmware
-        // is the authoritative source and this accumulator is only a
-        // hardware-free stand-in, so that's an acceptable, rare overlap
-        // rather than the routine one two browser tabs created.
+        // its own elapsedHours with no idea the other existed.
+        //
+        // Rooms with a real ESP32 already ticking these same fields must be
+        // excluded entirely (see the hasRealHardware check in
+        // tickEnergyAccumulator below) rather than just accepted as an "it's
+        // rare" overlap - confirmed live for Room 401 that having a
+        // Dashboard tab open for an extended testing session doubled a
+        // day's real energyKwh (₱434.83 one day vs ₱923.88 the next for
+        // near-identical usage hours, traced to this accumulator adding on
+        // top of the room's real firmware reading).
         let energyAccumLastTick = {};
         let energyAccumIsLeader = false;
         const ENERGY_ACCUM_CLIENT_ID = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -609,6 +613,17 @@
                 if (!roomData) return;
                 const roomConfig = airconConfig[room] || {};
                 const isDualUnit = !!(roomData.units && (roomData.units.unit_1 || roomData.units.unit_2));
+
+                // This accumulator exists only as a hardware-free stand-in
+                // for rooms with no real ESP32 reporting energyKwh. A room
+                // with real hardware already has that field maintained by
+                // its own firmware, so ticking it here too would just add a
+                // second, redundant contributor to the same running total -
+                // confirmed live to roughly double a day's real energyKwh
+                // for Room 401 (see the comment above this function).
+                if (roomConfig.hasRealHardware) {
+                    return;
+                }
 
                 if (isDualUnit) {
                     const u1 = roomData.units.unit_1 || {};
