@@ -1928,16 +1928,30 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
         const isDualUnit = !!(roomData && roomData.units && (roomData.units.unit_1 || roomData.units.unit_2));
 
         if (isToday) {
-            // Prefer the dashboard's energy-accumulator onHours field, which
-            // is written from the exact same tick/elapsedHours measurement
-            // as energyKwh (see accumulateUnitEnergy in 1_dashboard_trial.html).
-            // Falling back to the separately-clocked roomUsage tracker below
-            // is what let Cost and Usage drift apart - roomUsage resets on its
-            // own ac on/off-transition schedule and its own lagging daily
-            // reset (only runs when some tab happens to load and notice the
-            // date changed), while the energy accumulator ticks independently.
-            // Sharing one clock for both numbers keeps them in sync by
-            // construction instead of relying on two trackers to agree.
+            // Two independent trackers exist for "hours on today", and
+            // neither one can OVERcount - each only starts a session on a
+            // genuine observed ac-on transition, so any gap between them is
+            // one tracker missing time the other one caught, never double-
+            // counting. Take the larger of the two instead of always
+            // preferring one:
+            //
+            // - onHours: written by the dashboard's energy-accumulator tick,
+            //   the SAME clock as energyKwh (see accumulateUnitEnergy in
+            //   1_dashboard_trial.html) - but it only ticks every 10s while
+            //   some tab holds a renewed leadership lease, so a closed/
+            //   backgrounded/throttled tab leaves gaps.
+            // - roomUsage: written reactively by a root-level Firebase
+            //   listener (in both this page and the Dashboard) on every
+            //   observed ac-state edge, with no lease to lose - confirmed
+            //   live to sometimes catch real on-time onHours missed (Room
+            //   401: onHours showed 5h3m while roomUsage showed 12h28m for
+            //   the same day).
+            //
+            // Cost calculations for rooms with real firmware energyKwh data
+            // don't depend on this value at all (see getActualCostForDate),
+            // so preferring the larger, more complete number here doesn't
+            // reintroduce the Cost/Usage drift the onHours-first waterfall
+            // was originally written to prevent.
             let onHours = null;
             if (isDualUnit) {
                 const [snap1, snap2] = await Promise.all([
@@ -1956,12 +1970,8 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                 const h = snap.val();
                 if (h !== null) onHours = h;
             }
-            if (onHours !== null) {
-                console.log(`[Usage Hours] ${room} (today): ${onHours.toFixed(2)} hours from energy-accumulator onHours`);
-                return onHours;
-            }
 
-            // For today, use Firebase roomUsage for accurate real-time tracking
+            // Firebase roomUsage for the same real-time tracking
             let totalMs = 0;
             if (isDualUnit) {
                 ['unit_1', 'unit_2'].forEach((unit) => {
@@ -1980,8 +1990,10 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                     totalMs += (Date.now() - roomUsage[room].lastStart);
                 }
             }
-            const hours = totalMs / 3600000;
-            console.log(`[Usage Hours] ${room} (today): ${hours.toFixed(2)} hours from Firebase roomUsage`);
+            const roomUsageHours = totalMs / 3600000;
+
+            const hours = Math.max(onHours || 0, roomUsageHours);
+            console.log(`[Usage Hours] ${room} (today): onHours=${onHours}, roomUsage=${roomUsageHours.toFixed(2)}, using max=${hours.toFixed(2)}`);
             return hours;
         } else {
             // For past dates, use historical daily analytics - the reset/
