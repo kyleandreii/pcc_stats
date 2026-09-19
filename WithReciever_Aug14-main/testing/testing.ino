@@ -577,6 +577,18 @@ void loop() {
           Serial.println("[Firebase] Dual unit mode - sending to both units");
           handleACCommand(cmd, 1, false); // Manual command
           handleACCommand(cmd, 2, false); // Manual command
+          // handleACCommand() only resets ac_command back to IDLE at the
+          // path matching the unit it was called with (root for unit==0,
+          // per-unit for unit==1/2) - neither of the two calls above clears
+          // THIS root-level ac_command, so it stays stuck at whatever this
+          // command was. Every later Firebase stream reconnect (any WiFi
+          // drop, the watchdog's WiFi.reconnect(), a full restart) redelivers
+          // the whole room object here again, re-reads that same stuck
+          // value, and re-transmits it - which is why the unit was silently
+          // re-sent OFF on every reconnect after the last time the root
+          // power toggle was used. Clear it explicitly since neither call
+          // above will.
+          Firebase.RTDB.setString(&fbdo, "/" + String(ROOM_ID) + "/ac_command", "IDLE");
           #else
           Serial.println("[Firebase] Single unit mode - sending to unit 0");
           handleACCommand(cmd, 0, false); // Manual command
