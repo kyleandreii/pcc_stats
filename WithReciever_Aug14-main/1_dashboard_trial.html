@@ -825,6 +825,23 @@
                             const unit2On = (roomData.units?.unit_2?.ac === true || roomData.units?.unit_2?.ac === "ON" || roomData.units?.unit_2?.ac === 1);
                             acOn = unit1On || unit2On;
 
+                            // For dual-unit rooms the firmware's root-object stream
+                            // handler dispatches a non-IDLE root ac_command to BOTH
+                            // units, but only resets the per-unit ac_command fields
+                            // afterward - the root field itself is never cleared, so
+                            // it stays stuck and gets silently re-transmitted to both
+                            // units on every future WiFi/stream reconnect (confirmed
+                            // live: this is why a unit re-received OFF on every
+                            // reconnect after the room-level power control was last
+                            // used, months ago). This is being fixed in firmware, but
+                            // that requires a physical reflash - clear it here too as
+                            // a software-side safety net that works immediately,
+                            // for any dual-unit room, without waiting on that reflash.
+                            if (roomData.ac_command && roomData.ac_command !== 'IDLE') {
+                                console.log(`[loadRoomsFromFirebase] ${key}: clearing stuck root ac_command (${roomData.ac_command})`);
+                                db.ref(`${key}/ac_command`).set('IDLE');
+                            }
+
                             // Track each unit's own online duration independently and
                             // reactively based on actual Firebase state - previously this
                             // only updated when toggled from THIS browser tab (toggleUnitAC),
@@ -992,8 +1009,8 @@
                 const newRoomData = {
                     temperature: 25.0, 
                     humidity: 50, 
-                    ac: false, 
-                    ac_command: "POWER_OFF",
+                    ac: false,
+                    ac_command: "IDLE",
                     roomName: "Room " + label,
                     status: "NORMAL",
                     thresholds: { minTemp: 20, maxTemp: 30 },
@@ -1005,12 +1022,12 @@
                     newRoomData.units = {
                         unit_1: {
                             ac: false,
-                            ac_command: "POWER_OFF",
+                            ac_command: "IDLE",
                             online_duration: 0
                         },
                         unit_2: {
                             ac: false,
-                            ac_command: "POWER_OFF",
+                            ac_command: "IDLE",
                             online_duration: 0
                         }
                     };
