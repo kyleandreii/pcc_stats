@@ -1295,12 +1295,18 @@ void handleIRReceiver() {
   if (irrecv.decode(&irResults)) {
     Serial.println("[IR Receiver] Signal detected!");
     String rawData = "";
-    int len = irResults.rawlen;
+    // rawbuf[0] is a reserved slot the IRremoteESP8266 library uses
+    // internally, not real signal data - including it here shifted every
+    // later mark/space value over by one position, which would flip which
+    // half of the signal is "on" vs "off" for the rest of the array if it
+    // were ever transmitted as captured. Start from rawbuf[1], matching the
+    // library's own dump examples, so rawData begins at the real header mark.
+    int len = irResults.rawlen - 1;
     Serial.print("[IR Receiver] Raw length: "); Serial.println(len);
 
     if (len > 0 && len < 200) {
-      for (int i = 0; i < len; i++) {
-        if (i > 0) rawData += ",";
+      for (int i = 1; i <= len; i++) {
+        if (i > 1) rawData += ",";
         rawData += String(irResults.rawbuf[i] * RAWTICK);
       }
       Serial.print("[IR Receiver] Raw data: "); Serial.println(rawData);
