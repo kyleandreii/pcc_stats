@@ -146,15 +146,27 @@ float getUnitPowerKw(float targetTemp) {
 // likely, and it's the one read this device most needs to succeed (a
 // failure here silently re-triggers the "reboot erases today's cost"
 // bug the resume logic exists to prevent).
-bool getFloatWithRetry(const String &path, float &outValue, int maxAttempts = 3) {
+//
+// Confirmed live that 3 attempts 1s apart weren't always enough - both
+// units' resume reads failed all 3 tries on the same boot the SSL errors
+// below occurred on. Raised to 5 attempts with a longer, increasing delay
+// (1s, 2s, 3s, 4s) so a still-settling connection gets more real time to
+// recover instead of just being retried faster, and each attempt now waits
+// for Firebase.ready() first rather than firing into a connection that's
+// already known not to be up yet.
+bool getFloatWithRetry(const String &path, float &outValue, int maxAttempts = 5) {
   for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+    unsigned long readyWaitStart = millis();
+    while (!Firebase.ready() && (millis() - readyWaitStart) < 2000) {
+      delay(100);
+    }
     if (Firebase.RTDB.getFloat(&fbdo, path)) {
       outValue = fbdo.floatData();
       return true;
     }
     if (attempt < maxAttempts) {
-      Serial.println("[Setup] Read failed for " + path + ", retrying (" + String(attempt) + "/" + String(maxAttempts) + ")...");
-      delay(1000);
+      Serial.println("[Setup] Read failed for " + path + " (" + fbdo.errorReason() + "), retrying (" + String(attempt) + "/" + String(maxAttempts) + ")...");
+      delay(1000 * attempt);
     }
   }
   return false;
@@ -321,6 +333,24 @@ void setup() {
   config.database_url = DATABASE_URL;
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
+
+  // Default SSL RX/TX buffers on this library are too small for some
+  // Firebase/Google handshake responses - confirmed live: "Incoming record
+  // is too large to be processed, or buffer is too small for the handshake
+  // message to send" during the very first burst of setup calls below.
+  // Both fbdo (used for one-off calls) and stream (the long-lived listener)
+  // make their own TLS connections, so both need this.
+  fbdo.setBSSLBufferSize(4096, 1024);
+  stream.setBSSLBufferSize(4096, 1024);
+
+  // The burst of setup calls right below (stream begin, config load, online
+  // duration reads, energy resume reads, IR library fetch) used to fire
+  // immediately after Firebase.begin(), before the connection had actually
+  // stabilized - confirmed live as the same boot where the SSL errors above
+  // occurred and both units' energy-resume reads failed all 3 retries.
+  // A brief settle here costs under a second and gives every call below a
+  // real connection to work with instead of racing it.
+  delay(800);
 
   Serial.println("Setting up Firebase stream for: /" + String(ROOM_ID));
   if (!Firebase.RTDB.beginStream(&stream, "/" + String(ROOM_ID))) {
