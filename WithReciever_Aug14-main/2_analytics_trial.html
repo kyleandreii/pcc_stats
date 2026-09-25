@@ -23,6 +23,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 
     <script src="shared-utils.js"></script>
 
@@ -348,10 +349,8 @@
 
                 
 
-                <button onclick="exportAnalytics()" class="neumorph-btn-primary px-6 py-3 rounded-2xl font-black uppercase text-sm flex items-center gap-2">
-
-                    <i data-lucide="download" class="w-5 h-5"></i> Export CSV
-
+                <button id="export-pdf-btn" onclick="exportAnalyticsPDF()" class="neumorph-btn-primary px-6 py-3 rounded-2xl font-black uppercase text-sm flex items-center gap-2">
+                    <i data-lucide="file-text" class="w-5 h-5"></i> Export PDF Report
                 </button>
 
             </div>
@@ -2481,556 +2480,363 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
 
 
 
-    async function exportAnalytics() {
-
+    async function exportAnalyticsPDF() {
+        const btn = document.getElementById('export-pdf-btn');
+        const originalBtnHtml = btn ? btn.innerHTML : '';
         try {
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i data-lucide="loader" class="w-5 h-5 animate-spin"></i> Generating...';
+            }
 
-            // Get date range from picker
-
+            // Date range - same inputs the old CSV export used
             const fromDateInput = document.getElementById('export-date-from').value;
-
             const toDateInput = document.getElementById('export-date-to').value;
-
             const toTodayCheckbox = document.getElementById('export-to-today').checked;
 
-            
-
             if (!fromDateInput) {
-
                 alert('Please select a "From" date for the export range.');
-
                 return;
-
             }
-
-            
 
             const fromDate = new Date(fromDateInput);
-
             let toDate = toTodayCheckbox ? new Date() : (toDateInput ? new Date(toDateInput) : new Date());
 
-            
-
-            // Validate date range
-
             if (toDate < fromDate) {
-
                 alert('"To" date must be on or after "From" date.');
-
                 return;
-
             }
-
-            
-
-            const exportDate = `'${new Date().toLocaleDateString('en-CA')}`;
-
-            const exportTime = new Date().toLocaleTimeString();
-
-            const fromDateStr = `'${fromDate.toLocaleDateString('en-CA')}`;
-
-            const toDateStr = `'${toDate.toLocaleDateString('en-CA')}`;
-
-            
-
-            // Generate date array for Firebase queries (without prefix)
 
             const dateArray = [];
-
-            // Generate date array for CSV display (prefixed with ' to prevent Excel auto-parsing)
-
-            const dateArrayDisplay = [];
-
-            const currentDate = new Date(fromDate);
-
-            while (currentDate <= toDate) {
-
-                const dateStr = currentDate.toLocaleDateString('en-CA');
-
-                dateArray.push(dateStr);
-
-                dateArrayDisplay.push(`'${dateStr}`);
-
-                currentDate.setDate(currentDate.getDate() + 1);
-
+            const cur = new Date(fromDate);
+            while (cur <= toDate) {
+                dateArray.push(cur.toLocaleDateString('en-CA'));
+                cur.setDate(cur.getDate() + 1);
             }
 
-            
+            console.log('[PDF Export] Date range:', dateArray[0], 'to', dateArray[dateArray.length - 1]);
 
-            console.log('[Export] Date range:', fromDateStr, 'to', toDateStr);
-
-            console.log('[Export] Dates to fetch:', dateArray);
-
-            
-
-            // Start CSV with report header
-
-            let csv = 'PCC S.T.A.T.S. ANALYTICS REPORT\n';
-
-            csv += '====================================\n';
-
-            csv += `Report Generated: ${exportDate} ${exportTime}\n`;
-
-            csv += `Date Range: ${fromDateStr} to ${toDateStr}\n`;
-
-            csv += `Total Days: ${dateArray.length}\n`;
-
-            csv += `Electricity Rate: ${ratePerKwh.toFixed(2)} PHP/kWh\n`;
-
-            csv += `Total Rooms Monitored: ${labKeys ? labKeys.length : 0}\n\n`;
-
-            
-
-            // Fetch historical data for all rooms and dates
-
-            console.log('[Export] Fetching historical data...');
-
+            // Fetch historical data for all rooms/dates in the range
             const historicalData = {};
-
-            
-
             for (const room of labKeys || []) {
-
                 historicalData[room] = {};
-
                 for (const dateStr of dateArray) {
-
-                    const path = `history/${room}/${dateStr}`;
-
                     try {
-
-                        const snapshot = await db.ref(path).once('value');
-
-                        historicalData[room][dateStr] = snapshot.val();
-
+                        const snap = await db.ref(`history/${room}/${dateStr}`).once('value');
+                        historicalData[room][dateStr] = snap.val();
                     } catch (e) {
-
-                        console.error(`[Export] Error fetching ${path}:`, e);
-
                         historicalData[room][dateStr] = null;
-
                     }
-
                 }
-
             }
 
-            
-
-            console.log('[Export] Historical data fetched:', historicalData);
-
-            
-            // EXPORT METADATA HEADER
-            csv += '====================================\n';
-            csv += 'PCC STATS ANALYTICS DATA EXPORT\n';
-            csv += '====================================\n';
-            csv += `Export Date: ${new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' })}\n`;
-            csv += `Date Range: ${fromDateStr} to ${toDateStr}\n`;
-            csv += `Electricity Rate: ₱${ratePerKwh.toFixed(4)}/kWh\n`;
-            csv += `Total Rooms: ${labKeys.length}\n`;
-            csv += '\n';
-            
-            // COST CALCULATION EXPLANATION
-            csv += '====================================\n';
-            csv += 'COST CALCULATION METHODOLOGY\n';
-            csv += '====================================\n';
-            csv += 'Cost = (Effective Watts / 1000) × AC Hours × Electricity Rate\n';
-            csv += '\n';
-            csv += 'Effective Watts are calculated using temperature-based interpolation:\n';
-            csv += '- Uses calibration points (default: 16°C = 3795W, 30°C = 253W)\n';
-            csv += '- Interpolates power based on AC target temperature\n';
-            csv += '- Lower target temp = Higher power consumption\n';
-            csv += '- Higher target temp = Lower power consumption\n';
-            csv += '\n';
-            csv += 'Example: At 23°C target, effective watts ≈ 2,202W\n';
-            csv += 'Example: At 25°C target, effective watts ≈ 1,646W\n';
-            csv += '\n';
-            
-            // PER-ROOM SUMMARY STATISTICS
-            csv += '====================================\n';
-            csv += 'PER-ROOM SUMMARY STATISTICS\n';
-            csv += '====================================\n';
-            csv += 'Room,Avg Temp (°C),Min Temp (°C),Max Temp (°C),Avg Humidity (%),Min Humidity (%),Max Humidity (%),Avg Target Temp (°C),Avg Effective Watts,Total AC Hours,Total Cost (PHP)\n';
-
-            
+            // Per-room aggregates + per-day series (for the charts)
+            const roomSummaries = [];
+            const dailyTempByDate = {}; // dateStr -> { roomDisplayName: avgTemp }
+            let grandTotalCost = 0, grandTotalSavings = 0, grandTotalHours = 0, totalAutomationEvents = 0;
+            const automationByRoom = {};
 
             for (const room of labKeys || []) {
-
                 const displayName = getRoomDisplayName(room, labsData[room]);
-
                 const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
-
-                console.log(`[Cost Verification] Room: ${room}`);
-                console.log(`[Cost Verification] Room Config:`, JSON.stringify(roomConfig, null, 2));
-                console.log(`[Cost Verification] Rate per kWh: ${ratePerKwh}`);
-
-                // Get target temperature for cost calculation
-                let targetTemp;
-                if (roomConfig.units && (roomConfig.units.unit_1 || roomConfig.units.unit_2)) {
-                    targetTemp = {
-                        unit_1: labsData[room]?.units?.unit_1?.targetTemp,
-                        unit_2: labsData[room]?.units?.unit_2?.targetTemp
-                    };
-                } else {
-                    targetTemp = labsData[room]?.targetTemp;
-                }
-
-                console.log(`[Cost Verification] Target Temp:`, targetTemp);
-
-                
-                let temps = [], hums = [], targetTemps = [], targetTemps1 = [], targetTemps2 = [], effectiveWatts = [], totalHours = 0;
-
+                let temps = [], hums = [], totalHours = 0, totalCost = 0, totalSavings = 0, eventCount = 0;
 
                 for (const dateStr of dateArray) {
-
                     const dayData = historicalData[room][dateStr];
-
+                    let dayTemps = [];
                     if (dayData) {
-
-                        Object.keys(dayData).forEach(hour => {
-
-                            const entry = dayData[hour];
-
-                            if (entry) {
-
-                                temps.push(parseFloat(entry.temperature) || 0);
-
-                                hums.push((entry.humidity !== undefined && entry.humidity !== null && entry.humidity !== 0) ? parseFloat((100 - parseFloat(entry.humidity)).toFixed(1)) : 0); // Invert humidity
-
-                                // Extract targetTemp from history if available. Dual-unit
-                                // rooms (Room_1) log targetTemp1/targetTemp2 instead of a
-                                // plain targetTemp, so without this branch their history
-                                // never populates targetTemps and this always fell through
-                                // to the live-current-setting fallback below.
-                                if (entry.targetTemp !== undefined && entry.targetTemp !== null) {
-                                    targetTemps.push(parseFloat(entry.targetTemp));
-                                } else {
-                                    if (entry.targetTemp1 !== undefined && entry.targetTemp1 !== null) {
-                                        targetTemps1.push(parseFloat(entry.targetTemp1));
-                                    }
-                                    if (entry.targetTemp2 !== undefined && entry.targetTemp2 !== null) {
-                                        targetTemps2.push(parseFloat(entry.targetTemp2));
-                                    }
-                                }
-                                // Calculate effective watts for this entry
-                                if (entry.targetTemp !== undefined && entry.targetTemp !== null) {
-                                    const entryTargetTemp = parseFloat(entry.targetTemp);
-                                    const entryEffectiveWatts = AirconCostCalculator.getEffectiveWatts(roomConfig, entryTargetTemp);
-                                    effectiveWatts.push(entryEffectiveWatts);
-                                }
-
+                        Object.values(dayData).forEach(entry => {
+                            if (!entry) return;
+                            if (entry.temperature !== undefined && entry.temperature !== null) {
+                                const t = parseFloat(entry.temperature);
+                                temps.push(t);
+                                dayTemps.push(t);
                             }
-
+                            if (entry.humidity !== undefined && entry.humidity !== null && entry.humidity !== 0) {
+                                hums.push(parseFloat(entry.humidity));
+                            }
+                            if (entry.automation_events) {
+                                eventCount += Object.keys(entry.automation_events).length;
+                            }
                         });
-
                     }
-
-                    // Add AC usage hours from dailyAnalytics
 
                     const hours = await getUsageHoursForDate(room, dateStr);
-
                     totalHours += hours;
 
-                }
-
-
-                const avgTemp = temps.length > 0 ? (temps.reduce((a, b) => a + b, 0) / temps.length) : 'N/A';
-                const minTemp = temps.length > 0 ? Math.min(...temps) : 'N/A';
-                const maxTemp = temps.length > 0 ? Math.max(...temps) : 'N/A';
-                const avgHum = hums.length > 0 ? (hums.reduce((a, b) => a + b, 0) / hums.length) : 'N/A';
-                const minHum = hums.length > 0 ? Math.min(...hums) : 'N/A';
-                const maxHum = hums.length > 0 ? Math.max(...hums) : 'N/A';
-                let avgTargetTemp;
-                if (targetTemps.length > 0) {
-                    avgTargetTemp = targetTemps.reduce((a, b) => a + b, 0) / targetTemps.length;
-                } else if (targetTemps1.length > 0 || targetTemps2.length > 0) {
-                    avgTargetTemp = {
-                        unit_1: targetTemps1.length > 0 ? (targetTemps1.reduce((a, b) => a + b, 0) / targetTemps1.length) : labsData[room]?.units?.unit_1?.targetTemp,
-                        unit_2: targetTemps2.length > 0 ? (targetTemps2.reduce((a, b) => a + b, 0) / targetTemps2.length) : labsData[room]?.units?.unit_2?.targetTemp
-                    };
-                } else {
-                    avgTargetTemp = targetTemp || 'N/A';
-                }
-                const avgEffectiveWatts = effectiveWatts.length > 0 ? (effectiveWatts.reduce((a, b) => a + b, 0) / effectiveWatts.length) : 'N/A';
-
-                console.log(`[Cost Verification] Avg Target Temp: ${avgTargetTemp}`);
-                console.log(`[Cost Verification] Avg Effective Watts: ${avgEffectiveWatts}`);
-
-                const cost = AirconCostCalculator.computeAirconCost(roomConfig, totalHours, ratePerKwh, avgTargetTemp);
-
-                console.log(`[Cost Verification] Calculated Cost: ₱${cost}`);
-                console.log(`[Cost Verification] --- Cost Breakdown ---`);
-                console.log(`[Cost Verification] Hours: ${totalHours}`);
-                console.log(`[Cost Verification] Rate: ₱${ratePerKwh}/kWh`);
-                console.log(`[Cost Verification] Avg Effective Watts: ${avgEffectiveWatts}W`);
-                console.log(`[Cost Verification] Energy (kWh): ${(avgEffectiveWatts / 1000 * totalHours).toFixed(4)}`);
-                console.log(`[Cost Verification] Cost Check: ₱${((avgEffectiveWatts / 1000 * totalHours) * ratePerKwh).toFixed(2)}`);
-
-                
-                const avgTempStr = typeof avgTemp === 'number' ? avgTemp.toFixed(1) : avgTemp;
-                const minTempStr = typeof minTemp === 'number' ? minTemp.toFixed(1) : minTemp;
-                const maxTempStr = typeof maxTemp === 'number' ? maxTemp.toFixed(1) : maxTemp;
-                const avgHumStr = typeof avgHum === 'number' ? Math.round(avgHum) : avgHum;
-                const minHumStr = typeof minHum === 'number' ? Math.round(minHum) : minHum;
-                const maxHumStr = typeof maxHum === 'number' ? Math.round(maxHum) : maxHum;
-                const avgTargetTempStr = typeof avgTargetTemp === 'number' ? avgTargetTemp.toFixed(1) : avgTargetTemp;
-                const avgEffectiveWattsStr = typeof avgEffectiveWatts === 'number' ? Math.round(avgEffectiveWatts) : avgEffectiveWatts;
-                
-                csv += `${displayName},${avgTempStr},${minTempStr},${maxTempStr},${avgHumStr},${minHumStr},${maxHumStr},${avgTargetTempStr},${avgEffectiveWattsStr},${totalHours.toFixed(2)},${cost.toFixed(2)}\n`;
-
-            }
-
-            
-
-            // DAILY BREAKDOWN TABLE
-
-            csv += '\n====================================\n';
-
-            csv += 'DAILY BREAKDOWN\n';
-
-            csv += '====================================\n';
-
-            csv += 'Date,Room,Avg Temp (°C),Avg Humidity (%),Avg Target Temp (°C),Avg Effective Watts,AC Hours,Cost (PHP)\n';
-
-            
-
-            for (let i = 0; i < dateArray.length; i++) {
-
-                const dateStr = dateArray[i];
-
-                const dateDisplay = dateArrayDisplay[i];
-
-                for (const room of labKeys || []) {
-
-                    const displayName = getRoomDisplayName(room, labsData[room]);
-
-                    const roomConfig = (airconConfig && airconConfig[room]) ? airconConfig[room] : AirconCostCalculator.getDefaultRoomConfig();
-
-                    // Get target temperature for cost calculation
-                    let targetTemp = await getHistoricalTargetTempForDate(room, dateStr, roomConfig);
-
-                    
-
-                    const dayData = historicalData[room][dateStr];
-
-                    let temps = [], hums = [], targetTemps = [], effectiveWatts = [];
-                    
-                    if (dayData) {
-
-                        Object.keys(dayData).forEach(hour => {
-
-                            const entry = dayData[hour];
-
-                            if (entry) {
-
-                                temps.push(parseFloat(entry.temperature) || 0);
-
-                                hums.push((entry.humidity !== undefined && entry.humidity !== null && entry.humidity !== 0) ? parseFloat((100 - parseFloat(entry.humidity)).toFixed(1)) : 0); // Invert humidity
-                                
-                                // Extract targetTemp from history if available
-                                if (entry.targetTemp !== undefined && entry.targetTemp !== null) {
-                                    targetTemps.push(parseFloat(entry.targetTemp));
-                                }
-                                // Calculate effective watts for this entry
-                                if (entry.targetTemp !== undefined && entry.targetTemp !== null) {
-                                    const entryTargetTemp = parseFloat(entry.targetTemp);
-                                    const entryEffectiveWatts = AirconCostCalculator.getEffectiveWatts(roomConfig, entryTargetTemp);
-                                    effectiveWatts.push(entryEffectiveWatts);
-                                }
-
-                            }
-
-                        });
-
+                    const targetTemp = await getHistoricalTargetTempForDate(room, dateStr, roomConfig);
+                    let dayCost = 0, daySavings = 0;
+                    try {
+                        const cmp = await getCostComparisonForDate(room, dateStr, hours, targetTemp, roomConfig, ratePerKwh);
+                        dayCost = cmp.actualCost;
+                        daySavings = cmp.normalCost - cmp.actualCost;
+                    } catch (e) {
+                        dayCost = await getActualCostForDate(room, dateStr, hours, targetTemp, roomConfig, ratePerKwh);
                     }
-                    
-                    const avgTemp = temps.length > 0 ? (temps.reduce((a, b) => a + b, 0) / temps.length) : 'N/A';
-                    const avgHum = hums.length > 0 ? (hums.reduce((a, b) => a + b, 0) / hums.length) : 'N/A';
-                    const avgTargetTemp = targetTemps.length > 0 ? (targetTemps.reduce((a, b) => a + b, 0) / targetTemps.length) : (targetTemp || 'N/A');
-                    const avgEffectiveWatts = effectiveWatts.length > 0 ? (effectiveWatts.reduce((a, b) => a + b, 0) / effectiveWatts.length) : 'N/A';
+                    totalCost += dayCost;
+                    totalSavings += daySavings;
 
-                    const hours = await getUsageHoursForDate(room, dateStr);
-
-                    const cost = AirconCostCalculator.computeAirconCost(roomConfig, hours, ratePerKwh, avgTargetTemp);
-                    
-                    const avgTempStr = typeof avgTemp === 'number' ? avgTemp.toFixed(1) : avgTemp;
-                    const avgHumStr = typeof avgHum === 'number' ? Math.round(avgHum) : avgHum;
-                    const avgTargetTempStr = typeof avgTargetTemp === 'number' ? avgTargetTemp.toFixed(1) : avgTargetTemp;
-                    const avgEffectiveWattsStr = typeof avgEffectiveWatts === 'number' ? Math.round(avgEffectiveWatts) : avgEffectiveWatts;
-
-                    csv += `${dateDisplay},${displayName},${avgTempStr},${avgHumStr},${avgTargetTempStr},${avgEffectiveWattsStr},${hours.toFixed(2)},${cost.toFixed(2)}\n`;
-
-                }
-
-            }
-
-            
-
-            // HISTORICAL TEMPERATURE & HUMIDITY DATA
-
-            csv += '\n====================================\n';
-
-            csv += 'HISTORICAL TEMPERATURE & HUMIDITY DATA\n';
-
-            csv += '====================================\n';
-
-            csv += 'Note: Hourly snapshots. Times shown in Philippine Time (PHT, UTC+8).\n';
-
-            csv += 'Data only available from implementation date onward.\n';
-
-            csv += 'Dates with no data are noted as "NO DATA".\n';
-
-            csv += 'Target Temp: AC target temperature setting\n';
-
-            csv += 'Effective Watts: Temperature-based power consumption (interpolated)\n\n';
-
-            
-            for (let i = 0; i < dateArray.length; i++) {
-
-                const dateStr = dateArray[i];
-
-                const dateDisplay = dateArrayDisplay[i];
-
-                csv += `--- ${dateDisplay} ---\n`;
-
-                csv += 'Room,Time,Temperature (°C),Humidity (%),Target Temp (°C),Effective Watts,Status\n';
-
-                
-
-                let hasData = false;
-
-                for (const room of labKeys || []) {
-
-                    const dayData = historicalData[room][dateStr];
-
-                    if (dayData) {
-
-                        const hours = Object.keys(dayData).sort();
-
-                        hours.forEach(hour => {
-
-                            const entry = dayData[hour];
-
-                            if (entry) {
-
-                                const displayName = getRoomDisplayName(room, labsData[room]);
-
-                                const temp = parseFloat(entry.temperature) || 0;
-
-                                const hum = (entry.humidity !== undefined && entry.humidity !== null && entry.humidity !== 0) ? parseFloat((100 - parseFloat(entry.humidity)).toFixed(1)) : 0; // Invert humidity
-
-                                const status = entry.status || 'NORMAL';
-                                
-                                const targetTemp = entry.targetTemp !== undefined && entry.targetTemp !== null ? parseFloat(entry.targetTemp) : 'N/A';
-                                let effectiveWatts = 'N/A';
-                                if (targetTemp !== 'N/A') {
-                                    effectiveWatts = Math.round(AirconCostCalculator.getEffectiveWatts(roomConfig, targetTemp));
-                                }
-
-                                // Format time as full date + 12-hour time with AM/PM
-
-                                const formattedTime = formatDateTimeForTooltip(dateStr, hour);
-
-                                csv += `${displayName},${formattedTime},${temp.toFixed(1)},${hum.toFixed(1)},${targetTemp !== 'N/A' ? targetTemp.toFixed(1) : 'N/A'},${effectiveWatts !== 'N/A' ? effectiveWatts : 'N/A'},${status}\n`;
-
-                                hasData = true;
-
-                            }
-
-                        });
-
+                    if (dayTemps.length > 0) {
+                        if (!dailyTempByDate[dateStr]) dailyTempByDate[dateStr] = {};
+                        dailyTempByDate[dateStr][displayName] = dayTemps.reduce((a, b) => a + b, 0) / dayTemps.length;
                     }
-
                 }
 
-                
+                const avgTemp = temps.length ? temps.reduce((a, b) => a + b, 0) / temps.length : null;
+                const minTemp = temps.length ? Math.min(...temps) : null;
+                const maxTemp = temps.length ? Math.max(...temps) : null;
+                const avgHum = hums.length ? (hums.reduce((a, b) => a + b, 0) / hums.length) : null;
 
-                if (!hasData) {
-
-                    csv += 'NO DATA FOR THIS DATE\n';
-
-                }
-
-                csv += '\n';
-
+                roomSummaries.push({ room, displayName, avgTemp, minTemp, maxTemp, avgHum, totalHours, totalCost, totalSavings, eventCount });
+                grandTotalCost += totalCost;
+                grandTotalSavings += totalSavings;
+                grandTotalHours += totalHours;
+                totalAutomationEvents += eventCount;
+                automationByRoom[displayName] = eventCount;
             }
 
-            
-
-            // ALERT FREQUENCY
-
-            csv += '====================================\n';
-
-            csv += 'ALERT FREQUENCY\n';
-
-            csv += '====================================\n';
-
-            csv += 'Room,Alert Count\n';
-
-            
-
-            for (const room of labKeys || []) {
-
-                const displayName = getRoomDisplayName(room, labsData[room]);
-
-                const alertCountRoom = (alertCounters && alertCounters[room]) ? alertCounters[room] : 0;
-
-                csv += `${displayName},${alertCountRoom}\n`;
-
+            // ---- Render charts off-screen and capture as images ----
+            function makeCanvas(w, h) {
+                const c = document.createElement('canvas');
+                c.width = w; c.height = h;
+                c.style.position = 'fixed';
+                c.style.left = '-9999px';
+                document.body.appendChild(c);
+                return c;
+            }
+            async function chartToImage(config, w, h) {
+                const canvas = makeCanvas(w, h);
+                const chart = new Chart(canvas, config);
+                await new Promise(r => setTimeout(r, 350)); // let Chart.js finish drawing
+                const img = canvas.toDataURL('image/png', 1.0);
+                chart.destroy();
+                document.body.removeChild(canvas);
+                return img;
             }
 
-            
+            const palette = ['#8B1538', '#26C281', '#2E86DE', '#F5A623', '#9B59B6', '#E74C3C', '#1ABC9C'];
 
-            // Download the CSV
+            const costImg = await chartToImage({
+                type: 'bar',
+                data: {
+                    labels: roomSummaries.map(r => r.displayName),
+                    datasets: [{ label: 'Total Cost (PHP)', data: roomSummaries.map(r => +r.totalCost.toFixed(2)), backgroundColor: palette }]
+                },
+                options: { responsive: false, animation: false, plugins: { legend: { display: false }, title: { display: true, text: 'Total Cost by Room (PHP)' } } }
+            }, 760, 380);
 
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const roomsWithTemp = roomSummaries.filter(r => r.avgTemp !== null);
+            const tempImg = roomsWithTemp.length > 0 ? await chartToImage({
+                type: 'line',
+                data: {
+                    labels: dateArray,
+                    datasets: roomsWithTemp.map((r, i) => ({
+                        label: r.displayName,
+                        data: dateArray.map(d => dailyTempByDate[d]?.[r.displayName] ?? null),
+                        borderColor: palette[i % palette.length],
+                        backgroundColor: 'transparent',
+                        spanGaps: true,
+                        tension: 0.3
+                    }))
+                },
+                options: { responsive: false, animation: false, plugins: { title: { display: true, text: 'Average Daily Temperature Trend (°C)' } } }
+            }, 760, 380) : null;
 
-            const link = document.createElement('a');
+            const eventRooms = Object.keys(automationByRoom).filter(k => automationByRoom[k] > 0);
+            const eventsImg = eventRooms.length > 0 ? await chartToImage({
+                type: 'doughnut',
+                data: { labels: eventRooms, datasets: [{ data: eventRooms.map(k => automationByRoom[k]), backgroundColor: palette }] },
+                options: { responsive: false, animation: false, plugins: { title: { display: true, text: 'Automation Events by Room' } } }
+            }, 480, 380) : null;
 
-            const url = URL.createObjectURL(blob);
+            // ---- Build the PDF ----
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+            const pageW = doc.internal.pageSize.getWidth();
+            const pageH = doc.internal.pageSize.getHeight();
+            const margin = 40;
+            const rangeLabel = `${fromDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })} – ${toDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}`;
+            let y = 0;
 
-            link.setAttribute('href', url);
-
-            link.setAttribute('download', `PCC_STATS_Export_${fromDateStr}_to_${toDateStr}.csv`);
-
-            link.style.display = 'none';
-
-            document.body.appendChild(link);
-
-            link.click();
-
-            
-
-            // Cleanup
-
-            setTimeout(() => {
-
-                try {
-
-                    document.body.removeChild(link);
-
-                    URL.revokeObjectURL(url);
-
-                } catch (e) {
-
-                    // Cleanup failed, but download should still work
-
+            function pageHeader(subtitle) {
+                doc.setFillColor(139, 21, 56);
+                doc.rect(0, 0, pageW, 70, 'F');
+                doc.setTextColor(255, 255, 255);
+                doc.setFontSize(18);
+                doc.setFont(undefined, 'bold');
+                doc.text('PCC S.T.A.T.S.', margin, 30);
+                doc.setFontSize(9.5);
+                doc.setFont(undefined, 'normal');
+                doc.text('Smart Thermal Adjustment & Tracking System — Analytics Report', margin, 47);
+                doc.setFontSize(9);
+                doc.text(subtitle, margin, 62);
+                doc.setTextColor(0, 0, 0);
+                y = 95;
+            }
+            function pageFooter() {
+                doc.setFontSize(8);
+                doc.setTextColor(150, 150, 150);
+                doc.text(
+                    `Generated ${new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' })}`,
+                    margin, pageH - 20
+                );
+                doc.text(String(doc.internal.getNumberOfPages()), pageW - margin - 10, pageH - 20);
+                doc.setTextColor(0, 0, 0);
+            }
+            function ensureSpace(needed) {
+                if (y + needed > pageH - 40) {
+                    pageFooter();
+                    doc.addPage();
+                    pageHeader(rangeLabel);
                 }
+            }
 
-            }, 100);
+            // ---- Page 1: Overview + Cost chart ----
+            pageHeader(rangeLabel);
 
-            
+            doc.setFontSize(13); doc.setFont(undefined, 'bold');
+            doc.text('Overview', margin, y); y += 20;
+            doc.setFont(undefined, 'normal');
 
-            console.log('CSV export successful');
+            const kpis = [
+                ['Total Cost', `PHP ${grandTotalCost.toFixed(2)}`],
+                ['Total Savings', `PHP ${grandTotalSavings.toFixed(2)}`],
+                ['Total AC Hours', `${grandTotalHours.toFixed(1)}h`],
+                ['Rooms Monitored', `${labKeys.length}`],
+                ['Automation Events', `${totalAutomationEvents}`],
+                ['Electricity Rate', `PHP ${ratePerKwh.toFixed(4)}/kWh`],
+            ];
+            const kpiColW = (pageW - margin * 2) / 3;
+            kpis.forEach((kv, i) => {
+                const col = i % 3, row = Math.floor(i / 3);
+                const x = margin + col * kpiColW;
+                const yy = y + row * 55;
+                doc.setDrawColor(220, 190, 200);
+                doc.roundedRect(x, yy, kpiColW - 10, 45, 6, 6);
+                doc.setFontSize(8);
+                doc.setTextColor(139, 21, 56);
+                doc.text(kv[0].toUpperCase(), x + 10, yy + 16);
+                doc.setFontSize(13);
+                doc.setTextColor(30, 30, 30);
+                doc.setFont(undefined, 'bold');
+                doc.text(kv[1], x + 10, yy + 34);
+                doc.setFont(undefined, 'normal');
+            });
+            y += Math.ceil(kpis.length / 3) * 55 + 15;
+            doc.setTextColor(0, 0, 0);
+
+            const imgW = pageW - margin * 2;
+            const imgH = imgW * (380 / 760);
+            ensureSpace(imgH + 30);
+            doc.setFontSize(13); doc.setFont(undefined, 'bold');
+            doc.text('Cost by Room', margin, y); y += 10;
+            doc.setFont(undefined, 'normal');
+            doc.addImage(costImg, 'PNG', margin, y, imgW, imgH);
+            y += imgH + 20;
+            pageFooter();
+
+            // ---- Page 2: Temperature trend + automation activity ----
+            doc.addPage();
+            pageHeader(rangeLabel);
+            if (tempImg) {
+                doc.setFontSize(13); doc.setFont(undefined, 'bold');
+                doc.text('Temperature Trend', margin, y); y += 10;
+                doc.setFont(undefined, 'normal');
+                doc.addImage(tempImg, 'PNG', margin, y, imgW, imgH);
+                y += imgH + 25;
+            }
+            if (eventsImg) {
+                ensureSpace(220);
+                doc.setFontSize(13); doc.setFont(undefined, 'bold');
+                doc.text('Automation Activity', margin, y); y += 10;
+                doc.setFont(undefined, 'normal');
+                const evImgW = 260, evImgH = evImgW * (380 / 480);
+                doc.addImage(eventsImg, 'PNG', margin, y, evImgW, evImgH);
+                y += evImgH + 20;
+            }
+            pageFooter();
+
+            // ---- Page 3+: Per-room summary table ----
+            doc.addPage();
+            pageHeader('Per-Room Summary');
+            doc.setFontSize(13); doc.setFont(undefined, 'bold');
+            doc.text('Per-Room Summary', margin, y); y += 15;
+            doc.setFontSize(8.5); doc.setFont(undefined, 'normal');
+
+            const cols = ['Room', 'Avg Temp', 'Min/Max', 'Avg Hum', 'AC Hours', 'Cost (PHP)', 'Savings (PHP)', 'Events'];
+            const colWidths = [90, 60, 75, 55, 60, 75, 80, 45];
+            const tableW = colWidths.reduce((a, b) => a + b, 0);
+
+            function tableHeaderRow() {
+                let x = margin;
+                doc.setFillColor(139, 21, 56);
+                doc.rect(margin, y, tableW, 20, 'F');
+                doc.setTextColor(255, 255, 255);
+                doc.setFont(undefined, 'bold');
+                cols.forEach((c, i) => { doc.text(c, x + 5, y + 14); x += colWidths[i]; });
+                y += 20;
+                doc.setTextColor(0, 0, 0);
+                doc.setFont(undefined, 'normal');
+            }
+            tableHeaderRow();
+
+            roomSummaries.forEach((r, idx) => {
+                if (y > pageH - 60) {
+                    pageFooter();
+                    doc.addPage();
+                    pageHeader('Per-Room Summary (cont.)');
+                    tableHeaderRow();
+                }
+                if (idx % 2 === 1) {
+                    doc.setFillColor(247, 238, 240);
+                    doc.rect(margin, y, tableW, 18, 'F');
+                }
+                let x = margin;
+                const rowVals = [
+                    r.displayName,
+                    r.avgTemp !== null ? r.avgTemp.toFixed(1) + '°C' : '--',
+                    (r.minTemp !== null && r.maxTemp !== null) ? `${r.minTemp.toFixed(1)}/${r.maxTemp.toFixed(1)}` : '--',
+                    r.avgHum !== null ? r.avgHum.toFixed(0) + '%' : '--',
+                    r.totalHours.toFixed(1) + 'h',
+                    r.totalCost.toFixed(2),
+                    r.totalSavings.toFixed(2),
+                    String(r.eventCount)
+                ];
+                rowVals.forEach((v, i) => { doc.text(String(v), x + 5, y + 13); x += colWidths[i]; });
+                y += 18;
+            });
+            y += 20;
+
+            // ---- Methodology note ----
+            ensureSpace(90);
+            doc.setFontSize(11); doc.setFont(undefined, 'bold');
+            doc.text('Cost Calculation Methodology', margin, y); y += 16;
+            doc.setFontSize(9); doc.setFont(undefined, 'normal');
+            const methodLines = [
+                'Cost = (Effective Watts / 1000) x AC Hours x Electricity Rate.',
+                'Effective Watts are interpolated from calibration points measured per room',
+                '(e.g. 16°C = 3795W, 30°C = 253W — a lower target temperature draws more power).',
+                'Rooms with real ESP32 hardware use the device\'s own measured energy reading',
+                'directly when available, instead of this estimate, for higher accuracy.'
+            ];
+            methodLines.forEach(line => { doc.text(line, margin, y); y += 13; });
+
+            pageFooter();
+
+            doc.save(`PCC_STATS_Report_${dateArray[0]}_to_${dateArray[dateArray.length - 1]}.pdf`);
+
+            console.log('[PDF Export] Report generated successfully');
 
         } catch (error) {
-
-            console.error('CSV export failed:', error);
-
-            alert('Failed to export CSV: ' + error.message + '\n\nPlease check the browser console for details.');
-
+            console.error('PDF export failed:', error);
+            alert('Failed to export PDF: ' + error.message + '\n\nPlease check the browser console for details.');
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = originalBtnHtml;
+                if (window.lucide) lucide.createIcons();
+            }
         }
-
     }
 
     function populateAutomationRoomFilter() {
