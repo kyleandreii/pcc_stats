@@ -1604,19 +1604,27 @@ void runAutomation(float temp, float humidity) {
   #endif
 
   if (humidity > MAX_HUMIDITY) {
-    // minTemp/maxTemp double as room-ambient safety thresholds elsewhere
-    // in this file, which an admin could legitimately configure outside
-    // the AC's real 16-30 range (e.g. as extra safety margin) - clamp
-    // before writing it as a setpoint so that can never happen here.
-    targetTemp = constrain(maxTemp, 16.0, 30.0);
-    humidityEventName = "Humidity automation: Occupied detected, setting target to max temp";
+    // Occupied (people present, raising humidity) means comfort takes
+    // priority - the coldest the hardware supports, not a configurable
+    // threshold. This used to set targetTemp to maxTemp (the WARMEST
+    // configured setting) here, which was backwards: it warmed the room up
+    // while people were actually in it, and only cooled it down once they'd
+    // left. Confirmed live and corrected per user direction (2026-09-26).
+    targetTemp = 16.0;
+    humidityEventName = "Humidity automation: Occupied detected, setting target to min temp";
     Serial.println("📊 HUMIDITY AUTOMATION: Occupied detected");
-    Serial.print("Humidity: "); Serial.print(humidity, 1); Serial.print("% > "); Serial.print(MAX_HUMIDITY); Serial.print("%, setting target to max: "); Serial.println(targetTemp, 1);
+    Serial.print("Humidity: "); Serial.print(humidity, 1); Serial.print("% > "); Serial.print(MAX_HUMIDITY); Serial.print("%, setting target to min: "); Serial.println(targetTemp, 1);
   } else if (humidity < MIN_HUMIDITY) {
-    targetTemp = constrain(minTemp, 16.0, 30.0);
-    humidityEventName = "Humidity automation: Not occupied detected, setting target to min temp";
+    // Not occupied (room empty, humidity dropped) - warm it up to the
+    // configured max to save energy on cooling nobody needs. minTemp/maxTemp
+    // double as room-ambient safety thresholds elsewhere in this file, which
+    // an admin could legitimately configure outside the AC's real 16-30
+    // range (e.g. as extra safety margin) - clamp before writing it as a
+    // setpoint so that can never happen here.
+    targetTemp = constrain(maxTemp, 16.0, 30.0);
+    humidityEventName = "Humidity automation: Not occupied detected, setting target to max temp";
     Serial.println("📊 HUMIDITY AUTOMATION: Not occupied detected");
-    Serial.print("Humidity: "); Serial.print(humidity, 1); Serial.print("% < "); Serial.print(MIN_HUMIDITY); Serial.print("%, setting target to min: "); Serial.println(targetTemp, 1);
+    Serial.print("Humidity: "); Serial.print(humidity, 1); Serial.print("% < "); Serial.print(MIN_HUMIDITY); Serial.print("%, setting target to max: "); Serial.println(targetTemp, 1);
   } else {
     Serial.println("✅ [Humidity Automation] Humidity within normal range (45-60%), no action needed");
     return;
