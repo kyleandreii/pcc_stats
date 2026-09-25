@@ -2544,6 +2544,14 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                 for (const dateStr of dateArray) {
                     const dayData = historicalData[room][dateStr];
                     let dayTemps = [];
+                    // Plain-number average of targetTemp1/targetTemp2 (or targetTemp for
+                    // single-unit rooms), matching loadSavingsData's own approach exactly -
+                    // getHistoricalTargetTempForDate() returns a per-unit OBJECT for dual-unit
+                    // rooms, which getEffectiveWatts() can't compare against a number and
+                    // silently falls back to rated_watts, producing a wrong ratio (confirmed
+                    // live: a verified +314.17 in Savings came out as -45.22 through this
+                    // export before this fix).
+                    let targetTempSum = 0, targetTempCount = 0;
                     if (dayData) {
                         Object.values(dayData).forEach(entry => {
                             if (!entry) return;
@@ -2558,13 +2566,22 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                             if (entry.automation_events) {
                                 eventCount += Object.keys(entry.automation_events).length;
                             }
+                            if (entry.targetTemp !== undefined && entry.targetTemp !== null) {
+                                targetTempSum += parseFloat(entry.targetTemp);
+                                targetTempCount++;
+                            } else if (entry.targetTemp1 !== undefined && entry.targetTemp1 !== null) {
+                                const t1 = parseFloat(entry.targetTemp1);
+                                const t2 = entry.targetTemp2 !== undefined && entry.targetTemp2 !== null ? parseFloat(entry.targetTemp2) : t1;
+                                targetTempSum += (t1 + t2) / 2;
+                                targetTempCount++;
+                            }
                         });
                     }
 
                     const hours = await getUsageHoursForDate(room, dateStr);
                     totalHours += hours;
 
-                    const targetTemp = await getHistoricalTargetTempForDate(room, dateStr, roomConfig);
+                    const targetTemp = targetTempCount > 0 ? (targetTempSum / targetTempCount) : 24;
                     let dayCost = 0, daySavings = 0;
                     try {
                         const cmp = await getCostComparisonForDate(room, dateStr, hours, targetTemp, roomConfig, ratePerKwh);
