@@ -2666,150 +2666,199 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                 options: { responsive: false, animation: false, plugins: { title: { display: true, text: 'Automation Events by Room' } } }
             }, 480, 380) : null;
 
-            // ---- Build the PDF ----
+            // ---- Build the PDF (Design B: Modern Dashboard) ----
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF({ unit: 'pt', format: 'a4' });
             const pageW = doc.internal.pageSize.getWidth();
             const pageH = doc.internal.pageSize.getHeight();
-            const margin = 40;
+            const margin = 36;
             const rangeLabel = `${fromDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })} – ${toDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}`;
+            const generatedStr = new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' });
             let y = 0;
+            let pageNum = 1;
 
-            function pageHeader(subtitle) {
-                doc.setFillColor(139, 21, 56);
-                doc.rect(0, 0, pageW, 70, 'F');
-                doc.setTextColor(255, 255, 255);
-                doc.setFontSize(18);
-                doc.setFont(undefined, 'bold');
-                doc.text('PCC S.T.A.T.S.', margin, 30);
-                doc.setFontSize(9.5);
-                doc.setFont(undefined, 'normal');
-                doc.text('Smart Thermal Adjustment & Tracking System — Analytics Report', margin, 47);
-                doc.setFontSize(9);
-                doc.text(subtitle, margin, 62);
-                doc.setTextColor(0, 0, 0);
-                y = 95;
-            }
-            function pageFooter() {
-                doc.setFontSize(8);
-                doc.setTextColor(150, 150, 150);
-                doc.text(
-                    `Generated ${new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' })}`,
-                    margin, pageH - 20
-                );
-                doc.text(String(doc.internal.getNumberOfPages()), pageW - margin - 10, pageH - 20);
-                doc.setTextColor(0, 0, 0);
-            }
-            function ensureSpace(needed) {
-                if (y + needed > pageH - 40) {
-                    pageFooter();
-                    doc.addPage();
-                    pageHeader(rangeLabel);
+            // Fetch the school seal and S.T.A.T.S. mark already served alongside
+            // this page and convert to data URLs jsPDF can embed - failures here
+            // (e.g. offline) shouldn't break the whole report, just skip the logo.
+            async function imageToDataURL(url) {
+                try {
+                    const res = await fetch(url);
+                    const blob = await res.blob();
+                    return await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(blob);
+                    });
+                } catch (e) {
+                    console.warn('[PDF Export] Could not load logo', url, e);
+                    return null;
                 }
             }
+            const [pccLogo, statsLogo] = await Promise.all([
+                imageToDataURL('pcctruelogo.png'),
+                imageToDataURL('statswhite.png')
+            ]);
 
-            // ---- Page 1: Overview + Cost chart ----
-            pageHeader(rangeLabel);
-
-            doc.setFontSize(13); doc.setFont(undefined, 'bold');
-            doc.text('Overview', margin, y); y += 20;
-            doc.setFont(undefined, 'normal');
-
-            const kpis = [
-                ['Total Cost', `PHP ${grandTotalCost.toFixed(2)}`],
-                ['Total Savings', `PHP ${grandTotalSavings.toFixed(2)}`],
-                ['Total AC Hours', `${grandTotalHours.toFixed(1)}h`],
-                ['Rooms Monitored', `${labKeys.length}`],
-                ['Automation Events', `${totalAutomationEvents}`],
-                ['Electricity Rate', `PHP ${ratePerKwh.toFixed(4)}/kWh`],
-            ];
-            const kpiColW = (pageW - margin * 2) / 3;
-            kpis.forEach((kv, i) => {
-                const col = i % 3, row = Math.floor(i / 3);
-                const x = margin + col * kpiColW;
-                const yy = y + row * 55;
-                doc.setDrawColor(220, 190, 200);
-                doc.roundedRect(x, yy, kpiColW - 10, 45, 6, 6);
+            function footer() {
+                doc.setFont(undefined, 'bold');
                 doc.setFontSize(8);
                 doc.setTextColor(139, 21, 56);
-                doc.text(kv[0].toUpperCase(), x + 10, yy + 16);
-                doc.setFontSize(13);
-                doc.setTextColor(30, 30, 30);
-                doc.setFont(undefined, 'bold');
-                doc.text(kv[1], x + 10, yy + 34);
+                doc.text('PCC S.T.A.T.S. Analytics Report', margin, pageH - 20);
+                doc.text(`Page ${pageNum}`, pageW - margin, pageH - 20, { align: 'right' });
+                doc.setTextColor(0, 0, 0);
                 doc.setFont(undefined, 'normal');
-            });
-            y += Math.ceil(kpis.length / 3) * 55 + 15;
-            doc.setTextColor(0, 0, 0);
+            }
+            function newPage() {
+                doc.addPage();
+                pageNum++;
+            }
+            function sectionBand(text, yy) {
+                doc.setFillColor(139, 21, 56);
+                doc.rect(0, yy - 26, pageW, 34, 'F');
+                doc.setTextColor(255, 255, 255);
+                doc.setFont(undefined, 'bold');
+                doc.setFontSize(14);
+                doc.text(text, margin, yy - 12);
+                if (statsLogo) {
+                    doc.addImage(statsLogo, 'PNG', pageW - margin - 24, yy - 24, 24, 24);
+                }
+                doc.setTextColor(0, 0, 0);
+                doc.setFont(undefined, 'normal');
+            }
 
             const imgW = pageW - margin * 2;
             const imgH = imgW * (380 / 760);
-            ensureSpace(imgH + 30);
-            doc.setFontSize(13); doc.setFont(undefined, 'bold');
-            doc.text('Cost by Room', margin, y); y += 10;
+
+            // ---- Cover page ----
+            doc.setFillColor(90, 14, 31);
+            doc.rect(0, 0, pageW, pageH, 'F');
+            doc.setFillColor(139, 21, 56);
+            doc.circle(pageW - 60, 80, 140, 'F');
+            doc.setFillColor(163, 37, 69);
+            doc.circle(60, pageH - 120, 100, 'F');
+
+            let logoY = 70;
+            if (pccLogo) doc.addImage(pccLogo, 'PNG', margin, logoY, 58, 58);
+            if (statsLogo) doc.addImage(statsLogo, 'PNG', margin + 70, logoY, 58, 58);
+
+            doc.setTextColor(255, 255, 255);
+            doc.setFont(undefined, 'bold');
+            doc.setFontSize(30);
+            doc.text('PCC S.T.A.T.S.', margin, 205);
+            doc.setFont(undefined, 'normal');
+            doc.setFontSize(13);
+            doc.text('Smart Thermal Adjustment & Tracking System', margin, 230);
+            doc.setFont(undefined, 'bold');
+            doc.setFontSize(20);
+            doc.text('Analytics Report', margin, 300);
+            doc.setFont(undefined, 'normal');
+            doc.setFontSize(12);
+            doc.text(rangeLabel, margin, 325);
+
+            doc.setTextColor(245, 215, 222);
+            doc.setFontSize(10);
+            doc.text('ICTC Department — Pasig Catholic College', margin, pageH - 60);
+            doc.text(`Generated ${generatedStr}`, margin, pageH - 45);
+            doc.setTextColor(0, 0, 0);
+            newPage();
+
+            // ---- Overview page: KPI tiles + cost chart ----
+            y = 60;
+            sectionBand('OVERVIEW', y);
+            y += 45;
+
+            const tiles = [
+                ['TOTAL COST', `PHP ${grandTotalCost.toFixed(2)}`, [139, 21, 56]],
+                ['TOTAL SAVINGS', `PHP ${grandTotalSavings.toFixed(2)}`, [192, 57, 43]],
+                ['TOTAL AC HOURS', `${grandTotalHours.toFixed(1)}h`, [46, 134, 222]],
+                ['ROOMS MONITORED', `${labKeys.length}`, [38, 194, 129]],
+                ['AUTOMATION EVENTS', `${totalAutomationEvents}`, [245, 166, 35]],
+                ['RATE', `PHP ${ratePerKwh.toFixed(2)}/kWh`, [155, 89, 182]],
+            ];
+            const tileGap = 10;
+            const tileW = (pageW - margin * 2 - tileGap * 2) / 3;
+            const tileH = 78;
+            tiles.forEach((t, i) => {
+                const col = i % 3, row = Math.floor(i / 3);
+                const x = margin + col * (tileW + tileGap);
+                const yy = y + row * (tileH + 12);
+                doc.setFillColor(t[2][0], t[2][1], t[2][2]);
+                doc.roundedRect(x, yy, tileW, tileH, 8, 8, 'F');
+                doc.setTextColor(255, 255, 255);
+                doc.setFont(undefined, 'bold');
+                doc.setFontSize(8.5);
+                doc.text(t[0], x + 12, yy + 20);
+                doc.setFontSize(16);
+                doc.text(t[1], x + 12, yy + 48);
+                doc.setFont(undefined, 'normal');
+            });
+            y += Math.ceil(tiles.length / 3) * (tileH + 12) + 15;
+            doc.setTextColor(0, 0, 0);
+
+            doc.setFont(undefined, 'bold');
+            doc.setFontSize(13);
+            doc.text('Cost by Room', margin, y);
+            y += 12;
             doc.setFont(undefined, 'normal');
             doc.addImage(costImg, 'PNG', margin, y, imgW, imgH);
-            y += imgH + 20;
-            pageFooter();
+            footer();
+            newPage();
 
-            // ---- Page 2: Temperature trend + automation activity ----
-            doc.addPage();
-            pageHeader(rangeLabel);
+            // ---- Trends page: temperature trend + automation activity ----
+            y = 60;
+            sectionBand('TRENDS & AUTOMATION', y);
+            y += 45;
             if (tempImg) {
-                doc.setFontSize(13); doc.setFont(undefined, 'bold');
-                doc.text('Temperature Trend', margin, y); y += 10;
-                doc.setFont(undefined, 'normal');
                 doc.addImage(tempImg, 'PNG', margin, y, imgW, imgH);
                 y += imgH + 25;
             }
             if (eventsImg) {
-                ensureSpace(220);
-                doc.setFontSize(13); doc.setFont(undefined, 'bold');
-                doc.text('Automation Activity', margin, y); y += 10;
-                doc.setFont(undefined, 'normal');
                 const evImgW = 260, evImgH = evImgW * (380 / 480);
                 doc.addImage(eventsImg, 'PNG', margin, y, evImgW, evImgH);
-                y += evImgH + 20;
             }
-            pageFooter();
+            footer();
+            newPage();
 
-            // ---- Page 3+: Per-room summary table ----
-            doc.addPage();
-            pageHeader('Per-Room Summary');
-            doc.setFontSize(13); doc.setFont(undefined, 'bold');
-            doc.text('Per-Room Summary', margin, y); y += 15;
-            doc.setFontSize(8.5); doc.setFont(undefined, 'normal');
+            // ---- Table page: per-room summary + methodology ----
+            y = 60;
+            sectionBand('PER-ROOM SUMMARY', y);
+            y += 45;
 
-            const cols = ['Room', 'Avg Temp', 'Min/Max', 'Avg Hum', 'AC Hours', 'Cost (PHP)', 'Savings (PHP)', 'Events'];
-            const colWidths = [90, 60, 75, 55, 60, 75, 80, 45];
+            const cols = ['Room', 'Avg Temp', 'Min/Max', 'Avg Hum', 'AC Hours', 'Cost', 'Savings', 'Events'];
+            const colWidths = [90, 60, 75, 55, 60, 65, 65, 45];
             const tableW = colWidths.reduce((a, b) => a + b, 0);
 
             function tableHeaderRow() {
                 let x = margin;
-                doc.setFillColor(139, 21, 56);
-                doc.rect(margin, y, tableW, 20, 'F');
+                doc.setFillColor(42, 42, 42);
+                doc.rect(margin, y, tableW, 22, 'F');
                 doc.setTextColor(255, 255, 255);
                 doc.setFont(undefined, 'bold');
-                cols.forEach((c, i) => { doc.text(c, x + 5, y + 14); x += colWidths[i]; });
-                y += 20;
+                doc.setFontSize(8.5);
+                cols.forEach((c, i) => { doc.text(c, x + 5, y + 15); x += colWidths[i]; });
+                y += 22;
                 doc.setTextColor(0, 0, 0);
                 doc.setFont(undefined, 'normal');
             }
             tableHeaderRow();
 
             roomSummaries.forEach((r, idx) => {
-                if (y > pageH - 60) {
-                    pageFooter();
-                    doc.addPage();
-                    pageHeader('Per-Room Summary (cont.)');
+                if (y > pageH - 70) {
+                    footer();
+                    newPage();
+                    y = 60;
+                    sectionBand('PER-ROOM SUMMARY (CONT.)', y);
+                    y += 45;
                     tableHeaderRow();
                 }
-                if (idx % 2 === 1) {
-                    doc.setFillColor(247, 238, 240);
-                    doc.rect(margin, y, tableW, 18, 'F');
-                }
-                let x = margin;
-                const rowVals = [
+                const bandColor = idx % 2 === 0 ? [251, 238, 241] : [255, 255, 255];
+                doc.setFillColor(bandColor[0], bandColor[1], bandColor[2]);
+                doc.rect(margin, y, tableW, 20, 'F');
+                doc.setTextColor(0, 0, 0);
+                doc.setFont(undefined, r.totalCost > 0 ? 'bold' : 'normal');
+                doc.setFontSize(8.5);
+                const vals = [
                     r.displayName,
                     r.avgTemp !== null ? r.avgTemp.toFixed(1) + '°C' : '--',
                     (r.minTemp !== null && r.maxTemp !== null) ? `${r.minTemp.toFixed(1)}/${r.maxTemp.toFixed(1)}` : '--',
@@ -2819,26 +2868,34 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                     r.totalSavings.toFixed(2),
                     String(r.eventCount)
                 ];
-                rowVals.forEach((v, i) => { doc.text(String(v), x + 5, y + 13); x += colWidths[i]; });
-                y += 18;
+                let x = margin;
+                vals.forEach((v, i) => { doc.text(String(v), x + 5, y + 14); x += colWidths[i]; });
+                y += 20;
             });
-            y += 20;
+            y += 25;
 
-            // ---- Methodology note ----
-            ensureSpace(90);
-            doc.setFontSize(11); doc.setFont(undefined, 'bold');
-            doc.text('Cost Calculation Methodology', margin, y); y += 16;
-            doc.setFontSize(9); doc.setFont(undefined, 'normal');
-            const methodLines = [
+            if (y + 100 > pageH - 50) {
+                footer();
+                newPage();
+                y = 70;
+            }
+            doc.setFillColor(247, 238, 240);
+            doc.roundedRect(margin, y, tableW, 90, 8, 8, 'F');
+            doc.setTextColor(139, 21, 56);
+            doc.setFont(undefined, 'bold');
+            doc.setFontSize(11);
+            doc.text('Cost Calculation Methodology', margin + 12, y + 22);
+            doc.setTextColor(51, 51, 51);
+            doc.setFont(undefined, 'normal');
+            doc.setFontSize(9);
+            let methodY = y + 40;
+            [
                 'Cost = (Effective Watts / 1000) x AC Hours x Electricity Rate.',
-                'Effective Watts are interpolated from calibration points measured per room',
-                '(e.g. 16°C = 3795W, 30°C = 253W — a lower target temperature draws more power).',
-                'Rooms with real ESP32 hardware use the device\'s own measured energy reading',
-                'directly when available, instead of this estimate, for higher accuracy.'
-            ];
-            methodLines.forEach(line => { doc.text(line, margin, y); y += 13; });
+                'Effective Watts are interpolated from calibration points measured per room.',
+                "Rooms with real ESP32 hardware use the device's own measured energy reading directly."
+            ].forEach(line => { doc.text(line, margin + 12, methodY); methodY += 14; });
 
-            pageFooter();
+            footer();
 
             doc.save(`PCC_STATS_Report_${dateArray[0]}_to_${dateArray[dateArray.length - 1]}.pdf`);
 
