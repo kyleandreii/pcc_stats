@@ -77,7 +77,7 @@ size_t irCodeOnLen = 0;
 size_t irCodeOffLen = 0;
 size_t irCodeTempUpLen = 0;
 size_t irCodeTempDownLen = 0;
-const unsigned long IR_LIBRARY_REFRESH_MS = 900000; // 15 minutes
+const unsigned long IR_LIBRARY_REFRESH_MS = 60000; // 1 minute (was 15 min, shortened per request 2026-09-26)
 unsigned long lastIRLibraryRefreshMillis = 0;
 
 FirebaseData fbdo;
