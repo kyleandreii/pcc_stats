@@ -219,6 +219,7 @@ void loadIRCodesFromPreferences();
 void saveIRCodesToPreferences();
 void loadIRCodesFromLibrary(bool cacheOnSuccess);
 bool loadIRCodeArrayFromJson(FirebaseJson &json, const char* path, uint16_t* outBuf, size_t &outLen);
+void printIRCode(const char* label, uint16_t pin, uint16_t* buf, size_t len);
 
 void setup() {
   Serial.begin(115200);
@@ -1181,6 +1182,21 @@ void loadIRCodesFromLibrary(bool cacheOnSuccess) {
   }
 }
 
+// Prints the exact mark/space array about to leave the IR LED, not just
+// which named command it was - lets the Serial monitor confirm a Remote
+// Library update actually changed what gets transmitted, or diagnose a
+// code that doesn't match what the AC expects.
+void printIRCode(const char* label, uint16_t pin, uint16_t* buf, size_t len) {
+  Serial.print("[IR TX] "); Serial.print(label); Serial.print(" on pin "); Serial.print(pin);
+  Serial.print(" ("); Serial.print(len); Serial.println(" values):");
+  Serial.print("  ");
+  for (size_t i = 0; i < len; i++) {
+    Serial.print(buf[i]);
+    if (i < len - 1) Serial.print(",");
+  }
+  Serial.println();
+}
+
 void handleACCommand(String cmd, int unit, bool isAutomation) {
   Serial.println("🎮 AC Command: " + cmd + " (Unit " + String(unit) + ") " + (isAutomation ? "[Automation]" : "[Manual]"));
 
@@ -1212,6 +1228,7 @@ void handleACCommand(String cmd, int unit, bool isAutomation) {
       Serial.println("⚠️ No ON code loaded - skipping IR send");
     } else {
       Serial.println("🎮 Sending ON signal...");
+      printIRCode("ON", pin, irCodeOn, irCodeOnLen);
       irSender->sendRaw(irCodeOn, irCodeOnLen, kFrequency);
       Serial.println("✓ ON sent on pin " + String(pin));
     }
@@ -1220,6 +1237,7 @@ void handleACCommand(String cmd, int unit, bool isAutomation) {
       Serial.println("⚠️ No OFF code loaded - skipping IR send");
     } else {
       Serial.println("🎮 Sending OFF signal...");
+      printIRCode("OFF", pin, irCodeOff, irCodeOffLen);
       irSender->sendRaw(irCodeOff, irCodeOffLen, kFrequency);
       Serial.println("✓ OFF sent on pin " + String(pin));
     }
@@ -1228,6 +1246,7 @@ void handleACCommand(String cmd, int unit, bool isAutomation) {
       Serial.println("⚠️ No TEMP_UP code loaded - skipping IR send");
     } else {
       Serial.println("🎮 Sending TEMP_UP signal...");
+      printIRCode("TEMP_UP", pin, irCodeTempUp, irCodeTempUpLen);
       irSender->sendRaw(irCodeTempUp, irCodeTempUpLen, kFrequency);
       Serial.println("✓ TEMP_UP sent on pin " + String(pin));
     }
@@ -1236,6 +1255,7 @@ void handleACCommand(String cmd, int unit, bool isAutomation) {
       Serial.println("⚠️ No TEMP_DOWN code loaded - skipping IR send");
     } else {
       Serial.println("🎮 Sending TEMP_DOWN signal...");
+      printIRCode("TEMP_DOWN", pin, irCodeTempDown, irCodeTempDownLen);
       irSender->sendRaw(irCodeTempDown, irCodeTempDownLen, kFrequency);
       Serial.println("✓ TEMP_DOWN sent on pin " + String(pin));
     }
@@ -1407,11 +1427,14 @@ void runAutomation(float temp, float humidity) {
           Serial.print("Sending TEMP_DOWN on pin "); Serial.println(kIrLedPin);
           #if DUAL_UNIT_MODE
           Serial.println("Sending to Unit 1 (pin 4)");
+          printIRCode("TEMP_DOWN (temp safety, Unit 1)", kIrLedPin, irCodeTempDown, irCodeTempDownLen);
           irsend.sendRaw(irCodeTempDown, irCodeTempDownLen, kFrequency);
           delay(100);
           Serial.println("Sending to Unit 2 (pin 5)");
+          printIRCode("TEMP_DOWN (temp safety, Unit 2)", kIrLedPin2, irCodeTempDown, irCodeTempDownLen);
           irsend2.sendRaw(irCodeTempDown, irCodeTempDownLen, kFrequency);
           #else
+          printIRCode("TEMP_DOWN (temp safety)", kIrLedPin, irCodeTempDown, irCodeTempDownLen);
           irsend.sendRaw(irCodeTempDown, irCodeTempDownLen, kFrequency);
           #endif
           Serial.println("TEMP_DOWN sent successfully");
@@ -1501,11 +1524,14 @@ void runAutomation(float temp, float humidity) {
           Serial.print("Sending TEMP_UP on pin "); Serial.println(kIrLedPin);
           #if DUAL_UNIT_MODE
           Serial.println("Sending to Unit 1 (pin 4)");
+          printIRCode("TEMP_UP (temp safety, Unit 1)", kIrLedPin, irCodeTempUp, irCodeTempUpLen);
           irsend.sendRaw(irCodeTempUp, irCodeTempUpLen, kFrequency);
           delay(100);
           Serial.println("Sending to Unit 2 (pin 5)");
+          printIRCode("TEMP_UP (temp safety, Unit 2)", kIrLedPin2, irCodeTempUp, irCodeTempUpLen);
           irsend2.sendRaw(irCodeTempUp, irCodeTempUpLen, kFrequency);
           #else
+          printIRCode("TEMP_UP (temp safety)", kIrLedPin, irCodeTempUp, irCodeTempUpLen);
           irsend.sendRaw(irCodeTempUp, irCodeTempUpLen, kFrequency);
           #endif
           Serial.println("TEMP_UP sent successfully");
@@ -1723,15 +1749,25 @@ void runAutomation(float temp, float humidity) {
     for (int i = 0; i < maxSteps; i++) {
       if (i < steps1) {
         Serial.print("Step "); Serial.print(i + 1); Serial.print("/"); Serial.print(steps1); Serial.print(": Unit 1 "); Serial.println(up1 ? "TEMP UP" : "TEMP DOWN");
-        if (up1) irsend.sendRaw(irCodeTempUp, irCodeTempUpLen, kFrequency);
-        else irsend.sendRaw(irCodeTempDown, irCodeTempDownLen, kFrequency);
+        if (up1) {
+          printIRCode("TEMP_UP (humidity automation, Unit 1)", kIrLedPin, irCodeTempUp, irCodeTempUpLen);
+          irsend.sendRaw(irCodeTempUp, irCodeTempUpLen, kFrequency);
+        } else {
+          printIRCode("TEMP_DOWN (humidity automation, Unit 1)", kIrLedPin, irCodeTempDown, irCodeTempDownLen);
+          irsend.sendRaw(irCodeTempDown, irCodeTempDownLen, kFrequency);
+        }
       }
       #if DUAL_UNIT_MODE
       if (i < steps1 && i < steps2) delay(100); // gap between back-to-back sends this round
       if (i < steps2) {
         Serial.print("Step "); Serial.print(i + 1); Serial.print("/"); Serial.print(steps2); Serial.print(": Unit 2 "); Serial.println(up2 ? "TEMP UP" : "TEMP DOWN");
-        if (up2) irsend2.sendRaw(irCodeTempUp, irCodeTempUpLen, kFrequency);
-        else irsend2.sendRaw(irCodeTempDown, irCodeTempDownLen, kFrequency);
+        if (up2) {
+          printIRCode("TEMP_UP (humidity automation, Unit 2)", kIrLedPin2, irCodeTempUp, irCodeTempUpLen);
+          irsend2.sendRaw(irCodeTempUp, irCodeTempUpLen, kFrequency);
+        } else {
+          printIRCode("TEMP_DOWN (humidity automation, Unit 2)", kIrLedPin2, irCodeTempDown, irCodeTempDownLen);
+          irsend2.sendRaw(irCodeTempDown, irCodeTempDownLen, kFrequency);
+        }
       }
       #endif
 
