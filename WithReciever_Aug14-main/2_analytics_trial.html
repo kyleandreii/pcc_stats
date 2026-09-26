@@ -1654,11 +1654,11 @@ const palette = ["#800000", "#059669", "#2563eb", "#d97706", "#7c3aed", "#db2777
                                 }
                                 
                                 if (label === 'Cost') {
-                                    return `Cost: ${value.toFixed(2)} ₱`;
+                                    return `Est. Cost (this hour @ this temp): ${value.toFixed(2)} ₱`;
                                 }
-                                
+
                                 if (label === 'Savings') {
-                                    return `Savings: ${value.toFixed(2)} ₱`;
+                                    return `Est. Savings (this hour vs 16°C): ${value.toFixed(2)} ₱`;
                                 }
                                 
                                 if (label === 'Automation Events') {
