@@ -77,6 +77,24 @@ size_t irCodeOnLen = 0;
 size_t irCodeOffLen = 0;
 size_t irCodeTempUpLen = 0;
 size_t irCodeTempDownLen = 0;
+#if DUAL_UNIT_MODE
+// Separate Unit 2 buffers - some rooms have two physically different AC
+// models (different remotes, different raw codes), not just two of the
+// same unit. Unit 1 keeps the arrays above; Unit 2 gets its own set,
+// loaded from /irRemoteLibrary/{ROOM_ID}/unit_2/{command}/rawData. If the
+// library has nothing saved yet for unit_2, loadIRCodesFromLibrary()
+// mirrors Unit 1's codes into these instead of leaving them empty, so a
+// room that hasn't captured a second remote yet keeps working exactly as
+// before (same code sent to both units).
+uint16_t irCodeOn2[MAX_IR_CODE_LEN];
+uint16_t irCodeOff2[MAX_IR_CODE_LEN];
+uint16_t irCodeTempUp2[MAX_IR_CODE_LEN];
+uint16_t irCodeTempDown2[MAX_IR_CODE_LEN];
+size_t irCodeOnLen2 = 0;
+size_t irCodeOffLen2 = 0;
+size_t irCodeTempUpLen2 = 0;
+size_t irCodeTempDownLen2 = 0;
+#endif
 const unsigned long IR_LIBRARY_REFRESH_MS = 60000; // 1 minute (was 15 min, shortened per request 2026-09-26)
 unsigned long lastIRLibraryRefreshMillis = 0;
 
@@ -1079,6 +1097,19 @@ void loadDefaultIRCodes() {
   irCodeTempUpLen = rawTempUpLen;
   memcpy_P(irCodeTempDown, rawTempDown, sizeof(rawTempDown));
   irCodeTempDownLen = rawTempDownLen;
+  #if DUAL_UNIT_MODE
+  // Unit 2 starts out mirroring Unit 1's compiled-in codes too, so a dual-
+  // unit room with no Remote Library data yet for unit_2 still has a
+  // known-good code to send rather than nothing.
+  memcpy_P(irCodeOn2, rawOn, sizeof(rawOn));
+  irCodeOnLen2 = rawOnLen;
+  memcpy_P(irCodeOff2, rawOff, sizeof(rawOff));
+  irCodeOffLen2 = rawOffLen;
+  memcpy_P(irCodeTempUp2, rawTempUp, sizeof(rawTempUp));
+  irCodeTempUpLen2 = rawTempUpLen;
+  memcpy_P(irCodeTempDown2, rawTempDown, sizeof(rawTempDown));
+  irCodeTempDownLen2 = rawTempDownLen;
+  #endif
   Serial.println("[IR Library] Loaded compiled-in default codes");
 }
 
@@ -1091,6 +1122,16 @@ void saveIRCodesToPreferences() {
   preferences.putUInt("irCodeTUpLen", irCodeTempUpLen);
   preferences.putBytes("irCodeTDn", irCodeTempDown, irCodeTempDownLen * sizeof(uint16_t));
   preferences.putUInt("irCodeTDnLen", irCodeTempDownLen);
+  #if DUAL_UNIT_MODE
+  preferences.putBytes("irCodeOn2", irCodeOn2, irCodeOnLen2 * sizeof(uint16_t));
+  preferences.putUInt("irCodeOnLen2", irCodeOnLen2);
+  preferences.putBytes("irCodeOff2", irCodeOff2, irCodeOffLen2 * sizeof(uint16_t));
+  preferences.putUInt("irCodeOffLen2", irCodeOffLen2);
+  preferences.putBytes("irCodeTUp2", irCodeTempUp2, irCodeTempUpLen2 * sizeof(uint16_t));
+  preferences.putUInt("irCodeTUpLen2", irCodeTempUpLen2);
+  preferences.putBytes("irCodeTDn2", irCodeTempDown2, irCodeTempDownLen2 * sizeof(uint16_t));
+  preferences.putUInt("irCodeTDnLen2", irCodeTempDownLen2);
+  #endif
   Serial.println("[IR Library] Cached current codes to flash");
 }
 
@@ -1117,6 +1158,28 @@ void loadIRCodesFromPreferences() {
     preferences.getBytes("irCodeTDn", irCodeTempDown, len * sizeof(uint16_t));
     irCodeTempDownLen = len;
   }
+  #if DUAL_UNIT_MODE
+  len = preferences.getUInt("irCodeOnLen2", 0);
+  if (len > 0 && len <= MAX_IR_CODE_LEN) {
+    preferences.getBytes("irCodeOn2", irCodeOn2, len * sizeof(uint16_t));
+    irCodeOnLen2 = len;
+  }
+  len = preferences.getUInt("irCodeOffLen2", 0);
+  if (len > 0 && len <= MAX_IR_CODE_LEN) {
+    preferences.getBytes("irCodeOff2", irCodeOff2, len * sizeof(uint16_t));
+    irCodeOffLen2 = len;
+  }
+  len = preferences.getUInt("irCodeTUpLen2", 0);
+  if (len > 0 && len <= MAX_IR_CODE_LEN) {
+    preferences.getBytes("irCodeTUp2", irCodeTempUp2, len * sizeof(uint16_t));
+    irCodeTempUpLen2 = len;
+  }
+  len = preferences.getUInt("irCodeTDnLen2", 0);
+  if (len > 0 && len <= MAX_IR_CODE_LEN) {
+    preferences.getBytes("irCodeTDn2", irCodeTempDown2, len * sizeof(uint16_t));
+    irCodeTempDownLen2 = len;
+  }
+  #endif
   Serial.println("[IR Library] Overlaid cached codes from flash (if any)");
 }
 
@@ -1145,10 +1208,18 @@ bool loadIRCodeArrayFromJson(FirebaseJson &json, const char* path, uint16_t* out
   return true;
 }
 
-// Fetches this room's 4 IR commands from the Remote Library in one request
+// Fetches this room's IR commands from the Remote Library in one request
 // and overlays whatever's valid onto the active buffers. Anything missing
 // or invalid just leaves the current code (Firebase/Preferences/compiled-in,
 // whichever was already active) in place rather than clearing it.
+//
+// Single-unit rooms read the flat "acOn/rawData" etc. shape, unchanged.
+// Dual-unit rooms instead read "unit_1/acOn/rawData" and
+// "unit_2/acOn/rawData" - two physically different AC units can need two
+// different remotes' codes, not just one code sent to both. If unit_2 has
+// nothing saved yet, its buffers mirror whatever unit_1 just loaded, so a
+// room that hasn't captured its second remote keeps behaving exactly like
+// before (identical codes to both units) until it does.
 void loadIRCodesFromLibrary(bool cacheOnSuccess) {
   Serial.println("[IR Library] Fetching IR codes for " + String(ROOM_ID) + " from Remote Library...");
 
@@ -1160,6 +1231,57 @@ void loadIRCodesFromLibrary(bool cacheOnSuccess) {
   FirebaseJson &libJson = fbdo.jsonObject();
   bool anyLoaded = false;
 
+  #if DUAL_UNIT_MODE
+  if (loadIRCodeArrayFromJson(libJson, "unit_1/acOn/rawData", irCodeOn, irCodeOnLen)) {
+    Serial.println("[IR Library] Loaded unit_1 acOn (" + String(irCodeOnLen) + " values)");
+    anyLoaded = true;
+  }
+  if (loadIRCodeArrayFromJson(libJson, "unit_1/acOff/rawData", irCodeOff, irCodeOffLen)) {
+    Serial.println("[IR Library] Loaded unit_1 acOff (" + String(irCodeOffLen) + " values)");
+    anyLoaded = true;
+  }
+  if (loadIRCodeArrayFromJson(libJson, "unit_1/temperatureUp/rawData", irCodeTempUp, irCodeTempUpLen)) {
+    Serial.println("[IR Library] Loaded unit_1 temperatureUp (" + String(irCodeTempUpLen) + " values)");
+    anyLoaded = true;
+  }
+  if (loadIRCodeArrayFromJson(libJson, "unit_1/temperatureDown/rawData", irCodeTempDown, irCodeTempDownLen)) {
+    Serial.println("[IR Library] Loaded unit_1 temperatureDown (" + String(irCodeTempDownLen) + " values)");
+    anyLoaded = true;
+  }
+
+  if (loadIRCodeArrayFromJson(libJson, "unit_2/acOn/rawData", irCodeOn2, irCodeOnLen2)) {
+    Serial.println("[IR Library] Loaded unit_2 acOn (" + String(irCodeOnLen2) + " values)");
+    anyLoaded = true;
+  } else {
+    memcpy(irCodeOn2, irCodeOn, irCodeOnLen * sizeof(uint16_t));
+    irCodeOnLen2 = irCodeOnLen;
+    Serial.println("[IR Library] No unit_2 acOn saved yet, mirroring unit_1");
+  }
+  if (loadIRCodeArrayFromJson(libJson, "unit_2/acOff/rawData", irCodeOff2, irCodeOffLen2)) {
+    Serial.println("[IR Library] Loaded unit_2 acOff (" + String(irCodeOffLen2) + " values)");
+    anyLoaded = true;
+  } else {
+    memcpy(irCodeOff2, irCodeOff, irCodeOffLen * sizeof(uint16_t));
+    irCodeOffLen2 = irCodeOffLen;
+    Serial.println("[IR Library] No unit_2 acOff saved yet, mirroring unit_1");
+  }
+  if (loadIRCodeArrayFromJson(libJson, "unit_2/temperatureUp/rawData", irCodeTempUp2, irCodeTempUpLen2)) {
+    Serial.println("[IR Library] Loaded unit_2 temperatureUp (" + String(irCodeTempUpLen2) + " values)");
+    anyLoaded = true;
+  } else {
+    memcpy(irCodeTempUp2, irCodeTempUp, irCodeTempUpLen * sizeof(uint16_t));
+    irCodeTempUpLen2 = irCodeTempUpLen;
+    Serial.println("[IR Library] No unit_2 temperatureUp saved yet, mirroring unit_1");
+  }
+  if (loadIRCodeArrayFromJson(libJson, "unit_2/temperatureDown/rawData", irCodeTempDown2, irCodeTempDownLen2)) {
+    Serial.println("[IR Library] Loaded unit_2 temperatureDown (" + String(irCodeTempDownLen2) + " values)");
+    anyLoaded = true;
+  } else {
+    memcpy(irCodeTempDown2, irCodeTempDown, irCodeTempDownLen * sizeof(uint16_t));
+    irCodeTempDownLen2 = irCodeTempDownLen;
+    Serial.println("[IR Library] No unit_2 temperatureDown saved yet, mirroring unit_1");
+  }
+  #else
   if (loadIRCodeArrayFromJson(libJson, "acOn/rawData", irCodeOn, irCodeOnLen)) {
     Serial.println("[IR Library] Loaded acOn (" + String(irCodeOnLen) + " values)");
     anyLoaded = true;
@@ -1176,6 +1298,7 @@ void loadIRCodesFromLibrary(bool cacheOnSuccess) {
     Serial.println("[IR Library] Loaded temperatureDown (" + String(irCodeTempDownLen) + " values)");
     anyLoaded = true;
   }
+  #endif
 
   if (anyLoaded && cacheOnSuccess) {
     saveIRCodesToPreferences();
@@ -1220,43 +1343,66 @@ void handleACCommand(String cmd, int unit, bool isAutomation) {
   // on pin 5, Unit 2's physical pin.
   IRsend *irSender = (unit == 2) ? &irsend2 : &irsend;
   uint16_t pin = (unit == 2) ? kIrLedPin2 : kIrLedPin;
-  
+
+  // Unit 2 can have its own physically different codes (a separate AC
+  // model/remote), not necessarily the same ones as Unit 1 - pick the
+  // buffer set matching the unit actually being commanded.
+  #if DUAL_UNIT_MODE
+  uint16_t* codeOn = (unit == 2) ? irCodeOn2 : irCodeOn;
+  size_t codeOnLen = (unit == 2) ? irCodeOnLen2 : irCodeOnLen;
+  uint16_t* codeOff = (unit == 2) ? irCodeOff2 : irCodeOff;
+  size_t codeOffLen = (unit == 2) ? irCodeOffLen2 : irCodeOffLen;
+  uint16_t* codeTempUp = (unit == 2) ? irCodeTempUp2 : irCodeTempUp;
+  size_t codeTempUpLen = (unit == 2) ? irCodeTempUpLen2 : irCodeTempUpLen;
+  uint16_t* codeTempDown = (unit == 2) ? irCodeTempDown2 : irCodeTempDown;
+  size_t codeTempDownLen = (unit == 2) ? irCodeTempDownLen2 : irCodeTempDownLen;
+  #else
+  uint16_t* codeOn = irCodeOn;
+  size_t codeOnLen = irCodeOnLen;
+  uint16_t* codeOff = irCodeOff;
+  size_t codeOffLen = irCodeOffLen;
+  uint16_t* codeTempUp = irCodeTempUp;
+  size_t codeTempUpLen = irCodeTempUpLen;
+  uint16_t* codeTempDown = irCodeTempDown;
+  size_t codeTempDownLen = irCodeTempDownLen;
+  #endif
+
   Serial.println("🎮 Using IRsend instance on pin " + String(pin));
-  
+
   if (cmd == "ON") {
-    if (irCodeOnLen == 0) {
+    if (codeOnLen == 0) {
       Serial.println("⚠️ No ON code loaded - skipping IR send");
     } else {
       Serial.println("🎮 Sending ON signal...");
-      printIRCode("ON", pin, irCodeOn, irCodeOnLen);
-      irSender->sendRaw(irCodeOn, irCodeOnLen, kFrequency);
+      printIRCode("ON", pin, codeOn, codeOnLen);
+      irSender->sendRaw(codeOn, codeOnLen, kFrequency);
       Serial.println("✓ ON sent on pin " + String(pin));
     }
   } else if (cmd == "OFF") {
-    if (irCodeOffLen == 0) {
+    if (codeOffLen == 0) {
       Serial.println("⚠️ No OFF code loaded - skipping IR send");
     } else {
       Serial.println("🎮 Sending OFF signal...");
-      printIRCode("OFF", pin, irCodeOff, irCodeOffLen);
-      irSender->sendRaw(irCodeOff, irCodeOffLen, kFrequency);
+      printIRCode("OFF", pin, codeOff, codeOffLen);
+      irSender->sendRaw(codeOff, codeOffLen, kFrequency);
       Serial.println("✓ OFF sent on pin " + String(pin));
     }
   } else if (cmd == "TEMP_UP") {
-    if (irCodeTempUpLen == 0) {
+    if (codeTempUpLen == 0) {
       Serial.println("⚠️ No TEMP_UP code loaded - skipping IR send");
     } else {
       Serial.println("🎮 Sending TEMP_UP signal...");
-      printIRCode("TEMP_UP", pin, irCodeTempUp, irCodeTempUpLen);
-      irSender->sendRaw(irCodeTempUp, irCodeTempUpLen, kFrequency);
+      printIRCode("TEMP_UP", pin, codeTempUp, codeTempUpLen);
+      irSender->sendRaw(codeTempUp, codeTempUpLen, kFrequency);
       Serial.println("✓ TEMP_UP sent on pin " + String(pin));
     }
   } else if (cmd == "TEMP_DOWN") {
-    if (irCodeTempDownLen == 0) {
+    if (codeTempDownLen == 0) {
       Serial.println("⚠️ No TEMP_DOWN code loaded - skipping IR send");
     } else {
       Serial.println("🎮 Sending TEMP_DOWN signal...");
-      printIRCode("TEMP_DOWN", pin, irCodeTempDown, irCodeTempDownLen);
-      irSender->sendRaw(irCodeTempDown, irCodeTempDownLen, kFrequency);
+      printIRCode("TEMP_DOWN", pin, codeTempDown, codeTempDownLen);
+      irSender->sendRaw(codeTempDown, codeTempDownLen, kFrequency);
       Serial.println("✓ TEMP_DOWN sent on pin " + String(pin));
     }
   } else {
@@ -1431,8 +1577,8 @@ void runAutomation(float temp, float humidity) {
           irsend.sendRaw(irCodeTempDown, irCodeTempDownLen, kFrequency);
           delay(100);
           Serial.println("Sending to Unit 2 (pin 5)");
-          printIRCode("TEMP_DOWN (temp safety, Unit 2)", kIrLedPin2, irCodeTempDown, irCodeTempDownLen);
-          irsend2.sendRaw(irCodeTempDown, irCodeTempDownLen, kFrequency);
+          printIRCode("TEMP_DOWN (temp safety, Unit 2)", kIrLedPin2, irCodeTempDown2, irCodeTempDownLen2);
+          irsend2.sendRaw(irCodeTempDown2, irCodeTempDownLen2, kFrequency);
           #else
           printIRCode("TEMP_DOWN (temp safety)", kIrLedPin, irCodeTempDown, irCodeTempDownLen);
           irsend.sendRaw(irCodeTempDown, irCodeTempDownLen, kFrequency);
@@ -1528,8 +1674,8 @@ void runAutomation(float temp, float humidity) {
           irsend.sendRaw(irCodeTempUp, irCodeTempUpLen, kFrequency);
           delay(100);
           Serial.println("Sending to Unit 2 (pin 5)");
-          printIRCode("TEMP_UP (temp safety, Unit 2)", kIrLedPin2, irCodeTempUp, irCodeTempUpLen);
-          irsend2.sendRaw(irCodeTempUp, irCodeTempUpLen, kFrequency);
+          printIRCode("TEMP_UP (temp safety, Unit 2)", kIrLedPin2, irCodeTempUp2, irCodeTempUpLen2);
+          irsend2.sendRaw(irCodeTempUp2, irCodeTempUpLen2, kFrequency);
           #else
           printIRCode("TEMP_UP (temp safety)", kIrLedPin, irCodeTempUp, irCodeTempUpLen);
           irsend.sendRaw(irCodeTempUp, irCodeTempUpLen, kFrequency);
@@ -1727,17 +1873,22 @@ void runAutomation(float temp, float humidity) {
     }
     #endif
 
-    bool needUp = up1;
-    bool needDown = !up1;
-    #if DUAL_UNIT_MODE
-    if (adjustUnit2 && up2) needUp = true;
-    if (adjustUnit2 && !up2) needDown = true;
-    #endif
-
-    if ((needUp && irCodeTempUpLen == 0) || (needDown && irCodeTempDownLen == 0)) {
-      Serial.println("⚠️ Missing IR code for a needed direction - skipping automation IR send");
+    bool needUp1 = up1;
+    bool needDown1 = !up1;
+    if ((needUp1 && irCodeTempUpLen == 0) || (needDown1 && irCodeTempDownLen == 0)) {
+      Serial.println("⚠️ Missing Unit 1 IR code for a needed direction - skipping automation IR send");
       return;
     }
+    #if DUAL_UNIT_MODE
+    if (adjustUnit2) {
+      bool needUp2 = up2;
+      bool needDown2 = !up2;
+      if ((needUp2 && irCodeTempUpLen2 == 0) || (needDown2 && irCodeTempDownLen2 == 0)) {
+        Serial.println("⚠️ Missing Unit 2 IR code for a needed direction - skipping automation IR send");
+        return;
+      }
+    }
+    #endif
 
     Serial.println("Starting IR transmission...");
 
@@ -1762,11 +1913,11 @@ void runAutomation(float temp, float humidity) {
       if (i < steps2) {
         Serial.print("Step "); Serial.print(i + 1); Serial.print("/"); Serial.print(steps2); Serial.print(": Unit 2 "); Serial.println(up2 ? "TEMP UP" : "TEMP DOWN");
         if (up2) {
-          printIRCode("TEMP_UP (humidity automation, Unit 2)", kIrLedPin2, irCodeTempUp, irCodeTempUpLen);
-          irsend2.sendRaw(irCodeTempUp, irCodeTempUpLen, kFrequency);
+          printIRCode("TEMP_UP (humidity automation, Unit 2)", kIrLedPin2, irCodeTempUp2, irCodeTempUpLen2);
+          irsend2.sendRaw(irCodeTempUp2, irCodeTempUpLen2, kFrequency);
         } else {
-          printIRCode("TEMP_DOWN (humidity automation, Unit 2)", kIrLedPin2, irCodeTempDown, irCodeTempDownLen);
-          irsend2.sendRaw(irCodeTempDown, irCodeTempDownLen, kFrequency);
+          printIRCode("TEMP_DOWN (humidity automation, Unit 2)", kIrLedPin2, irCodeTempDown2, irCodeTempDownLen2);
+          irsend2.sendRaw(irCodeTempDown2, irCodeTempDownLen2, kFrequency);
         }
       }
       #endif

@@ -420,6 +420,20 @@
                         </div>
                     </div>
 
+                    <!-- Unit selector - shown only for rooms with 2 AC units, which
+                         can each need their own distinct IR codes (different remote/
+                         AC model), not just one code shared between both. -->
+                    <div class="mb-4 hidden" id="unitFilterWrapper">
+                        <label class="text-xs font-bold text-gray-500 uppercase block mb-2">Unit</label>
+                        <div class="relative">
+                            <select id="unitFilterSelect" class="neumorph-input w-full appearance-none pr-10">
+                                <option value="unit_1">Unit 1</option>
+                                <option value="unit_2">Unit 2</option>
+                            </select>
+                            <i data-lucide="chevron-down" class="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"></i>
+                        </div>
+                    </div>
+
                     <!-- Library Form (Hidden by default) -->
                     <div id="libraryForm" class="library-form hidden mb-4 bg-gradient-to-br from-white to-gray-50 border-2 border-gray-200 rounded-xl p-4 shadow-sm">
                         <div class="flex items-center gap-2 mb-4">
@@ -435,6 +449,13 @@
                                 <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Command</label>
                                 <select id="saveCommandSelect" class="field w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#7A001E] focus:border-transparent"></select>
                             </div>
+                        </div>
+                        <div class="mb-3 hidden" id="saveUnitWrapper">
+                            <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Unit</label>
+                            <select id="saveUnitSelect" class="field w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#7A001E] focus:border-transparent">
+                                <option value="unit_1">Unit 1</option>
+                                <option value="unit_2">Unit 2</option>
+                            </select>
                         </div>
                         <div class="mb-3">
                             <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Signal Name</label>
@@ -709,23 +730,64 @@
 
         function dashboardLabListFromFirebase(data) {
             const systemKeys = ['alerts', 'analytics', 'config', 'history', 'irReceiver', 'irRemoteLibrary', 'usage_daily', 'info', '.info'];
-            const roomEntries = Object.keys(data || {}).filter((key) => 
-                (key.startsWith('Room_') || key.startsWith('Room ')) && 
+            const roomEntries = Object.keys(data || {}).filter((key) =>
+                (key.startsWith('Room_') || key.startsWith('Room ')) &&
                 !systemKeys.includes(key)
             );
+            // Same "does this room have 2 AC units" signal the Analytics page's
+            // cost calculator already relies on (config/rooms/{room}/units) -
+            // reused here so a room only shows Unit 1/Unit 2 tabs when the rest
+            // of the app already treats it as dual-unit.
+            const roomsConfig = (data && data.config && data.config.rooms) || {};
             const list = roomEntries.map((key) => {
                 const roomData = data[key] || {};
                 const roomName = getRoomDisplayName(key, roomData);
-                return { key, name: normalizeLabName(roomName) };
+                const unitsCfg = roomsConfig[key]?.units;
+                const isDualUnit = !!(unitsCfg && (unitsCfg.unit_1 || unitsCfg.unit_2));
+                return { key, name: normalizeLabName(roomName), isDualUnit };
             });
             return list.length ? list : [
-                { key: 'Laboratory 1', name: 'Laboratory 1' },
-                { key: 'Laboratory 2', name: 'Laboratory 2' },
-                { key: 'Laboratory 3', name: 'Laboratory 3' },
-                { key: 'Laboratory 4', name: 'Laboratory 4' },
-                { key: 'Laboratory 5', name: 'Laboratory 5' },
-                { key: 'Laboratory 6', name: 'Laboratory 6' }
+                { key: 'Laboratory 1', name: 'Laboratory 1', isDualUnit: false },
+                { key: 'Laboratory 2', name: 'Laboratory 2', isDualUnit: false },
+                { key: 'Laboratory 3', name: 'Laboratory 3', isDualUnit: false },
+                { key: 'Laboratory 4', name: 'Laboratory 4', isDualUnit: false },
+                { key: 'Laboratory 5', name: 'Laboratory 5', isDualUnit: false },
+                { key: 'Laboratory 6', name: 'Laboratory 6', isDualUnit: false }
             ];
+        }
+
+        // Whether the given room key is configured with 2 AC units.
+        function isDualUnitLab(labKey) {
+            const lab = state.availableLabs.find((item) => item.key === labKey);
+            return !!(lab && lab.isDualUnit);
+        }
+
+        // Shows/hides the unit selector next to the Laboratory filter
+        // (library grid) and returns the currently effective unit for that
+        // selector, or null for a single-unit room.
+        function syncUnitFilterVisibility(selectedLab) {
+            const wrapper = document.getElementById('unitFilterWrapper');
+            if (!isDualUnitLab(selectedLab)) {
+                wrapper.classList.add('hidden');
+                return null;
+            }
+            wrapper.classList.remove('hidden');
+            const select = document.getElementById('unitFilterSelect');
+            if (!select.value) select.value = 'unit_1';
+            return select.value;
+        }
+
+        // Same idea for the Add/Edit Signal form's own unit selector.
+        function syncSaveUnitVisibility(selectedLab, preferredUnit) {
+            const wrapper = document.getElementById('saveUnitWrapper');
+            const select = document.getElementById('saveUnitSelect');
+            if (!isDualUnitLab(selectedLab)) {
+                wrapper.classList.add('hidden');
+                return null;
+            }
+            wrapper.classList.remove('hidden');
+            select.value = preferredUnit || select.value || 'unit_1';
+            return select.value;
         }
 
         function renderLabOptions() {
@@ -749,16 +811,23 @@
             if (saveCommandSelect) {
                 saveCommandSelect.innerHTML = commandOptionsHtml;
             }
+
+            syncUnitFilterVisibility(document.getElementById('labFilterSelect').value);
+            syncSaveUnitVisibility(document.getElementById('saveLabSelect').value);
         }
 
-        function getLibraryByLab(labKey) {
+        // unit is null for single-unit rooms (flat irRemoteLibrary/{lab}/{command}
+        // shape, unchanged) or 'unit_1'/'unit_2' for dual-unit rooms (nested
+        // irRemoteLibrary/{lab}/{unit}/{command} shape).
+        function getLibraryByLab(labKey, unit) {
             const key = String(labKey || '').trim();
-            console.log('Getting library for lab key:', key);
+            console.log('Getting library for lab key:', key, 'unit:', unit);
             const labEntry = state.libraryData[key] || {};
-            console.log('Lab entry:', labEntry);
+            const source = unit ? (labEntry[unit] || {}) : labEntry;
+            console.log('Lab entry source:', source);
             const result = {};
             COMMANDS.forEach((cmd) => {
-                result[cmd.key] = labEntry[cmd.key] || null;
+                result[cmd.key] = source[cmd.key] || null;
             });
             console.log('Result:', result);
             return result;
@@ -809,6 +878,7 @@
                 });
                 
                 labSelect.value = data.lab || '';
+                syncSaveUnitVisibility(data.lab, data.unit);
                 commandSelect.value = data.command || '';
                 nameInput.value = data.name || '';
                 protocolInput.value = data.protocol || 'PANASONIC';
@@ -831,9 +901,11 @@
 
         function renderLibraryCards() {
             const selectedLab = document.getElementById('labFilterSelect').value || state.availableLabs[0]?.key || 'Laboratory 1';
-            const labSignals = getLibraryByLab(selectedLab);
-            console.log('Rendering cards for lab:', selectedLab, 'Signals:', labSignals);
+            const selectedUnit = syncUnitFilterVisibility(selectedLab);
+            const labSignals = getLibraryByLab(selectedLab, selectedUnit);
+            console.log('Rendering cards for lab:', selectedLab, 'unit:', selectedUnit, 'Signals:', labSignals);
             console.log('COMMANDS:', COMMANDS);
+            const unitAttr = selectedUnit || '';
             const groupMarkup = COMMANDS.map((cmd) => {
                 const entry = labSignals[cmd.key];
                 const card = entry ? `
@@ -846,10 +918,10 @@
                             <span><strong>Length:</strong> ${entry.signalLength || normalizeRawData(entry.rawData || []).length}</span>
                         </div>
                         <div class="library-entry-actions flex gap-2">
-                            <button data-action="view" data-lab="${selectedLab}" data-command="${cmd.key}" class="library-action-btn flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold py-2 px-3 rounded-lg transition-colors">View</button>
-                            <button data-action="copy" data-lab="${selectedLab}" data-command="${cmd.key}" class="library-action-btn flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold py-2 px-3 rounded-lg transition-colors">Copy</button>
-                            <button data-action="edit" data-lab="${selectedLab}" data-command="${cmd.key}" class="library-action-btn flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold py-2 px-3 rounded-lg transition-colors">Edit</button>
-                            <button data-action="delete" data-lab="${selectedLab}" data-command="${cmd.key}" class="library-action-btn flex-1 bg-red-100 hover:bg-red-200 text-red-700 text-xs font-bold py-2 px-3 rounded-lg transition-colors">Delete</button>
+                            <button data-action="view" data-lab="${selectedLab}" data-unit="${unitAttr}" data-command="${cmd.key}" class="library-action-btn flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold py-2 px-3 rounded-lg transition-colors">View</button>
+                            <button data-action="copy" data-lab="${selectedLab}" data-unit="${unitAttr}" data-command="${cmd.key}" class="library-action-btn flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold py-2 px-3 rounded-lg transition-colors">Copy</button>
+                            <button data-action="edit" data-lab="${selectedLab}" data-unit="${unitAttr}" data-command="${cmd.key}" class="library-action-btn flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold py-2 px-3 rounded-lg transition-colors">Edit</button>
+                            <button data-action="delete" data-lab="${selectedLab}" data-unit="${unitAttr}" data-command="${cmd.key}" class="library-action-btn flex-1 bg-red-100 hover:bg-red-200 text-red-700 text-xs font-bold py-2 px-3 rounded-lg transition-colors">Delete</button>
                         </div>
                     </div>
                 ` : `
@@ -862,7 +934,7 @@
                             <span>No saved signal yet</span>
                         </div>
                         <div class="library-entry-actions">
-                            <button data-action="new" data-lab="${selectedLab}" data-command="${cmd.key}" class="library-action-btn w-full bg-[#7A001E] hover:bg-[#5a0016] text-white text-xs font-bold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2">
+                            <button data-action="new" data-lab="${selectedLab}" data-unit="${unitAttr}" data-command="${cmd.key}" class="library-action-btn w-full bg-[#7A001E] hover:bg-[#5a0016] text-white text-xs font-bold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2">
                                 <i data-lucide="plus" class="w-4 h-4"></i> Add Signal
                             </button>
                         </div>
@@ -887,24 +959,26 @@
             document.querySelectorAll('[data-action]').forEach((button) => {
                 const action = button.dataset.action;
                 const lab = button.dataset.lab;
+                const unit = button.dataset.unit || null;
                 const command = button.dataset.command;
-                console.log('[Card Button] Binding button:', action, lab, command);
+                console.log('[Card Button] Binding button:', action, lab, unit, command);
                 button.addEventListener('click', (e) => {
-                    console.log('[Card Button] Clicked:', action, lab, command);
+                    console.log('[Card Button] Clicked:', action, lab, unit, command);
                     e.preventDefault();
                     e.stopPropagation();
-                    handleLibraryAction(action, lab, command);
+                    handleLibraryAction(action, lab, command, unit);
                 });
             });
         }
 
-        function handleLibraryAction(action, lab, command) {
-            const data = state.libraryData[lab]?.[command];
-            
+        function handleLibraryAction(action, lab, command, unit) {
+            const data = unit ? state.libraryData[lab]?.[unit]?.[command] : state.libraryData[lab]?.[command];
+
             if (action === 'new' || action === 'edit') {
                 const selected = data || { protocol: 'PANASONIC', name: command, rawData: [], signalLength: 0 };
                 populateForm({
                     lab: lab,
+                    unit: unit,
                     command: command,
                     name: selected.name || COMMANDS.find((item) => item.key === command)?.label || '',
                     protocol: selected.protocol || 'PANASONIC',
@@ -921,7 +995,8 @@
             }
             if (action === 'view') {
                 const details = data || {};
-                const entry = { labName: labNameFromKey(lab), commandKey: command, commandLabel: COMMANDS.find((item) => item.key === command)?.label || command, protocol: details.protocol || 'PANASONIC', rawData: details.rawData || [], signalLength: details.signalLength || normalizeRawData(details.rawData || []).length, createdAt: details.createdAt || '', updatedAt: details.updatedAt || '' };
+                const unitLabel = unit === 'unit_2' ? ' (Unit 2)' : unit === 'unit_1' ? ' (Unit 1)' : '';
+                const entry = { labName: labNameFromKey(lab) + unitLabel, commandKey: command, commandLabel: COMMANDS.find((item) => item.key === command)?.label || command, protocol: details.protocol || 'PANASONIC', rawData: details.rawData || [], signalLength: details.signalLength || normalizeRawData(details.rawData || []).length, createdAt: details.createdAt || '', updatedAt: details.updatedAt || '' };
                 // .tag/.mini-btn/.primary-btn used below previously had no CSS
                 // definition anywhere in the app - the modal was rendering as
                 // plain unstyled text/buttons. Rebuilt with real Tailwind
@@ -990,13 +1065,15 @@
                 document.getElementById('closeModalBtn').addEventListener('click', closeModal);
                 document.getElementById('modalCopyBtn').addEventListener('click', async () => { await navigator.clipboard.writeText(formatSignal(entry.rawData)); asyncAlert('IR signal copied successfully!'); });
                 document.getElementById('modalCopyRawBtn').addEventListener('click', async () => { await navigator.clipboard.writeText(formatSignal(entry.rawData)); asyncAlert('IR signal copied successfully!'); });
-                document.getElementById('modalEditBtn').addEventListener('click', () => { closeModal(); handleLibraryAction('edit', lab, command); });
+                document.getElementById('modalEditBtn').addEventListener('click', () => { closeModal(); handleLibraryAction('edit', lab, command, unit); });
                 return;
             }
             if (action === 'delete') {
+                const unitLabel = unit === 'unit_2' ? ' (Unit 2)' : unit === 'unit_1' ? ' (Unit 1)' : '';
+                const deletePath = unit ? `irRemoteLibrary/${lab}/${unit}/${command}` : `irRemoteLibrary/${lab}/${command}`;
                 Swal.fire({
                     title: 'Delete IR Signal?',
-                    html: `Are you sure you want to delete:<br><strong>${labNameFromKey(lab)} → ${COMMANDS.find((item) => item.key === command)?.label || command}</strong><br><br>This action cannot be undone.`,
+                    html: `Are you sure you want to delete:<br><strong>${labNameFromKey(lab)}${unitLabel} → ${COMMANDS.find((item) => item.key === command)?.label || command}</strong><br><br>This action cannot be undone.`,
                     icon: 'warning',
                     showCancelButton: true,
                     confirmButtonColor: '#800000',
@@ -1005,7 +1082,7 @@
                     cancelButtonText: 'Cancel'
                 }).then((result) => {
                     if (result.isConfirmed) {
-                        db.ref(`irRemoteLibrary/${lab}/${command}`).remove().then(() => {
+                        db.ref(deletePath).remove().then(() => {
                             Swal.fire({
                                 title: 'Deleted!',
                                 text: 'IR signal has been deleted.',
@@ -1020,6 +1097,7 @@
 
         function saveLibrarySignal() {
             const lab = document.getElementById('saveLabSelect').value;
+            const unit = isDualUnitLab(lab) ? document.getElementById('saveUnitSelect').value : null;
             const command = document.getElementById('saveCommandSelect').value;
             const name = document.getElementById('saveSignalName').value.trim() || COMMANDS.find((item) => item.key === command)?.label || 'IR Signal';
             const protocol = document.getElementById('saveProtocolInput').value.trim() || 'PANASONIC';
@@ -1030,11 +1108,12 @@
                 return;
             }
 
-            const existing = state.libraryData[lab]?.[command];
+            const existing = unit ? state.libraryData[lab]?.[unit]?.[command] : state.libraryData[lab]?.[command];
+            const unitLabel = unit === 'unit_2' ? ' (Unit 2)' : unit === 'unit_1' ? ' (Unit 1)' : '';
             if (existing) {
                 Swal.fire({
                     title: 'Signal Already Exists',
-                    html: `<strong>${name}</strong> signal already exists for <strong>${labNameFromKey(lab)}</strong>.<br><br>Do you want to replace it?`,
+                    html: `<strong>${name}</strong> signal already exists for <strong>${labNameFromKey(lab)}${unitLabel}</strong>.<br><br>Do you want to replace it?`,
                     icon: 'warning',
                     showCancelButton: true,
                     confirmButtonColor: '#800000',
@@ -1043,16 +1122,16 @@
                     cancelButtonText: 'Cancel'
                 }).then((result) => {
                     if (result.isConfirmed) {
-                        persistLibrarySignal(lab, command, name, protocol, rawData, existing);
+                        persistLibrarySignal(lab, unit, command, name, protocol, rawData, existing);
                     }
                 });
                 return;
             }
 
-            persistLibrarySignal(lab, command, name, protocol, rawData, existing);
+            persistLibrarySignal(lab, unit, command, name, protocol, rawData, existing);
         }
 
-        function persistLibrarySignal(lab, command, name, protocol, rawData, existing) {
+        function persistLibrarySignal(lab, unit, command, name, protocol, rawData, existing) {
             const payload = {
                 name,
                 protocol,
@@ -1064,8 +1143,12 @@
                 updatedAt: new Date().toISOString()
             };
 
-            // Save to IR Remote Library only (avoid creating duplicate room entries)
-            db.ref(`irRemoteLibrary/${lab}/${command}`).set(payload).then(() => {
+            // Dual-unit rooms nest under unit_1/unit_2 (2 physically different AC
+            // units can need different codes); single-unit rooms keep the flat
+            // shape unchanged so their firmware (which only ever reads the flat
+            // path) keeps working exactly as before.
+            const path = unit ? `irRemoteLibrary/${lab}/${unit}/${command}` : `irRemoteLibrary/${lab}/${command}`;
+            db.ref(path).set(payload).then(() => {
                 document.getElementById('libraryForm').classList.add('hidden');
                 asyncAlert('IR signal saved successfully!');
             }).catch(() => asyncAlert('Unable to save to the IR library.', 'Retry'));
@@ -1131,9 +1214,11 @@
 
         document.getElementById('pasteSignalBtn').addEventListener('click', () => {
             const selectedLab = document.getElementById('labFilterSelect').value || state.availableLabs[0]?.key || 'Laboratory 1';
+            const selectedUnit = isDualUnitLab(selectedLab) ? (document.getElementById('unitFilterSelect').value || 'unit_1') : null;
             const rawText = document.getElementById('rawSignalOutput').textContent;
             populateForm({
                 lab: selectedLab,
+                unit: selectedUnit,
                 command: 'acOn',
                 name: 'AC ON',
                 protocol: 'PANASONIC',
@@ -1144,8 +1229,10 @@
 
         document.getElementById('addSignalBtn').addEventListener('click', () => {
             const selectedLab = document.getElementById('labFilterSelect').value || state.availableLabs[0]?.key || 'Laboratory 1';
+            const selectedUnit = isDualUnitLab(selectedLab) ? (document.getElementById('unitFilterSelect').value || 'unit_1') : null;
             populateForm({
                 lab: selectedLab,
+                unit: selectedUnit,
                 command: 'acOn',
                 name: 'AC ON',
                 protocol: 'PANASONIC',
@@ -1161,6 +1248,8 @@
             libraryForm.style.display = 'none';
         });
         document.getElementById('labFilterSelect').addEventListener('change', renderLibraryCards);
+        document.getElementById('unitFilterSelect').addEventListener('change', renderLibraryCards);
+        document.getElementById('saveLabSelect').addEventListener('change', (e) => syncSaveUnitVisibility(e.target.value));
 
         document.addEventListener('DOMContentLoaded', () => {
             console.log('DOM Content Loaded');
